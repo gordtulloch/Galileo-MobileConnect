@@ -1,6 +1,6 @@
 # Galileo MobileConnect
 
-Native **iOS/iPadOS and Android** client apps for [Galileo](https://github.com/gordtulloch/Galileo), the cross-platform astrophotography imaging application. The apps let you watch and operate a running Galileo observatory from a **tablet** (the primary target) or a phone — connect equipment, find and centre targets, focus, guide, run and author sessions and schedules, and respond to safety events — without going back to the computer. They **operate** an observatory; they never **configure** one.
+Native **iOS/iPadOS and Android** client apps — plus a **Meta Quest 2/3 edition** of the Android app — for [Galileo](https://github.com/gordtulloch/Galileo), the cross-platform astrophotography imaging application. The apps let you watch and operate a running Galileo observatory from a **tablet** (the primary target) or a phone — connect equipment, find and centre targets, focus, guide, run and author sessions and schedules, and respond to safety events — without going back to the computer. They **operate** an observatory; they never **configure** one.
 
 > **Status: In Design.** There is no code yet. The scope document is written and under review; requirements, design and the first build follow its approval. See [Status](#status).
 
@@ -47,12 +47,19 @@ This is one monorepo for both platforms, sharing as much as possible below the U
 docs/                PSD, SRS and RTM (common to both apps); SDD.md = shared architecture
 docs/ios/SDD.md      iOS/iPadOS design
 docs/android/SDD.md  Android design
+docs/quest/SDD.md    Meta Quest 2/3 design (immersive planetarium and image viewer)
+docs/analysis/       analyses, e.g. QuestVR.md
 shared/              Kotlin Multiplatform: model, state, API client, session/schedule logic
 ios/                 Swift / SwiftUI app
 android/             Kotlin / Jetpack Compose app
+quest/               Meta Quest 2/3 edition (reuses shared/ and the Android panel screens)
 api/                 pinned copy of the Galileo wire-API description
 design/              design tokens, icons, strings
 ```
+
+## Meta Quest edition
+
+An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as the primary target and initial test device** — inexpensive second-hand headsets make a dedicated astronomy device realistic — and Quest 3-specific support added later according to use. Version 1 runs the operating screens as floating panels and adds two **immersive scenes** — a full-dome **planetarium** around you and a large **image viewer** — operated with controllers or hands, with camera passthrough one gesture away and no dependence on Google services. Its data is streamed from the Master, which must be a PC or Mac (a Raspberry Pi can be a paired spoke behind it). It has its own design document and is distributed through the Meta Horizon Store. See the PSD, Section 4a, and the [VR opportunities analysis](docs/analysis/QuestVR.md).
 
 ## Documents
 
@@ -62,7 +69,8 @@ design/              design tokens, icons, strings
 | SRS | Both apps (common) | Not yet written |
 | RTM | Both apps (common) | Not yet written |
 | SDD (shared) | Shared architecture | Not yet written |
-| SDD (iOS), SDD (Android) | One per platform | Not yet written |
+| SDD (iOS), SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
+| [Meta Quest VR analysis](docs/analysis/QuestVR.md) | Opportunities for the Quest edition | Draft — for review |
 
 ## Status
 
