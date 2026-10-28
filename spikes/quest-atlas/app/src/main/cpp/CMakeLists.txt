@@ -12,5 +12,5 @@ find_package(OpenXR REQUIRED CONFIG)
 
 add_library(galileo_atlas SHARED main.cpp)
 target_compile_options(galileo_atlas PRIVATE -Wall -Wextra -O3)
-target_link_libraries(galileo_atlas PRIVATE native_app_glue OpenXR::openxr_loader android log EGL GLESv3)
+target_link_libraries(galileo_atlas PRIVATE native_app_glue OpenXR::openxr_loader android log EGL GLESv3 mediandk aaudio)
 set_target_properties(galileo_atlas PROPERTIES LINK_FLAGS "-u ANativeActivity_onCreate")

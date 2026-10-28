@@ -28,17 +28,18 @@ An on-headset HUD (head-locked, lower field) and a once-a-second logcat line sho
 | Right trigger or right stick click | **lock** the Messier / Caldwell / NGC object under the laser, or release (point at empty sky, or at the locked object again) |
 | A | star-count tier: 0 = Hipparcos, naked-eye (magnitude 5 and brighter, ~1,600 stars; raise with the right stick), 1 = 500k, 2 = 1M, 3 = 2M **synthetic** |
 | B | night mode (red only, PSD G10) |
+| Left grip held + B | Sun / Moon / planets / asteroids / satellites on/off |
 | X | back to now (zero the time offset) |
 | Y | constellation outlines and labels on/off |
 | Left grip held + X | Messier / Caldwell / NGC layer on/off |
 | Left grip held + Y | cycle display refresh rate (starts at 72 Hz; the runtime offers 60/72/80/90/120) |
 | Left stick click | all-sky background on/off |
-| Left menu | show/hide HUD |
+| Left menu | show/hide the diagnostic HUD (hidden by default) |
 | Trigger / grip / thumb-touch | curl the virtual index finger / other fingers / thumb |
 
 Each controller is drawn as a **virtual hand** (procedural, no model files) posed from the controller and
-posed fingers following the trigger, grip and thumb touch. A **laser pointer** runs from each controller to the
-dome, ending in a ring. The HUD reads out what the right controller (left if the right is not tracked) is
+posed fingers following the trigger, grip and thumb touch. A **laser pointer** runs from the right controller to the
+dome, ending in a ring. The HUD reads out what the right controller is
 pointing at: altitude/azimuth, J2000 RA/Dec, the nearest constellation centre, and the deep-sky object under
 the beam (a grey ring marks it).
 
@@ -46,6 +47,50 @@ the beam (a grey ring marks it).
 of your gaze; the ~7,100 other NGC objects fade in by magnitude (about 270 at 1x, more as you zoom; NGC labels appear from 3x). Symbols by type:
 ellipse = galaxy, dashed circle = open cluster, circle with a cross = globular, small circle with ticks = planetary nebula,
 square = nebula/remnant. Symbol size follows the object's real size and grows with the zoom.
+
+**DSS2 pictures.** Zoom in on a Messier, Caldwell or brighter NGC object (635 have a picture) and a DSS2 survey image fades
+in over the sky. It is not a flat sticker: the shader runs every displayed ray back through the zoom, the sky rotation and
+precession to J2000 and projects it onto the object's tangent plane, so the picture is oriented by the sky itself (north up,
+east left at the object, rotating with the view as the sky turns) and its stars sit exactly under the catalogue stars. It
+fades in as the object's displayed size passes ~2.5 to 5 degrees (so M31 at ~2x, a small planetary nebula at ~20x+); with
+nothing locked it is the imaged object nearest your gaze. Images are 256 px, DSS2 Red, one per object, with a field of
+2.4x the object's size (0.2 to 6 degrees), so the biggest objects are soft.
+
+**Controller models.** Each hand is drawn with the runtime's own Touch controller model (`XR_FB_render_model`, loaded as a GLB
+and flattened to coloured triangles in grip space; needs both the `com.oculus.permission.RENDER_MODEL` permission and the `com.oculus.feature.RENDER_MODEL` uses-feature in the manifest; without the feature the runtime hides the extension). Meta's
+textures are KTX2 and are not decoded, so the models use material colours without texture detail. If the extension, the
+permission or the model is missing, or the GLB cannot be parsed, the procedural hands are drawn instead; `adb logcat | findstr
+"render model"` shows which happened, with the model's bounds so a mis-aligned model is easy to spot.
+
+**Music.** Every `.mp3` (also `.mp4` / `.m4a`) in `app/src/main/assets/music/` plays in a random order while the app runs (a shuffle that plays
+each track once before repeating, and never repeats the track that just ended). Drop your files in and rebuild; they are
+gitignored. Decoding is Java-free (NDK `AMediaExtractor` + `AMediaCodec`, output through AAudio) on its own thread, volume is
+`kVolume` in `music.h` (0.6), and it pauses when the headset is taken off. Needs an audio track the headset can decode
+(MP3 and AAC both are). `adb logcat -s GalileoMusic` shows what was found and played.
+
+**Read aloud.** With an object's panel open, the **right grip (second trigger)** reads it aloud in a female voice; press again
+to stop. The Quest has no text-to-speech engine and the app has no Java, so the speech is pre-rendered on the PC
+(`tools/make_speech.py`: Windows "Microsoft Zira" voice, ffmpeg to 16 kbps mono MP3, ~38 MB for the 635 pictured objects plus the
+Sun, Moon and planets) and played from `assets/speech/`. The clip says the panel's text: name, type, constellation,
+designations, magnitude, size and description; altitude/azimuth change with the sky so they are not read. Objects without a
+picture have no clip (the panel's hint line only appears when one exists). The music is ducked to 25% while it speaks, and
+changing or releasing the object, or taking the headset off, stops it.
+
+**Object panel.** Locking an object pops up a small card on the right controller: its bottom edge runs along the pointer axis and it faces your head, so turning your palm towards you reads it like a wrist display. It shows name and common name, type and constellation, other designations, magnitude and size, RA/Dec, current altitude/azimuth, and the opening of the Wikipedia article for the 526 objects that have one. The card is a fixed 11 cm window; **right stick Y scrolls it** (down reads on) while it is open (the stick sets the star magnitude limit otherwise), with a bar on its right edge showing the position. It shrinks away on release. The Sun, Moon, planets, asteroids and satellites get the same card without the article text.
+
+**Solar system.** The Sun, Moon, the seven planets, the 250 brightest asteroids and 70 bright satellites (ISS, Tiangong, the
+CelesTrak "visual" group) move with the simulated time, so the left stick runs them forward and back like the stars. They can be
+pointed at, locked and zoomed like any deep-sky object.
+
+| Body | How | Accuracy (checked against astropy / JPL Horizons) |
+|---|---|---|
+| Planets, Sun | JPL approximate Keplerian elements, on the headset | under 5 arcmin |
+| Moon | Schlyter perturbed elements, **topocentric** (parallax up to a degree), disc brightness follows the phase | under 5 arcmin |
+| Asteroids | osculating elements from JPL SBDB, plain Kepler propagation, H-G magnitudes; labelled from 2x | tens of arcmin a year from the element epoch |
+| Satellites | SGP4 baked on the PC into 5-minute position/velocity samples, Hermite-interpolated, topocentric; shown faint while in Earth's shadow | tens of arcsec over the TLE's first days, degrading over two weeks |
+
+Symbols: filled disc = Sun / Moon, soft dot = planet, plus = asteroid, filled square = satellite. Asteroids obey the same
+magnitude limit as NGC objects (about 9.5 at 1x, fainter as you zoom).
 
 **Lock and zoom.** Locking pins the object at the spot in your view where you pointed and keeps it there as time passes
 (the sky turns around it instead of drifting away). Zoom is an azimuthal-equidistant magnification about that object, so angular distances
@@ -60,7 +105,7 @@ longitude and elevation, UTC, local time (site timezone), LST, and whether time 
 The dome shows the horizon, 30° and 60° altitude rings, N/E/S/W letters and the Mellinger all-sky Milky Way
 map behind the stars. The **ground is opaque**: a dark plane 1.65 m below the session's start eye height with a 2 m grid that fades
 into horizon haze (it is rendered with real per-eye parallax, which is what gives the dome its scale). Stars, lines and labels below the horizon are hidden.
-The sky is drawn on a 1000-unit dome (10x larger than before) so the lasers' landing point barely moves with your head.
+The sky is drawn on a 1000-unit dome (10x larger than before) so the laser's landing point barely moves with your head.
 
 Constellation labels are IAU three-letter abbreviations (And, UMa, CVn …) set in Arial.
 
@@ -75,7 +120,10 @@ C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_stars.py
 
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_background.py   # Mellinger all-sky from CDS hips2fits
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_font.py         # Arial glyph atlas (needs arial.ttf)
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_bodies.py       # asteroid elements (JPL SBDB) + satellite tracks (CelesTrak, SGP4) - REBAKE every week or two
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_dso.py          # Messier/Caldwell/NGC from Galileo's cached OpenNGC catalogue
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_dss.py          # DSS2 cutouts from NASA SkyView (635 images, ~42 MB, a few minutes)
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_info.py         # panel text: names, constellations, Wikipedia openings (run after make_dss.py)
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_site.py         # observing site from Galileo's DB (name/lat/lon/elev/tz only)
 
 # build, sideload, launch, stream metrics
@@ -91,7 +139,7 @@ store build. `com.oculus.supportedDevices` lists Quest 2 and Pro only; add Quest
 
 ## Not done / known limits
 
-- **Never run on a headset yet.** It builds, and the manifest declares the VR features, but the first
+- **Not yet run on a headset with the zoom, DSS2 pictures or panel.** It builds, and the manifest declares the VR features, but the first
   device run is the first real test. Expect to tune point sizes and brightness on the device.
 - No MSAA, fixed foveated rendering, or CPU/GPU performance-level hints, so numbers are the
   unoptimised baseline. Those are the next levers if a tier misses 72 Hz.
@@ -104,9 +152,14 @@ store build. `com.oculus.supportedDevices` lists Quest 2 and Pro only; add Quest
   public); DSS2 is free for research/education with acknowledgement (STScI); Arial is Monotype's - keep
   `fontarial.bin` out of anything redistributed (`make_font.py --font` takes Liberation Sans / Arimo);
   the constellation figures are KStars GPL-2 data.
-- Deep-sky data is OpenNGC (CC-BY-SA 4.0), via Galileo's cache (open the Star Atlas once, or run Galileo, to create it).
+- DSS2 cutouts come from NASA SkyView (STScI POSS-II plates, research/education use) and the panel text from Wikipedia (CC BY-SA 4.0); both are baked, gitignored and not for redistribution. Deep-sky data is OpenNGC (CC-BY-SA 4.0), via Galileo's cache (open the Star Atlas once, or run Galileo, to create it).
 - Zoom and lock were verified numerically (round-trip, centre pinned, angular scaling) and the shaders compile, but have not been
   run on a headset yet. Zoom magnifies the sky layers only; the horizon rings, compass and ground stay put.
+- **Satellite tracks are a 14-day window** (1 day back, 13 ahead of the day `make_bodies.py` ran); outside it the satellites
+  vanish, and their accuracy decays with TLE age. Asteroid elements also age. Rerun `tools/make_bodies.py` before a session.
+  `tools/test_ephem.py` rebuilds `tools/test_ephem.cpp` with MSVC and compares `ephem.h` to astropy and JPL Horizons.
+- No comets, no Saturn rings or moons, no light-time or aberration (a few arcsec), satellite magnitudes are nominal
+  (stations 0, others 3.5), not phase- or range-dependent.
 - Atmosphere is not modelled: no twilight, extinction or light pollution.
 - The virtual hands and lasers have been built and run, but not yet tried with controllers in hand: finger poses
   assume the aim-pose frame (+X right, +Y up, -Z forward) and may want tuning once seen.

@@ -36,10 +36,12 @@
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <ctime>
 #include <random>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 #define TAG "GalileoAtlas"
@@ -62,6 +64,9 @@
 #define GL_QUERY_RESULT_AVAILABLE_EXT 0x8867
 #define GL_GPU_DISJOINT_EXT 0x8FBB
 #endif
+
+#include "ephem.h"
+#include "music.h"
 
 namespace {
 
@@ -323,6 +328,7 @@ uniform vec4 uSky;
 uniform float uPx;
 uniform float uNight;
 uniform float uLim;                   // NGC objects fainter than this are left out
+uniform vec2 uHide;                   // catalogue index whose symbol is fading out (its picture is showing), amount 0..1
 out vec3 vCol;
 flat out float vType;
 void main() {
@@ -330,10 +336,12 @@ void main() {
     float a = d.x * uSky.x + d.y * uSky.y;
     float b = d.x * uSky.y - d.y * uSky.x;
     vec3 w = zoomFwd(vec3(-b, d.z * uSky.z + a * uSky.w, -(d.z * uSky.w - a * uSky.z)));
-    bool mc = mod(aTC.y, 4.0) > 0.5;
+    bool body = aTC.y > 7.5;                               // Sun, Moon, planets, satellites (8); asteroids (16)
+    bool mc = mod(aTC.y, 4.0) > 0.5 || mod(floor(aTC.y / 8.0), 2.0) > 0.5;
     bool hide = dot(w, w) < 0.25 || w.y < 0.0 || (!mc && aMS.x > uLim);
     float deg = aMS.y / 60.0 * max(uZoom.w, 1.0);
-    gl_PointSize = hide ? 0.0 : clamp(max(mc ? 16.0 : 11.0, deg * 14.0), 11.0, 220.0) * uPx;
+    float minPx = body ? (aTC.x > 8.5 ? 12.0 : 16.0) : (mc ? 16.0 : 11.0);
+    gl_PointSize = hide ? 0.0 : clamp(max(minPx, deg * 14.0), 11.0, 220.0) * uPx;
     gl_Position = hide ? vec4(2.0, 2.0, 2.0, 1.0) : uVP * vec4(w * 1000.0, 1.0);
     vType = aTC.x;
     vec3 c = vec3(0.7);
@@ -341,7 +349,20 @@ void main() {
     else if (aTC.x < 2.5) c = vec3(1.0, 0.85, 0.35);      // open / globular cluster
     else if (aTC.x < 3.5) c = vec3(0.3, 0.9, 1.0);        // planetary nebula
     else if (aTC.x < 4.5) c = vec3(0.35, 1.0, 0.5);       // nebula, remnant
-    float lum = (mc ? 0.75 : 0.45) * smoothstep(0.0, 0.05, w.y);
+    else if (aTC.x > 5.5 && aTC.x < 6.5) c = vec3(1.0, 0.95, 0.7);    // Sun
+    else if (aTC.x > 6.5 && aTC.x < 7.5) c = vec3(0.95, 0.95, 0.85);  // Moon
+    else if (aTC.x > 7.5 && aTC.x < 8.5) c = vec3(1.0, 0.92, 0.75);   // planet
+    else if (aTC.x > 8.5 && aTC.x < 9.5) c = vec3(0.85, 0.7, 1.0);    // asteroid
+    else if (aTC.x > 9.5) c = vec3(0.5, 1.0, 0.65);                   // satellite
+    float lum = mc ? 0.75 : 0.45;
+    if (body) {
+        lum = clamp(0.9 - 0.12 * aMS.x, 0.12, 1.0);                   // brighter magnitude, brighter symbol
+        if (aTC.x > 8.5 && aTC.x < 9.5) lum = max(lum, 0.45);         // asteroids
+        if (aTC.x > 6.5 && aTC.x < 7.5) lum = 0.25 + 0.75 * aMS.x;    // Moon: illuminated fraction
+        if (aTC.x < 6.5) lum = 1.0;                                    // Sun
+    }
+    if (gl_VertexID == int(uHide.x)) lum *= 1.0 - uHide.y;
+    lum *= smoothstep(0.0, 0.05, w.y);
     vCol = (uNight > 0.5 ? vec3(1.0, 0.07, 0.0) : c) * lum;
 }
 )";
@@ -366,8 +387,16 @@ void main() {
         s = max(s, tn < 0.07 && tk > 0.62 && tk < 0.95 ? 1.0 : 0.0);
     } else if (vType < 4.5) {                             // nebula, remnant: square
         s = ring(max(abs(p.x), abs(p.y)));
-    } else {                                              // other: diamond
+    } else if (vType < 5.5) {                             // other: diamond
         s = ring((abs(p.x) + abs(p.y)) * 0.8);
+    } else if (vType < 7.5) {                             // Sun, Moon: solid disc (the Sun with a glow)
+        s = (1.0 - smoothstep(0.78, 0.92, r)) + (vType < 6.5 ? 0.35 * pow(max(1.0 - r, 0.0), 2.0) : 0.0);
+    } else if (vType < 8.5) {                             // planet: soft dot
+        s = (1.0 - smoothstep(0.25, 0.55, r)) + 0.3 * pow(max(1.0 - r, 0.0), 2.0);
+    } else if (vType < 9.5) {                             // asteroid: small plus
+        s = (abs(p.x) < 0.1 || abs(p.y) < 0.1) && r < 0.7 ? 1.0 : 0.0;
+    } else {                                              // satellite: filled square
+        s = step(max(abs(p.x), abs(p.y)), 0.5);
     }
     if (s < 0.02) discard;
     o = vec4(vCol * s, 1.0);
@@ -392,6 +421,80 @@ void main() {
     o = vec4(uColor * l, 1.0);
 }
 )";
+// Controller model: vertex colours come from the glTF materials (the runtime's textures are KTX2 and are not decoded).
+const char* kCtlVS = R"(#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+out vec3 vN;
+out vec3 vC;
+void main() { vN = mat3(uModel) * aNrm; vC = aCol; gl_Position = uMVP * vec4(aPos, 1.0); }
+)";
+const char* kCtlFS = R"(#version 300 es
+precision mediump float;
+in vec3 vN;
+in vec3 vC;
+uniform float uNight;
+out vec4 o;
+void main() {
+    vec3 n = normalize(vN);
+    float l = 0.30 + 0.55 * max(dot(n, normalize(vec3(0.3, 0.8, 0.5))), 0.0) + 0.25 * max(dot(n, normalize(vec3(-0.6, 0.2, -0.4))), 0.0);
+    vec3 c = vC * l;
+    if (uNight > 0.5) c = vec3(dot(c, vec3(0.30, 0.59, 0.11)), 0.0, 0.0) * vec3(0.9, 0.0, 0.0);
+    o = vec4(c, 1.0);
+}
+)";
+// DSS2 cutout: a quad parked around the object's displayed direction. The fragment shader works backwards from each
+// displayed ray -- undo the zoom, undo the sky rotation, precess to J2000 -- and projects it (gnomonic) onto the
+// object's tangent plane, so the picture is oriented and scaled by the sky itself: north up and east left at the
+// object, however the view is rotated by the lock, and exactly registered with the stars.
+const char* kDssVS = R"(#version 300 es
+layout(location=0) in vec3 aPos;      // quad corners in displayed space, x=E y=up z=S
+uniform mat4 uVP;
+out vec3 vW;
+void main() { vW = aPos; gl_Position = uVP * vec4(aPos, 1.0); }
+)";
+const char* kDssFS = R"(#version 300 es
+precision highp float;
+)" ZOOM_GLSL R"(
+in vec3 vW;
+uniform sampler2D uTex;               // 8-bit DSS2 red, row 0 = north edge, column 0 = east edge
+uniform mat3 uPrec;
+uniform vec4 uSky;                    // cos(LST), sin(LST), sin(lat), cos(lat)
+uniform vec3 uObj;                    // object, J2000
+uniform vec3 uEast;                   // tangent-plane axes at the object, J2000
+uniform vec3 uNorth;
+uniform float uFov;                   // image width, radians
+uniform float uAlpha;
+uniform float uNight;
+uniform float uBase;                  // the plate's sky level, 0..1
+out vec4 o;
+void main() {
+    vec3 w = normalize(vW);
+    vec3 ws = zoomInv(w);
+    float east = ws.x, up = ws.y, north = -ws.z;
+    float a = up * uSky.w - north * uSky.z;
+    float zz = up * uSky.z + north * uSky.w;
+    float b = -east;
+    vec3 eq = vec3(a * uSky.x + b * uSky.y, a * uSky.y - b * uSky.x, zz) * uPrec;
+    float c = dot(eq, uObj);
+    vec2 uv = vec2(0.5 - dot(eq, uEast) / max(c, 0.05) / uFov, 0.5 - dot(eq, uNorth) / max(c, 0.05) / uFov);
+    float g = texture(uTex, clamp(uv, 0.0, 1.0)).r;
+    vec2 e = min(uv, 1.0 - uv);
+    float edge = min(e.x, e.y);
+    if (c <= 0.05 || edge <= 0.0 || w.y <= 0.0) discard;
+    // The plate's own sky level is taken out and what is left is ADDED to the background, so the picture carries no frame:
+    // where the plate is empty sky nothing changes, and a radial fade takes the outer part of the field to nothing.
+    float v = pow(clamp((g - uBase) / max(1.0 - uBase, 0.05), 0.0, 1.0), 0.85);
+    float fade = 1.0 - smoothstep(0.35, 1.0, length(uv - 0.5) * 2.0);
+    vec3 col = vec3(v * 0.93, v * 0.96, v) * 1.1;
+    if (uNight > 0.5) col = vec3(v, v * 0.06, 0.0);
+    o = vec4(col * (uAlpha * fade * smoothstep(0.0, 0.05, w.y)), 1.0);
+}
+)";
+
 const char* kFlatVS = R"(#version 300 es
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec4 aCol;
@@ -586,19 +689,29 @@ struct Hand {
     bool gripOk = false, aimOk = false;
     Vec3 gripPos{0, 0, 0}, aimPos{0, 0, 0}, hitPt{0, 0, 0};
     XrQuaternionf aimQ{0, 0, 0, 1};
+    XrQuaternionf gripQ{0, 0, 0, 1};
     float trigger = 0, squeeze = 0, thumb = 0;
     std::vector<float> mesh;  // pos+normal triangles in hand space, rebuilt every frame
     bool trigDown = false, trigEdge = false;
+    bool sqzDown = false, sqzEdge = false;  // the second (grip) trigger
 };
 
-// One Messier / Caldwell / NGC object (deepsky.bin, tools/make_dso.py).
+// One sky object the user can point at: a Messier / Caldwell / NGC object (deepsky.bin, tools/make_dso.py) or a
+// solar-system body whose direction is recomputed every frame.
 struct Dso {
     Vec3 d{0, 0, 0};  // J2000 unit vector
     float mag = 15.f, size = 0.f;  // size: major axis, arcmin
-    uint8_t type = 0, cat = 0;     // type: 0 galaxy 1 open 2 globular 3 planetary 4 nebula 5 other; cat bits M=1 C=2 NGC=4
+    uint8_t type = 0, cat = 0;     // type: 0 galaxy 1 open 2 globular 3 planetary 4 nebula 5 other 6 Sun 7 Moon 8 planet 9 asteroid 10 satellite
+                                   // cat bits: M=1 C=2 NGC=4, 8 = always shown (Sun, Moon, planets, lit satellites), 16 = asteroid (magnitude-limited)
+                                   // for the Moon "mag" holds the illuminated fraction
     char label[10] = {};
 };
-const char* const kDsoTypeName[6] = {"GALAXY", "OPEN CLUSTER", "GLOBULAR", "PLANETARY", "NEBULA", "OTHER"};
+const char* const kDsoTypeName[11] = {"GALAXY", "OPEN CLUSTER", "GLOBULAR", "PLANETARY", "NEBULA", "OTHER",
+                                      "SUN", "MOON", "PLANET", "ASTEROID", "SATELLITE"};
+
+// Panel text for a catalogue object (deepinfo.txt, tools/make_info.py)
+struct Info { std::string common, also, con, desc; };
+struct PanelLine { std::string s; int style; };  // style 0 title, 1 body, 2 dim, 3 hint
 
 constexpr float kDome = 1000.f;      // radius the sky is drawn at (stars, lines, labels); the background is 5x that
 constexpr float kFloorY = -1.65f;    // ground plane in the LOCAL space, assuming the session starts at standing eye height
@@ -675,7 +788,40 @@ struct App {
     std::vector<uint8_t> dsoRaw;
     std::vector<Dso> dso;
     std::vector<Vec3> dsoW;            // displayed (zoomed, locked) horizontal direction of each object, per frame
-    bool showDso = true;
+    bool showDso = true, showBodies = true;
+    size_t nStatic = 0;                // dso[0, nStatic) are catalogue objects; after them Sun, Moon, planets, asteroids, satellites
+    size_t astStart = 0, satStart = 0;
+    // DSS2 cutouts (dss.bin) drawn over the sky once zoomed in, and the panel that pops up from the right controller
+    std::vector<uint8_t> dssRaw;
+    uint32_t dssCount = 0, dssSide = 0;
+    size_t dssPix = 0;                 // offset of the first image in dssRaw
+    std::vector<int> dssOf;            // catalogue index -> image index, -1 when there is none
+    std::vector<float> dssFov;         // degrees, per image
+    GLuint dssProg = 0, dssVao = 0, dssVbo = 0, dssTex = 0;
+    int dssShown = -1, dssLoaded = -1; // catalogue index being drawn, image index in the texture
+    float dssAlpha = 0.f, dssFovRad = 0.f, dssBase = 0.f;
+    Vec3 dssObj{0, 0, 0}, dssEast{0, 0, 0}, dssNorth{0, 0, 0};
+    float dssQuad[18] = {};
+    std::unordered_map<std::string, Info> info;
+    std::vector<PanelLine> panelLines;
+    float panelT = 0.f;                // 0 closed .. 1 open
+    Vec3 panelO{0, 0, 0}, panelR{1, 0, 0}, panelU{0, 1, 0};  // bottom centre, text direction and up of the open panel
+    float panelScroll = 0.f, panelMaxScroll = 0.f;  // metres of content scrolled off the top, and the most it can be
+    int panelFor = -1;                 // catalogue index the panel was last built for (scroll resets on a change)
+    Vec3 headPos{0, 0, 0};
+    // controller models from the runtime (XR_FB_render_model), drawn in grip space when available
+    PFN_xrEnumerateRenderModelPathsFB xrEnumPaths = nullptr;
+    PFN_xrGetRenderModelPropertiesFB xrModelProps = nullptr;
+    PFN_xrLoadRenderModelFB xrLoadModel = nullptr;
+    GLuint ctlProg = 0, ctlVao[2] = {0, 0}, ctlVbo[2] = {0, 0};
+    int ctlVerts[2] = {0, 0}, ctlTries = 0;
+    double ctlNext = 0;
+    std::vector<ephem::Asteroid> ast;
+    std::vector<uint8_t> satRaw;       // satellites.bin, sampled TEME tracks
+    double satT0 = 0, tNow = 0;        // track start (unix); the simulated time
+    float satStep = 300.f;
+    uint32_t satN = 0, satCount = 0;
+    GLuint bodyVao = 0, bodyVbo = 0;
     float zoom = 1.f, zoomLog = 0.f;
     int lock = -1, hover = -1;         // indices into dso
     bool zcSet = false, selectReq = false;
@@ -697,7 +843,7 @@ struct App {
     float fontPx = 56.f;
     int fontW = 0, fontH = 0;
     size_t fontAtlasOff = 0;
-    bool night = false, hud = true;
+    bool night = false, hud = false;  // the diagnostic text is off by default; the menu button toggles it
     float latitude = 45.f * float(kPi / 180.0);
 
     // GPU timer
@@ -728,8 +874,112 @@ std::vector<uint8_t> readAsset(AAssetManager* am, const char* name) {
     return out;
 }
 
+// Solar-system bodies appended after the catalogue objects: Sun, Moon, 7 planets, then asteroids and satellites.
+void addBody(const char* name, uint8_t type, uint8_t cat, float mag) {
+    Dso o;
+    o.type = type;
+    o.cat = cat;
+    o.mag = mag;
+    strncpy(o.label, name, 9);
+    g.dso.push_back(o);
+}
+void loadBodies(AAssetManager* am) {
+    g.nStatic = g.dso.size();
+    static const char* const planets[9] = {"Sun", "Moon", "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune"};
+    for (int i = 0; i < 9; ++i) addBody(planets[i], uint8_t(i == 0 ? 6 : i == 1 ? 7 : 8), 8, 0.f);
+
+    g.astStart = g.dso.size();
+    std::vector<uint8_t> a = readAsset(am, "asteroids.bin");  // "GAST", count, 80-byte records (tools/make_bodies.py)
+    if (a.size() >= 8 && memcmp(a.data(), "GAST", 4) == 0) {
+        uint32_t n;
+        memcpy(&n, a.data() + 4, 4);
+        if (a.size() >= 8 + size_t(n) * 80) {
+            for (uint32_t i = 0; i < n; ++i) {
+                const uint8_t* r = a.data() + 8 + size_t(i) * 80;
+                char name[17] = {};
+                memcpy(name, r, 16);
+                float hg[2];
+                memcpy(hg, r + 16, 8);
+                double el[7];
+                memcpy(el, r + 24, 56);
+                g.ast.push_back({hg[0], hg[1], el[0], el[1], el[2], el[3], el[4], el[5], el[6]});
+                addBody(name, 9, 16, 15.f);
+            }
+        }
+    }
+
+    g.satStart = g.dso.size();
+    g.satRaw = readAsset(am, "satellites.bin");  // "GSAT", count, t0, step, samples, per sat: name[16] mag pad, samples x 6 floats
+    if (g.satRaw.size() >= 24 && memcmp(g.satRaw.data(), "GSAT", 4) == 0) {
+        memcpy(&g.satCount, g.satRaw.data() + 4, 4);
+        memcpy(&g.satT0, g.satRaw.data() + 8, 8);
+        memcpy(&g.satStep, g.satRaw.data() + 16, 4);
+        memcpy(&g.satN, g.satRaw.data() + 20, 4);
+        if (g.satRaw.size() >= 24 + size_t(g.satCount) * (24 + size_t(g.satN) * 24) && g.satN > 2) {
+            for (uint32_t k = 0; k < g.satCount; ++k) {
+                char name[17] = {};
+                memcpy(name, g.satRaw.data() + 24 + size_t(k) * (24 + size_t(g.satN) * 24), 16);
+                addBody(name, 10, 8, 99.f);
+            }
+        } else {
+            g.satCount = 0;
+        }
+    }
+    g.dsoW.assign(g.dso.size(), Vec3{0, 0, 0});
+    LOGI("bodies: 9 sun/moon/planets, %zu asteroids, %u satellites", g.ast.size(), g.satCount);
+}
+
 // Observing site, DSS2 map and Arial atlas. All optional; the atlas degrades to
 // a plain star field at 0N 0E without them.
+// dss.bin: "GDSS", count, side, count x {label[12], fov}, count x side*side bytes (tools/make_dss.py). Optional.
+void loadDss(AAssetManager* am) {
+    g.dssRaw = readAsset(am, "dss.bin");
+    g.dssCount = 0;
+    if (g.dssRaw.size() < 12 || memcmp(g.dssRaw.data(), "GDSS", 4) != 0) { g.dssRaw.clear(); return; }
+    uint32_t n, side;
+    memcpy(&n, g.dssRaw.data() + 4, 4);
+    memcpy(&side, g.dssRaw.data() + 8, 4);
+    size_t px = size_t(side) * side;
+    if (side == 0 || g.dssRaw.size() < 12 + size_t(n) * 16 + size_t(n) * px) { g.dssRaw.clear(); return; }
+    g.dssSide = side;
+    g.dssPix = 12 + size_t(n) * 16;
+    g.dssOf.assign(g.nStatic, -1);
+    g.dssFov.assign(n, 0.f);
+    std::unordered_map<std::string, size_t> byLabel;
+    for (size_t i = 0; i < g.nStatic; ++i) byLabel.emplace(g.dso[i].label, i);
+    for (uint32_t k = 0; k < n; ++k) {
+        const uint8_t* e = g.dssRaw.data() + 12 + size_t(k) * 16;
+        char lab[13];
+        memcpy(lab, e, 12);
+        lab[12] = 0;
+        memcpy(&g.dssFov[k], e + 12, 4);
+        auto it = byLabel.find(lab);
+        if (it != byLabel.end()) g.dssOf[it->second] = int(k);
+    }
+    g.dssCount = n;
+    LOGI("DSS2 cutouts: %u images of %ux%u", n, side, side);
+}
+
+// deepinfo.txt: label, common name(s), other designations, constellation, description; tab separated, optional.
+void loadInfo(AAssetManager* am) {
+    std::vector<uint8_t> t = readAsset(am, "deepinfo.txt");
+    size_t pos = 0;
+    while (pos < t.size()) {
+        size_t end = pos;
+        while (end < t.size() && t[end] != '\n') ++end;
+        std::string line(reinterpret_cast<const char*>(t.data()) + pos, end - pos);
+        pos = end + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        std::string f[5];
+        int k = 0;
+        size_t a = 0;
+        for (size_t i = 0; i <= line.size() && k < 5; ++i)
+            if (i == line.size() || line[i] == '\t') { f[k++] = line.substr(a, i - a); a = i + 1; }
+        if (k == 5 && !f[0].empty()) g.info[f[0]] = Info{f[1], f[2], f[3], f[4]};
+    }
+    LOGI("object info: %zu entries", g.info.size());
+}
+
 void loadSkyAssets(AAssetManager* am) {
     std::vector<uint8_t> t = readAsset(am, "site.txt");
     if (!t.empty()) {
@@ -793,6 +1043,9 @@ void loadSkyAssets(AAssetManager* am) {
         }
     }
     LOGI("deep-sky objects: %zu", g.dso.size());
+    loadBodies(am);
+    loadDss(am);
+    loadInfo(am);
 }
 
 // constlines.bin ("GCLN", count, count x 6 floats) and constnames.txt ("x y z Abbr").
@@ -924,6 +1177,7 @@ void initGlResources() {
 
     // DSS2 background: RGB bytes -> sRGB texture (so filtering and blending are linear)
     g.handProg = program(kHandVS, kHandFS);
+    g.ctlProg = program(kCtlVS, kCtlFS);
     g.flatProg = program(kFlatVS, kFlatFS);
     glGenVertexArrays(1, &g.handVao);
     glGenBuffers(1, &g.handVbo);
@@ -942,6 +1196,21 @@ void initGlResources() {
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 28, (void*)12);
     glBindVertexArray(0);
+
+    g.dssProg = program(kDssVS, kDssFS);
+    glGenVertexArrays(1, &g.dssVao);
+    glGenBuffers(1, &g.dssVbo);
+    glBindVertexArray(g.dssVao);
+    glBindBuffer(GL_ARRAY_BUFFER, g.dssVbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, (void*)0);
+    glBindVertexArray(0);
+    glGenTextures(1, &g.dssTex);
+    glBindTexture(GL_TEXTURE_2D, g.dssTex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     g.bgProg = program(kBgVS, kBgFS);
     if (g.bgRaw.size() > 8 && memcmp(g.bgRaw.data(), "GBKG", 4) == 0) {
@@ -1022,6 +1291,19 @@ void initGlResources() {
         g.dsoRaw.clear();
         g.dsoRaw.shrink_to_fit();
     }
+
+    // moving bodies: same record layout as the catalogue, refilled every frame
+    glGenVertexArrays(1, &g.bodyVao);
+    glGenBuffers(1, &g.bodyVbo);
+    glBindVertexArray(g.bodyVao);
+    glBindBuffer(GL_ARRAY_BUFFER, g.bodyVbo);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 32, (void*)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 32, (void*)12);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_UNSIGNED_BYTE, GL_FALSE, 32, (void*)20);
+    glBindVertexArray(0);
 
     // Arial atlas
     if (!g.glyphs.empty()) {
@@ -1149,7 +1431,8 @@ void setRotTo(float* m, Vec3 a, Vec3 b) {
 
 // NGC objects fainter than this are hidden; Messier and Caldwell always show. Zooming in reveals fainter ones.
 float dsoLimit() { return std::min(16.f, 9.5f + 3.f * std::log2(g.zoom)); }
-bool dsoVisible(const Dso& o) { return (o.cat & 3) || o.mag <= dsoLimit(); }
+bool dsoVisible(const Dso& o) { return (o.cat & 11) || o.mag <= dsoLimit(); }
+bool dsoShown(size_t i) { return i < g.nStatic ? g.showDso : g.showBodies; }
 
 // Once per frame: where the zoom is centred, and where every deep-sky object is displayed.
 void updateZoomMap() {
@@ -1178,14 +1461,98 @@ void updateZoomMap() {
     }
 }
 
+// Sun, Moon, planets, asteroids and satellites at the simulated time; the records are uploaded for drawing.
+void updateBodies() {
+    if (g.nStatic >= g.dso.size()) return;
+    using namespace ephem;
+    const double jd = jdFromUnix(g.tNow);
+    MoonPos mp = moonGeo(jd);
+    V3 earth = earthHelioEcl(jd, mp);
+    const float* P = g.prec;  // column-major J2000 -> date
+    auto toDate = [&](V3 v) {
+        return V3{P[0] * v.x + P[3] * v.y + P[6] * v.z, P[1] * v.x + P[4] * v.y + P[7] * v.z,
+                  P[2] * v.x + P[5] * v.y + P[8] * v.z};
+    };
+    auto toJ2000 = [&](V3 v) {
+        return V3{P[0] * v.x + P[1] * v.y + P[2] * v.z, P[3] * v.x + P[4] * v.y + P[5] * v.z,
+                  P[6] * v.x + P[7] * v.y + P[8] * v.z};
+    };
+    auto setDir = [](Dso& o, V3 d) { o.d = {float(d.x), float(d.y), float(d.z)}; };
+    const double arcmin = 60.0 / kD2R;
+    Dso* b = &g.dso[g.nStatic];
+
+    Seen sun = seenFrom(V3{}, earth);
+    setDir(b[0], sun.dir);
+    b[0].size = float(2 * std::asin(696000.0 / (sun.distAu * kAuKm)) * arcmin);
+
+    V3 obs = observerEr(g.latitude, g.elevM, g.lst);  // topocentric: the Moon's parallax is up to a degree
+    V3 topo = mp.eqDate - obs;
+    setDir(b[1], toJ2000(unit(topo)));
+    b[1].size = float(2 * std::asin(1737.4 / (norm(topo) * kEarthRadiusKm)) * arcmin);
+    V3 sunDate = toDate(sun.dir);
+    b[1].mag = float((1.0 - dot(unit(mp.eqDate), sunDate)) / 2.0);
+
+    static const int kPlanetIdx[7] = {MERCURY, VENUS, MARS, JUPITER, SATURN, URANUS, NEPTUNE};
+    for (int k = 0; k < 7; ++k) {
+        Seen s = seenFrom(planetHelioEcl(kPlanetIdx[k], jd), earth);
+        setDir(b[2 + k], s.dir);
+        b[2 + k].mag = float(planetMag(kPlanetIdx[k], s.rAu, s.distAu, s.phaseDeg));
+        b[2 + k].size = float(2 * std::asin(planetRadiusKm(kPlanetIdx[k]) / (s.distAu * kAuKm)) * arcmin);
+    }
+    for (size_t i = 0; i < g.ast.size(); ++i) {
+        Seen s = seenFrom(asteroidHelioEcl(g.ast[i], jd), earth);
+        Dso& o = g.dso[g.astStart + i];
+        setDir(o, s.dir);
+        o.mag = float(asteroidMag(g.ast[i], s.rAu, s.distAu, s.phaseDeg));
+    }
+
+    // satellites: Hermite-interpolate the baked TEME track, then take the topocentric direction
+    V3 obsKm = obs * kEarthRadiusKm;
+    double u = (g.tNow - g.satT0) / double(g.satStep);
+    const double h = g.satStep;
+    for (uint32_t k = 0; k < g.satCount; ++k) {
+        Dso& o = g.dso[g.satStart + k];
+        if (u < 0.0 || u >= double(g.satN) - 1.0) { o.cat = 0; o.mag = 99.f; continue; }  // outside the baked window
+        const uint8_t* rec = g.satRaw.data() + 24 + size_t(k) * (24 + size_t(g.satN) * 24);
+        float nominal;
+        memcpy(&nominal, rec + 16, 4);
+        size_t i = size_t(u);
+        double f = u - double(i), f2 = f * f, f3 = f2 * f;
+        double h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = -2 * f3 + 3 * f2, h11 = f3 - f2;
+        float s0[6], s1[6];
+        memcpy(s0, rec + 24 + i * 24, 24);
+        memcpy(s1, rec + 24 + (i + 1) * 24, 24);
+        V3 r{h00 * s0[0] + h10 * h * s0[3] + h01 * s1[0] + h11 * h * s1[3],
+             h00 * s0[1] + h10 * h * s0[4] + h01 * s1[1] + h11 * h * s1[4],
+             h00 * s0[2] + h10 * h * s0[5] + h01 * s1[2] + h11 * h * s1[5]};
+        setDir(o, toJ2000(unit(r - obsKm)));
+        double along = dot(r, sunDate);
+        bool shadow = along < 0.0 && norm(r - sunDate * along) < 6371.0;  // cylindrical Earth shadow
+        o.cat = 8;
+        o.mag = shadow ? 9.f : nominal;
+    }
+
+    std::vector<uint8_t> rec((g.dso.size() - g.nStatic) * 32);
+    for (size_t i = g.nStatic; i < g.dso.size(); ++i) {
+        const Dso& o = g.dso[i];
+        uint8_t* r = rec.data() + (i - g.nStatic) * 32;
+        float f[5] = {o.d.x, o.d.y, o.d.z, o.mag, o.size};
+        memcpy(r, f, 20);
+        r[20] = o.type;
+        r[21] = o.cat;
+        memcpy(r + 22, o.label, 9);
+    }
+    glBindBuffer(GL_ARRAY_BUFFER, g.bodyVbo);
+    glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(rec.size()), rec.data(), GL_STREAM_DRAW);
+}
+
 // The visible deep-sky object nearest the displayed direction `wd`, within a few degrees of screen; -1 if none.
 int findDso(Vec3 wd) {
-    if (!g.showDso) return -1;
     int best = -1;
     float bestScore = 1.f;
     for (size_t i = 0; i < g.dso.size(); ++i) {
         const Vec3& w = g.dsoW[i];
-        if (dot(w, w) < 0.25f || w.y < 0.f) continue;
+        if (!dsoShown(i) || dot(w, w) < 0.25f || w.y < 0.f) continue;
         float cd = dot(w, wd);
         if (cd < 0.97f) continue;  // beyond ~14 degrees
         const Dso& o = g.dso[i];
@@ -1241,6 +1608,21 @@ void addTextArial(std::vector<float>& v, const char* s, Vec3 origin, Vec3 right,
         push(tl, gl->u0, gl->v0); push(br, gl->u1, gl->v1); push(bl, gl->u0, gl->v1);
         pen += gl->adv * scale;
     }
+}
+
+float arialWidth(const char* s) {  // font pixels
+    float w = 0.f;
+    for (; *s; ++s) {
+        int i = int((unsigned char)*s) - 32;
+        if (i >= 0 && size_t(i) < g.glyphs.size()) w += g.glyphs[size_t(i)].adv;
+    }
+    return w;
+}
+
+// Left-aligned: `left` is the start of the text, vertically centred on it.
+void addTextArialLeft(std::vector<float>& v, const char* s, Vec3 left, Vec3 right, Vec3 up, float scale) {
+    float w = arialWidth(s) * scale;
+    addTextArial(v, s, left + right * (w * 0.5f), right, up, scale);
 }
 
 void drawText(const std::vector<float>& v, const Mat4& mvp, const float color[3], GLuint tex = 0) {
@@ -1405,6 +1787,93 @@ void addRing(std::vector<float>& v, Vec3 c, Vec3 eye, float R, float width, cons
     }
 }
 
+// The object panel: a small card riding on the right controller, its bottom edge along the pointer axis and facing the
+// head, so turning the palm towards you reads it like a wrist display. The rows are clipped to a fixed-height window
+// that the right stick scrolls; a thin bar on the right edge shows the position. Everything is built in the card's own
+// metres and scaled about the middle of its bottom edge by the pop animation.
+void drawPanel(const Mat4& vpFull) {
+    if (g.panelT < 0.01f || g.panelLines.empty() || g.glyphs.empty()) return;
+    const float k = g.panelT * g.panelT * (3.f - 2.f * g.panelT);
+    const float W = 0.11f, Hmax = 0.11f, pad = 0.0045f, em = 0.00525f;
+    const float bs = em / std::max(g.fontPx, 1.f);
+
+    struct Row { std::string s; int style; float scale, h; };
+    std::vector<Row> rows;
+    for (const PanelLine& pl : g.panelLines) {
+        const float sc = pl.style == 0 ? bs * 1.35f : bs;
+        if (pl.s.empty()) { rows.push_back({"", pl.style, sc, 0.5f * em}); continue; }
+        std::string line;
+        size_t i = 0;
+        while (i < pl.s.size()) {
+            size_t j = pl.s.find(' ', i);
+            if (j == std::string::npos) j = pl.s.size();
+            std::string word = pl.s.substr(i, j - i);
+            std::string trial = line.empty() ? word : line + " " + word;
+            if (!line.empty() && arialWidth(trial.c_str()) * sc > W - 2.f * pad - 0.004f) {
+                rows.push_back({line, pl.style, sc, 1.3f * em * (pl.style == 0 ? 1.35f : 1.f)});
+                line = word;
+            } else {
+                line = trial;
+            }
+            i = j + 1;
+        }
+        if (!line.empty()) rows.push_back({line, pl.style, sc, 1.3f * em * (pl.style == 0 ? 1.35f : 1.f)});
+    }
+    float content = 0.f;
+    for (const Row& r : rows) content += r.h;
+    const float H = std::min(content + 2.f * pad, Hmax);
+    const float view = H - 2.f * pad;
+    g.panelMaxScroll = std::max(content - view, 0.f);
+    g.panelScroll = std::min(std::max(g.panelScroll, 0.f), g.panelMaxScroll);
+
+    const Vec3 R = g.panelR * k, U = g.panelU * k;
+    auto at = [&](float x, float y) { return g.panelO + R * x + U * y; };
+    std::vector<float> bg;
+    auto quad = [&](float x0, float y0, float x1, float y1, const float c[3]) {
+        auto vert = [&](float x, float y) { Vec3 p = at(x, y); bg.insert(bg.end(), {p.x, p.y, p.z, c[0], c[1], c[2], 1.f}); };
+        vert(x0, y0); vert(x1, y0); vert(x1, y1);
+        vert(x0, y0); vert(x1, y1); vert(x0, y1);
+    };
+    const float rim[3] = {g.night ? 0.30f : 0.16f, g.night ? 0.03f : 0.30f, g.night ? 0.f : 0.52f};
+    const float fill[3] = {g.night ? 0.04f : 0.015f, g.night ? 0.f : 0.025f, g.night ? 0.f : 0.06f};
+    const float bar[3] = {g.night ? 0.60f : 0.45f, g.night ? 0.06f : 0.62f, g.night ? 0.f : 0.90f};
+    quad(-W / 2 - 0.001f, -0.001f, W / 2 + 0.001f, H + 0.001f, rim);
+    quad(-W / 2, 0.f, W / 2, H, fill);
+    if (g.panelMaxScroll > 0.f) {  // scroll bar: thumb length is the visible fraction of the content
+        const float th = std::max(view * view / content, 0.01f);
+        const float top = H - pad - (view - th) * (g.panelScroll / g.panelMaxScroll);
+        quad(W / 2 - 0.004f, top - th, W / 2 - 0.0025f, top, bar);
+    }
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendColor(0.f, 0.f, 0.f, 0.9f);
+    glBlendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA);
+    glUseProgram(g.flatProg);
+    glUniformMatrix4fv(glGetUniformLocation(g.flatProg, "uMVP"), 1, GL_FALSE, vpFull.m);
+    glBindVertexArray(g.flatVao);
+    glBindBuffer(GL_ARRAY_BUFFER, g.flatVbo);
+    glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(bg.size() * 4), bg.data(), GL_STREAM_DRAW);
+    glDrawArrays(GL_TRIANGLES, 0, GLsizei(bg.size() / 7));
+    glBlendFunc(GL_ONE, GL_ONE);
+
+    std::vector<float> tv[4];
+    float y = H - pad + g.panelScroll;  // top of the first row, shifted up by the scroll
+    for (const Row& r : rows) {
+        const float top = y, bottom = y - r.h;
+        y = bottom;
+        if (r.s.empty()) continue;
+        if (top > H - pad + 0.0005f || bottom < pad - 0.0005f) continue;  // only whole rows inside the window
+        addTextArialLeft(tv[std::min(std::max(r.style, 0), 3)], r.s.c_str(), at(-W / 2 + pad, bottom + r.h * 0.5f), R, U, r.scale);
+    }
+    const float cols[4][3] = {{g.night ? 1.0f : 1.0f, g.night ? 0.10f : 0.86f, g.night ? 0.f : 0.40f},
+                              {g.night ? 0.85f : 0.88f, g.night ? 0.06f : 0.90f, g.night ? 0.f : 0.96f},
+                              {g.night ? 0.55f : 0.50f, g.night ? 0.04f : 0.58f, g.night ? 0.f : 0.70f},
+                              {g.night ? 0.70f : 0.35f, g.night ? 0.05f : 0.85f, g.night ? 0.f : 0.95f}};
+    for (int i = 0; i < 4; ++i) drawText(tv[i], vpFull, cols[i], g.arialTex);
+}
+
+// -------- scene
 // -------- scene
 
 void setZoomUniforms(GLuint prog) {
@@ -1460,6 +1929,46 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         glDrawElements(GL_TRIANGLES, g.bgIndices, GL_UNSIGNED_SHORT, nullptr);
     }
 
+    // DSS2 cutout of the locked (or centred) object once zoomed far enough that it is worth a picture
+    if (g.dssShown >= 0 && g.dssAlpha > 0.003f && g.dssProg) {
+        const int k = g.dssOf[size_t(g.dssShown)];
+        if (g.dssLoaded != k) {
+            glBindTexture(GL_TEXTURE_2D, g.dssTex);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, GLsizei(g.dssSide), GLsizei(g.dssSide), 0, GL_RED, GL_UNSIGNED_BYTE,
+                         g.dssRaw.data() + g.dssPix + size_t(k) * g.dssSide * g.dssSide);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            {  // sky level: the 20th percentile of the plate (an object rarely covers most of it, the sky always does)
+                const uint8_t* img = g.dssRaw.data() + g.dssPix + size_t(k) * g.dssSide * g.dssSide;
+                std::vector<uint8_t> tmp(img, img + size_t(g.dssSide) * g.dssSide);
+                std::nth_element(tmp.begin(), tmp.begin() + ptrdiff_t(tmp.size() / 5), tmp.end());
+                g.dssBase = float(tmp[tmp.size() / 5]) / 255.f;
+            }
+            g.dssLoaded = k;
+        }
+        glUseProgram(g.dssProg);
+        glUniformMatrix4fv(glGetUniformLocation(g.dssProg, "uVP"), 1, GL_FALSE, vp.m);
+        glUniformMatrix3fv(glGetUniformLocation(g.dssProg, "uPrec"), 1, GL_FALSE, g.prec);
+        glUniform4f(glGetUniformLocation(g.dssProg, "uSky"), std::cos(float(g.lst)), std::sin(float(g.lst)),
+                    std::sin(g.latitude), std::cos(g.latitude));
+        glUniform3f(glGetUniformLocation(g.dssProg, "uObj"), g.dssObj.x, g.dssObj.y, g.dssObj.z);
+        glUniform3f(glGetUniformLocation(g.dssProg, "uEast"), g.dssEast.x, g.dssEast.y, g.dssEast.z);
+        glUniform3f(glGetUniformLocation(g.dssProg, "uNorth"), g.dssNorth.x, g.dssNorth.y, g.dssNorth.z);
+        glUniform1f(glGetUniformLocation(g.dssProg, "uFov"), g.dssFovRad);
+        glUniform1f(glGetUniformLocation(g.dssProg, "uAlpha"), g.dssAlpha);
+        glUniform1f(glGetUniformLocation(g.dssProg, "uBase"), g.dssBase);
+        glUniform1f(glGetUniformLocation(g.dssProg, "uNight"), g.night ? 1.f : 0.f);
+        setZoomUniforms(g.dssProg);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, g.dssTex);
+        glUniform1i(glGetUniformLocation(g.dssProg, "uTex"), 0);
+        glBindVertexArray(g.dssVao);
+        glBindBuffer(GL_ARRAY_BUFFER, g.dssVbo);
+        glBufferData(GL_ARRAY_BUFFER, sizeof g.dssQuad, g.dssQuad, GL_STREAM_DRAW);
+        glBlendFunc(GL_ONE, GL_ONE);  // additive onto the sky
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+
     // stars
     const StarSet* set = &g.real;
     uint32_t n = prefixCount(g.real, g.magLimit);
@@ -1480,7 +1989,7 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
     g.lastDrawn = n;
 
     // Messier / Caldwell / NGC symbols
-    if (g.showDso && g.dsoVao) {
+    if ((g.showDso && g.dsoVao) || (g.showBodies && g.nStatic < g.dso.size())) {
         glUseProgram(g.dsoProg);
         glUniformMatrix4fv(glGetUniformLocation(g.dsoProg, "uVP"), 1, GL_FALSE, vp.m);
         glUniform4f(glGetUniformLocation(g.dsoProg, "uSky"), std::cos(float(g.lst)), std::sin(float(g.lst)),
@@ -1489,9 +1998,17 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         glUniform1f(glGetUniformLocation(g.dsoProg, "uPx"), float(sc.w) / 1832.f);
         glUniform1f(glGetUniformLocation(g.dsoProg, "uNight"), g.night ? 1.f : 0.f);
         glUniform1f(glGetUniformLocation(g.dsoProg, "uLim"), dsoLimit());
+        glUniform2f(glGetUniformLocation(g.dsoProg, "uHide"), float(g.dssShown), std::min(g.dssAlpha * 1.5f, 1.f));
         setZoomUniforms(g.dsoProg);
-        glBindVertexArray(g.dsoVao);
-        glDrawArrays(GL_POINTS, 0, GLsizei(g.dso.size()));
+        if (g.showDso && g.dsoVao) {
+            glBindVertexArray(g.dsoVao);
+            glDrawArrays(GL_POINTS, 0, GLsizei(g.nStatic));
+        }
+        if (g.showBodies && g.nStatic < g.dso.size()) {
+            glUniform2f(glGetUniformLocation(g.dsoProg, "uHide"), -1.f, 0.f);  // vertex ids restart at 0 for the bodies
+            glBindVertexArray(g.bodyVao);
+            glDrawArrays(GL_POINTS, 0, GLsizei(g.dso.size() - g.nStatic));
+        }
     }
 
     // reference rings
@@ -1531,14 +2048,20 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
     }
 
     // deep-sky labels: Messier and Caldwell always, NGC numbers once zoomed in; only those near the gaze
-    if (g.showDso && !g.glyphs.empty()) {
+    if ((g.showDso || g.showBodies) && !g.glyphs.empty()) {
         std::vector<float> dv;
         const float scale = 0.05f * kDome / 100.f;
         for (size_t i = 0; i < g.dso.size(); ++i) {
             const Dso& o = g.dso[i];
             Vec3 w = g.dsoW[i];
-            if (dot(w, w) < 0.25f || w.y < 0.02f || dot(w, g.headFwd) < 0.5f || !dsoVisible(o)) continue;
-            if (!(o.cat & 3) && g.zoom < 3.f) continue;
+            if (!dsoShown(i) || dot(w, w) < 0.25f || w.y < 0.02f || dot(w, g.headFwd) < 0.5f || !dsoVisible(o)) continue;
+            if (o.type == 10) {  // satellites: lit ones only, and just the stations until zoomed in
+                if (o.mag > 8.f || (o.mag > 1.f && g.zoom < 2.f)) continue;
+            } else if (o.type == 9) {
+                if (g.zoom < 2.f) continue;
+            } else if (!(o.cat & 11) && g.zoom < 3.f) {
+                continue;
+            }
             Vec3 r{-w.z, 0.f, w.x};
             float rl = std::sqrt(r.x * r.x + r.z * r.z);
             if (rl < 1e-3f) continue;
@@ -1577,14 +2100,14 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         snprintf(line[6], 96, "%s", g.hPoint2.c_str());
         snprintf(line[7], 96, "%s", g.hOver.c_str());
         snprintf(line[8], 96, "%s  ZOOM %.1fX", g.hLock.c_str(), g.zoom);
-        snprintf(line[9], 96, "STARS %u  MAG<=%.1f  DSO %zu", g.lastDrawn, g.magLimit, g.showDso ? g.dso.size() : size_t(0));
+        snprintf(line[9], 96, "STARS %u  MAG<=%.1f  DSO %zu", g.lastDrawn, g.magLimit, g.showDso ? g.nStatic : size_t(0));
         snprintf(line[10], 96, "TIER %d %s  %.1f/%.0f FPS", g.tier, g.tier == 0 ? "HIP" : "SYN", s.fps, g.targetHz);
         snprintf(line[11], 96, "WORST %.1f CPU %.1f GPU %.1f MS", s.worst, s.cpu, s.gpu);
         snprintf(line[12], 96, "%s", g.tier > 0 && !g.stressUploaded ? "BUILDING STRESS SET" : " ");
-        snprintf(line[13], 96, "L STICK X TIME  Y ZOOM  R STICK Y MAG");
+        snprintf(line[13], 96, "L STICK X TIME  Y ZOOM  R STICK Y MAG/SCROLL");
         snprintf(line[14], 96, "TRIGGER OR R CLICK: LOCK / RELEASE");
         snprintf(line[15], 96, "A TIER B NIGHT X NOW Y CONSTEL");
-        snprintf(line[16], 96, "L GRIP + X DSO  + Y HZ  L CLICK BG");
+        snprintf(line[16], 96, "L GRIP + X DSO  B BODIES  Y HZ");
         std::vector<float> hv;
         float px = 0.0045f;
         for (int i = 0; i < 17; ++i)
@@ -1605,6 +2128,25 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         glUniform3fv(glGetUniformLocation(g.handProg, "uColor"), 1, skin);
         for (int i = 0; i < 2; ++i) {
             const Hand& h = g.hand[i];
+            if (!h.aimOk) continue;
+            if (g.ctlVerts[i] > 0 && g.ctlVao[i]) {  // the runtime's controller model, in grip space
+                Mat4 model = rotFromQuat(h.gripQ);
+                for (int c : {0, 1})  // the model is turned 180 degrees about its pointing (z) axis: columns x and y negated
+                    for (int r = 0; r < 3; ++r) model.m[c * 4 + r] = -model.m[c * 4 + r];
+                model.m[12] = h.gripPos.x;
+                model.m[13] = h.gripPos.y;
+                model.m[14] = h.gripPos.z;
+                Mat4 mvp = mul(vpFull, model);
+                glUseProgram(g.ctlProg);
+                glUniformMatrix4fv(glGetUniformLocation(g.ctlProg, "uMVP"), 1, GL_FALSE, mvp.m);
+                glUniformMatrix4fv(glGetUniformLocation(g.ctlProg, "uModel"), 1, GL_FALSE, model.m);
+                glUniform1f(glGetUniformLocation(g.ctlProg, "uNight"), g.night ? 1.f : 0.f);
+                glBindVertexArray(g.ctlVao[i]);
+                glDrawArrays(GL_TRIANGLES, 0, g.ctlVerts[i]);
+                glUseProgram(g.handProg);
+                continue;
+            }
+            if (h.mesh.empty()) continue;
             if (!h.aimOk || h.mesh.empty()) continue;
             Mat4 model = rotFromQuat(h.aimQ);
             model.m[12] = h.gripPos.x;
@@ -1620,10 +2162,12 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         }
         std::vector<float> lv;
         const float laserCol[3] = {g.night ? 0.8f : 0.2f, g.night ? 0.1f : 0.7f, g.night ? 0.f : 0.9f};
-        for (int i = 0; i < 2; ++i)
-            if (g.hand[i].aimOk) addLaser(lv, g.hand[i], eye, laserCol);
-        if (g.showDso) {
+        if (g.hand[1].aimOk) addLaser(lv, g.hand[1], eye, laserCol);  // right hand only; the left hand has no pointer
+        if (g.showDso || g.showBodies) {
             auto mark = [&](int idx, const float rgb[3], float a, float extra) {
+                if (!dsoShown(size_t(idx))) return;
+                if (idx == g.dssShown) a *= std::max(0.f, 1.f - g.dssAlpha * 1.5f);  // the picture is the highlight
+                if (a < 0.02f) return;
                 const Dso& o = g.dso[size_t(idx)];
                 const Vec3& w = g.dsoW[size_t(idx)];
                 if (dot(w, w) < 0.25f || w.y < 0.f) return;
@@ -1650,6 +2194,7 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
             glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(lv.size() * 4), lv.data(), GL_STREAM_DRAW);
             glDrawArrays(GL_TRIANGLES, 0, GLsizei(lv.size() / 7));
         }
+        drawPanel(vpFull);
         glDepthMask(GL_TRUE);
         glDisable(GL_DEPTH_TEST);
         const GLenum depthAtt = GL_DEPTH_ATTACHMENT;  // tiler: never write depth back to memory
@@ -1798,13 +2343,19 @@ void pollInput(double dt) {
             g.zoom = std::exp(g.zoomLog);
         }
     }
-    if (std::fabs(r.y) > 0.15f) g.magLimit = std::clamp(g.magLimit + r.y * float(dt) * 4.f, 1.f, 20.f);
+    const bool panelOpen = g.lock >= 0 && g.panelT > 0.5f;
+    if (panelOpen) {
+        if (std::fabs(r.y) > 0.15f) g.panelScroll = std::clamp(g.panelScroll - r.y * float(dt) * 0.08f, 0.f, g.panelMaxScroll);
+    } else if (std::fabs(r.y) > 0.15f) g.magLimit = std::clamp(g.magLimit + r.y * float(dt) * 4.f, 1.f, 20.f);
     if (boolEdge(g.aA)) {
         g.tier = (g.tier + 1) % kTiers;
         g.magLimit = g.tier == 0 ? 5.f : 20.f;  // stress tiers are bounded by their count cap instead
         LOGI("tier -> %d", g.tier);
     }
-    if (boolEdge(g.aB)) g.night = !g.night;
+    if (boolEdge(g.aB)) {
+        if (g.hand[0].squeeze > 0.7f) g.showBodies = !g.showBodies;  // left grip held: Sun, Moon, planets, asteroids, satellites
+        else g.night = !g.night;
+    }
     const bool lgrip = g.hand[0].squeeze > 0.7f;  // left grip held: second layer for X and Y
     if (boolEdge(g.aX)) {
         if (lgrip) g.showDso = !g.showDso;
@@ -1848,6 +2399,13 @@ bool createInstance() {
                                      XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
     bool refresh = has(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
     if (refresh) exts.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+    {
+        std::string all;
+        for (auto& p : props) all += std::string(p.extensionName) + " ";
+        LOGI("runtime extensions: %s", all.c_str());
+    }
+    bool renderModel = has(XR_FB_RENDER_MODEL_EXTENSION_NAME);
+    if (renderModel) exts.push_back(XR_FB_RENDER_MODEL_EXTENSION_NAME);
 
     XrInstanceCreateInfoAndroidKHR ai{XR_TYPE_INSTANCE_CREATE_INFO_ANDROID_KHR};
     ai.applicationVM = g.android->activity->vm;
@@ -1878,6 +2436,12 @@ bool createInstance() {
         xrGetInstanceProcAddr(g.inst, "xrEnumerateDisplayRefreshRatesFB", (PFN_xrVoidFunction*)&g.xrEnumRates);
         xrGetInstanceProcAddr(g.inst, "xrRequestDisplayRefreshRateFB", (PFN_xrVoidFunction*)&g.xrRequestRate);
     }
+    if (renderModel) {
+        xrGetInstanceProcAddr(g.inst, "xrEnumerateRenderModelPathsFB", (PFN_xrVoidFunction*)&g.xrEnumPaths);
+        xrGetInstanceProcAddr(g.inst, "xrGetRenderModelPropertiesFB", (PFN_xrVoidFunction*)&g.xrModelProps);
+        xrGetInstanceProcAddr(g.inst, "xrLoadRenderModelFB", (PFN_xrVoidFunction*)&g.xrLoadModel);
+    }
+    LOGI("render model extension: %s", renderModel ? "yes" : "no");
     return true;
 }
 
@@ -2050,10 +2614,12 @@ void updateHands(XrTime t, const XrView views[2], double dt) {
     Vec3 head{(views[0].pose.position.x + views[1].pose.position.x) * 0.5f,
               (views[0].pose.position.y + views[1].pose.position.y) * 0.5f,
               (views[0].pose.position.z + views[1].pose.position.z) * 0.5f};
+    g.headPos = head;
     for (int i = 0; i < 2; ++i) {
         Hand& h = g.hand[i];
         h.aimOk = h.gripOk = false;
         h.trigEdge = false;
+        h.sqzEdge = false;
         XrActionStateGetInfo gi{XR_TYPE_ACTION_STATE_GET_INFO};
         gi.subactionPath = g.handPath[i];
         gi.action = g.aAim;
@@ -2066,6 +2632,7 @@ void updateHands(XrTime t, const XrView views[2], double dt) {
         h.aimPos = {pa.position.x, pa.position.y, pa.position.z};
         h.aimQ = pa.orientation;
         h.gripPos = h.gripOk ? Vec3{pg.position.x, pg.position.y, pg.position.z} : h.aimPos;
+        h.gripQ = h.gripOk ? pg.orientation : h.aimQ;
 
         auto flt = [&](XrAction a) {
             gi.action = a;
@@ -2083,6 +2650,8 @@ void updateHands(XrTime t, const XrView views[2], double dt) {
         h.trigEdge = h.trigger > 0.85f && !h.trigDown;
         h.trigDown = h.trigger > 0.85f;
         h.squeeze = flt(g.aSqz);
+        h.sqzEdge = h.squeeze > 0.7f && !h.sqzDown;
+        h.sqzDown = h.squeeze > 0.7f;
         float target = (bln(g.aThumbA) || bln(g.aThumbB)) ? 1.f : 0.f;
         h.thumb += (target - h.thumb) * float(std::min(1.0, dt * 12.0));
 
@@ -2091,11 +2660,11 @@ void updateHands(XrTime t, const XrView views[2], double dt) {
         const float R = 0.9f * kDome;
         float b = dot(h.aimPos, dir), c = dot(h.aimPos, h.aimPos) - R * R;
         h.hitPt = h.aimPos + dir * (-b + std::sqrt(std::max(b * b - c, 0.f)));
-        buildHand(h, i);
+        if (!g.ctlVerts[i]) buildHand(h, i);
     }
 
-    // readout: right controller if tracked, else left
-    const Hand* ph = g.hand[1].aimOk ? &g.hand[1] : (g.hand[0].aimOk ? &g.hand[0] : nullptr);
+    // readout: the right controller is the only pointer
+    const Hand* ph = g.hand[1].aimOk ? &g.hand[1] : nullptr;
     if (!ph) {
         g.hPoint1 = "POINT NONE";
         g.hPoint2 = " ";
@@ -2148,8 +2717,10 @@ void updateHands(XrTime t, const XrView views[2], double dt) {
     auto describe = [](const char* tag, int idx, std::string& out) {
         const Dso& o = g.dso[size_t(idx)];
         char t[96];
-        snprintf(t, sizeof t, "%s %s %s MAG%.1f %.0f ARCMIN", tag, o.label, kDsoTypeName[std::min<int>(o.type, 5)], o.mag,
-                 o.size);
+        if (o.type == 7) snprintf(t, sizeof t, "%s MOON %.0f%% LIT", tag, o.mag * 100.0);
+        else if (o.type == 6) snprintf(t, sizeof t, "%s SUN", tag);
+        else if (o.type >= 8) snprintf(t, sizeof t, "%s %s %s MAG%.1f", tag, o.label, kDsoTypeName[std::min<int>(o.type, 10)], o.mag);
+        else snprintf(t, sizeof t, "%s %s %s MAG%.1f %.0f ARCMIN", tag, o.label, kDsoTypeName[std::min<int>(o.type, 5)], o.mag, o.size);
         out = t;
     };
     if (g.hover >= 0) describe("OVER", g.hover, g.hOver); else g.hOver = "OVER NONE";
@@ -2165,6 +2736,7 @@ void updateSky() {
     using namespace std::chrono;
     double now = duration<double>(system_clock::now().time_since_epoch()).count();
     double t = now + g.simOffset;
+    g.tNow = t;
     double d = t / 86400.0 + 2440587.5 - 2451545.0;  // days since J2000.0 (UT)
     double gmst = std::fmod(280.46061837 + 360.98564736629 * d, 360.0);
     double lstDeg = std::fmod(gmst + g.lonDeg, 360.0);
@@ -2215,6 +2787,462 @@ void updateSky() {
     }
 }
 
+// -------- controller models (XR_FB_render_model): a GLB per controller, flattened to coloured triangles
+
+struct JV {  // just enough JSON for a glTF
+    enum T { Null, Bool, Num, Str, Arr, Obj } t = Null;
+    double n = 0;
+    std::string s;
+    std::vector<JV> a;
+    std::vector<std::pair<std::string, JV>> o;
+    const JV* get(const char* k) const {
+        for (const auto& kv : o) if (kv.first == k) return &kv.second;
+        return nullptr;
+    }
+    const JV* at(size_t i) const { return i < a.size() ? &a[i] : nullptr; }
+    double num(double d = 0) const { return t == Num ? n : d; }
+};
+
+struct JsonParser {
+    const char* p;
+    const char* e;
+    void ws() { while (p < e && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t')) ++p; }
+    bool str(std::string& out) {
+        if (p >= e || *p != '"') return false;
+        ++p;
+        while (p < e && *p != '"') {
+            if (*p == '\\' && p + 1 < e) {
+                ++p;
+                char c = *p;
+                if (c == 'n') out += '\n';
+                else if (c == 't') out += '\t';
+                else if (c == 'u') { out += '?'; p += 4; }
+                else out += c;
+                ++p;
+            } else {
+                out += *p++;
+            }
+        }
+        if (p >= e) return false;
+        ++p;
+        return true;
+    }
+    bool val(JV& v, int depth = 0) {
+        if (depth > 32) return false;
+        ws();
+        if (p >= e) return false;
+        if (*p == '{') {
+            v.t = JV::Obj;
+            ++p;
+            ws();
+            if (p < e && *p == '}') { ++p; return true; }
+            for (;;) {
+                ws();
+                std::string k;
+                if (!str(k)) return false;
+                ws();
+                if (p >= e || *p != ':') return false;
+                ++p;
+                v.o.emplace_back(k, JV{});
+                if (!val(v.o.back().second, depth + 1)) return false;
+                ws();
+                if (p < e && *p == ',') { ++p; continue; }
+                if (p < e && *p == '}') { ++p; return true; }
+                return false;
+            }
+        }
+        if (*p == '[') {
+            v.t = JV::Arr;
+            ++p;
+            ws();
+            if (p < e && *p == ']') { ++p; return true; }
+            for (;;) {
+                v.a.emplace_back();
+                if (!val(v.a.back(), depth + 1)) return false;
+                ws();
+                if (p < e && *p == ',') { ++p; continue; }
+                if (p < e && *p == ']') { ++p; return true; }
+                return false;
+            }
+        }
+        if (*p == '"') { v.t = JV::Str; return str(v.s); }
+        if (e - p >= 4 && !strncmp(p, "true", 4)) { v.t = JV::Bool; v.n = 1; p += 4; return true; }
+        if (e - p >= 5 && !strncmp(p, "false", 5)) { v.t = JV::Bool; p += 5; return true; }
+        if (e - p >= 4 && !strncmp(p, "null", 4)) { p += 4; return true; }
+        char* end = nullptr;
+        v.n = strtod(p, &end);
+        if (end == p) return false;
+        v.t = JV::Num;
+        p = end;
+        return true;
+    }
+};
+
+// Flatten every triangle primitive of a GLB's default scene into pos(3) normal(3) colour(3) vertices in model space.
+// Colour is the material's base colour factor, dimmed when the material relies on a texture we cannot decode.
+bool buildGlbMesh(const std::vector<uint8_t>& glb, std::vector<float>& out) {
+    if (glb.size() < 28 || memcmp(glb.data(), "glTF", 4) != 0) return false;
+    uint32_t jl;
+    memcpy(&jl, glb.data() + 12, 4);
+    if (20 + size_t(jl) + 8 > glb.size()) return false;
+    const char* js = reinterpret_cast<const char*>(glb.data()) + 20;
+    JV root;
+    JsonParser jp{js, js + jl};
+    if (!jp.val(root)) return false;
+    uint32_t bl;
+    memcpy(&bl, glb.data() + 20 + jl, 4);
+    const uint8_t* bin = glb.data() + 20 + jl + 8;
+    const size_t binLen = std::min<size_t>(bl, glb.size() - (20 + jl + 8));
+
+    const JV* accessors = root.get("accessors");
+    const JV* views = root.get("bufferViews");
+    const JV* meshes = root.get("meshes");
+    const JV* nodes = root.get("nodes");
+    const JV* materials = root.get("materials");
+    if (!accessors || !views || !meshes || !nodes) return false;
+
+    struct Acc { const uint8_t* base; size_t count, stride; int ctype; };
+    auto access = [&](double idx, int comps, Acc& a) {
+        const JV* ac = accessors->at(size_t(idx));
+        if (!ac) return false;
+        const JV* bv = views->at(size_t(ac->get("bufferView") ? ac->get("bufferView")->num(-1) : -1));
+        if (!bv) return false;
+        a.count = size_t(ac->get("count") ? ac->get("count")->num() : 0);
+        a.ctype = int(ac->get("componentType") ? ac->get("componentType")->num() : 0);
+        size_t csz = (a.ctype == 5126 || a.ctype == 5125) ? 4 : a.ctype == 5123 ? 2 : 1;
+        size_t off = size_t(bv->get("byteOffset") ? bv->get("byteOffset")->num() : 0) +
+                     size_t(ac->get("byteOffset") ? ac->get("byteOffset")->num() : 0);
+        a.stride = size_t(bv->get("byteStride") ? bv->get("byteStride")->num() : 0);
+        if (!a.stride) a.stride = csz * size_t(comps);
+        if (off + (a.count ? (a.count - 1) * a.stride + csz * size_t(comps) : 0) > binLen) return false;
+        a.base = bin + off;
+        return true;
+    };
+    auto readIndex = [](const Acc& a, size_t i) -> uint32_t {
+        const uint8_t* q = a.base + i * a.stride;
+        if (a.ctype == 5125) { uint32_t v; memcpy(&v, q, 4); return v; }
+        if (a.ctype == 5123) { uint16_t v; memcpy(&v, q, 2); return v; }
+        return *q;
+    };
+    auto readVec3 = [](const Acc& a, size_t i) {
+        float f[3];
+        memcpy(f, a.base + i * a.stride, 12);
+        return Vec3{f[0], f[1], f[2]};
+    };
+
+    bool ok = false;
+    std::function<void(size_t, const Mat4&, int)> walk = [&](size_t ni, const Mat4& parent, int depth) {
+        const JV* nd = nodes->at(ni);
+        if (!nd || depth > 32) return;
+        Mat4 local = identity();
+        if (const JV* m = nd->get("matrix")) {
+            for (int k = 0; k < 16 && size_t(k) < m->a.size(); ++k) local.m[k] = float(m->a[size_t(k)].num());
+        } else {
+            if (const JV* r = nd->get("rotation")) {
+                XrQuaternionf q{float(r->at(0) ? r->at(0)->num() : 0), float(r->at(1) ? r->at(1)->num() : 0),
+                                float(r->at(2) ? r->at(2)->num() : 0), float(r->at(3) ? r->at(3)->num(1) : 1)};
+                local = rotFromQuat(q);
+            }
+            if (const JV* sc = nd->get("scale")) {
+                for (int c = 0; c < 3; ++c) {
+                    float f = float(sc->at(size_t(c)) ? sc->at(size_t(c))->num(1) : 1);
+                    for (int r = 0; r < 3; ++r) local.m[c * 4 + r] *= f;
+                }
+            }
+            if (const JV* tr = nd->get("translation"))
+                for (int c = 0; c < 3; ++c) local.m[12 + c] = float(tr->at(size_t(c)) ? tr->at(size_t(c))->num() : 0);
+        }
+        Mat4 world = mul(parent, local);
+        if (const JV* mi = nd->get("mesh")) {
+            const JV* mesh = meshes->at(size_t(mi->num()));
+            const JV* prims = mesh ? mesh->get("primitives") : nullptr;
+            for (size_t pi = 0; prims && pi < prims->a.size(); ++pi) {
+                const JV& pr = prims->a[pi];
+                if (pr.get("mode") && pr.get("mode")->num(4) != 4) continue;
+                const JV* at = pr.get("attributes");
+                if (!at || !at->get("POSITION")) continue;
+                Acc ap{}, an{}, ai{};
+                bool hasN = at->get("NORMAL") != nullptr;
+                if (!access(at->get("POSITION")->num(), 3, ap) || ap.ctype != 5126) continue;
+                if (hasN && (!access(at->get("NORMAL")->num(), 3, an) || an.ctype != 5126 || an.count < ap.count)) hasN = false;
+                bool indexed = pr.get("indices") != nullptr;
+                if (indexed && !access(pr.get("indices")->num(), 1, ai)) continue;
+                float col[3] = {0.6f, 0.6f, 0.6f};
+                if (materials && pr.get("material")) {
+                    const JV* mat = materials->at(size_t(pr.get("material")->num()));
+                    const JV* pbr = mat ? mat->get("pbrMetallicRoughness") : nullptr;
+                    if (const JV* bc = pbr ? pbr->get("baseColorFactor") : nullptr)
+                        for (int k = 0; k < 3; ++k) col[k] = float(bc->at(size_t(k)) ? bc->at(size_t(k))->num(1) : 1);
+                    else col[0] = col[1] = col[2] = 1.f;
+                    if (pbr && pbr->get("baseColorTexture"))
+                        for (float& c : col) c *= 0.55f;
+                }
+                size_t n = indexed ? ai.count : ap.count;
+                for (size_t k = 0; k + 2 < n; k += 3) {
+                    Vec3 P3[3], N3[3];
+                    bool bad = false;
+                    for (int c = 0; c < 3; ++c) {
+                        size_t vi = indexed ? readIndex(ai, k + size_t(c)) : k + size_t(c);
+                        if (vi >= ap.count) { bad = true; break; }
+                        Vec3 p = readVec3(ap, vi);
+                        P3[c] = {world.m[0] * p.x + world.m[4] * p.y + world.m[8] * p.z + world.m[12],
+                                 world.m[1] * p.x + world.m[5] * p.y + world.m[9] * p.z + world.m[13],
+                                 world.m[2] * p.x + world.m[6] * p.y + world.m[10] * p.z + world.m[14]};
+                        if (hasN) {
+                            Vec3 nn = readVec3(an, vi);
+                            Vec3 t{world.m[0] * nn.x + world.m[4] * nn.y + world.m[8] * nn.z,
+                                   world.m[1] * nn.x + world.m[5] * nn.y + world.m[9] * nn.z,
+                                   world.m[2] * nn.x + world.m[6] * nn.y + world.m[10] * nn.z};
+                            N3[c] = dot(t, t) > 1e-12f ? normalize(t) : Vec3{0, 1, 0};
+                        }
+                    }
+                    if (bad) continue;
+                    if (!hasN) {
+                        Vec3 fn = cross(P3[1] - P3[0], P3[2] - P3[0]);
+                        fn = dot(fn, fn) > 1e-18f ? normalize(fn) : Vec3{0, 1, 0};
+                        N3[0] = N3[1] = N3[2] = fn;
+                    }
+                    for (int c = 0; c < 3; ++c)
+                        out.insert(out.end(), {P3[c].x, P3[c].y, P3[c].z, N3[c].x, N3[c].y, N3[c].z, col[0], col[1], col[2]});
+                    ok = true;
+                }
+            }
+        }
+        if (const JV* ch = nd->get("children"))
+            for (const JV& c : ch->a) walk(size_t(c.num()), world, depth + 1);
+    };
+    const JV* scenes = root.get("scenes");
+    const JV* sc = scenes ? scenes->at(size_t(root.get("scene") ? root.get("scene")->num() : 0)) : nullptr;
+    if (const JV* roots = sc ? sc->get("nodes") : nullptr) {
+        for (const JV& r : roots->a) walk(size_t(r.num()), identity(), 0);
+    } else {
+        for (size_t i = 0; i < nodes->a.size(); ++i) walk(i, identity(), 0);  // no scene: every node (children repeat; rare)
+    }
+    return ok;
+}
+
+// Retried every few seconds until both controllers are in: the runtime may not have them ready at session start.
+void loadControllerModels() {
+    if (!g.xrLoadModel || !g.xrEnumPaths || !g.xrModelProps || g.ctlTries >= 8) return;
+    if (g.ctlVerts[0] > 0 && g.ctlVerts[1] > 0) return;
+    double now = std::chrono::duration<double>(Clock::now().time_since_epoch()).count();
+    if (now < g.ctlNext) return;
+    g.ctlNext = now + 3.0;
+    ++g.ctlTries;
+    uint32_t n = 0;
+    if (XR_FAILED(g.xrEnumPaths(g.sess, 0, &n, nullptr)) || n == 0) {
+        LOGI("render models: none listed (try %d)", g.ctlTries);
+        return;
+    }
+    std::vector<XrRenderModelPathInfoFB> paths(n, {XR_TYPE_RENDER_MODEL_PATH_INFO_FB});
+    if (XR_FAILED(g.xrEnumPaths(g.sess, n, &n, paths.data()))) return;
+    for (uint32_t k = 0; k < n; ++k) {
+        char buf[256];
+        uint32_t len = 0;
+        if (XR_FAILED(xrPathToString(g.inst, paths[k].path, sizeof buf, &len, buf))) continue;
+        std::string name = buf;
+        int side = name.rfind("/model_fb/controller/left", 0) == 0 ? 0 : name.rfind("/model_fb/controller/right", 0) == 0 ? 1 : -1;
+        if (side < 0 || g.ctlVerts[side] > 0) continue;
+        XrRenderModelPropertiesFB pr{XR_TYPE_RENDER_MODEL_PROPERTIES_FB};
+        if (XR_FAILED(g.xrModelProps(g.sess, paths[k].path, &pr)) || pr.modelKey == XR_NULL_RENDER_MODEL_KEY_FB) {
+            LOGI("render model %s: not available yet", buf);
+            continue;
+        }
+        XrRenderModelLoadInfoFB li{XR_TYPE_RENDER_MODEL_LOAD_INFO_FB};
+        li.modelKey = pr.modelKey;
+        XrRenderModelBufferFB rb{XR_TYPE_RENDER_MODEL_BUFFER_FB};
+        if (XR_FAILED(g.xrLoadModel(g.sess, &li, &rb)) || rb.bufferCountOutput == 0) continue;
+        std::vector<uint8_t> glb(rb.bufferCountOutput);
+        rb.bufferCapacityInput = uint32_t(glb.size());
+        rb.buffer = glb.data();
+        if (XR_FAILED(g.xrLoadModel(g.sess, &li, &rb))) continue;
+        std::vector<float> mesh;
+        if (!buildGlbMesh(glb, mesh)) {
+            LOGI("render model %s (%s): GLB not understood, %zu bytes", buf, pr.modelName, glb.size());
+            continue;
+        }
+        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+        for (size_t v = 0; v + 8 < mesh.size(); v += 9)
+            for (int c = 0; c < 3; ++c) { lo[c] = std::min(lo[c], mesh[v + size_t(c)]); hi[c] = std::max(hi[c], mesh[v + size_t(c)]); }
+        if (!g.ctlVao[side]) {
+            glGenVertexArrays(1, &g.ctlVao[side]);
+            glGenBuffers(1, &g.ctlVbo[side]);
+        }
+        glBindVertexArray(g.ctlVao[side]);
+        glBindBuffer(GL_ARRAY_BUFFER, g.ctlVbo[side]);
+        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(mesh.size() * 4), mesh.data(), GL_STATIC_DRAW);
+        for (int a = 0; a < 3; ++a) {
+            glEnableVertexAttribArray(GLuint(a));
+            glVertexAttribPointer(GLuint(a), 3, GL_FLOAT, GL_FALSE, 36, (void*)(uintptr_t(a) * 12));
+        }
+        glBindVertexArray(0);
+        g.ctlVerts[side] = int(mesh.size() / 9);
+        LOGI("render model %s (%s): %d vertices, %zu-byte GLB, bounds x %.3f..%.3f y %.3f..%.3f z %.3f..%.3f", buf,
+             pr.modelName, g.ctlVerts[side], glb.size(), lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
+    }
+}
+
+// Which DSS2 cutout to draw this frame and where: the locked object, or with nothing locked the one nearest the gaze.
+// It fades in as the object's displayed size grows (and not at all below a modest zoom).
+void updateDss() {
+    g.dssShown = -1;
+    g.dssAlpha = 0.f;
+    if (!g.dssCount || g.zoom < 1.2f) return;
+    auto sstep = [](float a, float b, float x) {
+        float t = std::min(std::max((x - a) / (b - a), 0.f), 1.f);
+        return t * t * (3.f - 2.f * t);
+    };
+    auto alphaFor = [&](size_t i) {
+        return sstep(2.5f, 5.f, std::max(g.dso[i].size / 60.f, 0.15f) * g.zoom) * sstep(1.2f, 2.f, g.zoom);
+    };
+    int best = -1;
+    float bestA = 0.f;
+    if (g.lock >= 0) {
+        size_t i = size_t(g.lock);
+        if (i < g.nStatic && g.dssOf[i] >= 0) { best = int(i); bestA = alphaFor(i); }
+    } else {
+        float bd = 0.85f;  // within ~32 degrees of the gaze
+        for (size_t i = 0; i < g.nStatic; ++i) {
+            if (g.dssOf[i] < 0) continue;
+            const Vec3& w = g.dsoW[i];
+            if (dot(w, w) < 0.25f || w.y < 0.f) continue;
+            float d = dot(w, g.headFwd);
+            if (d <= bd) continue;
+            float a = alphaFor(i);
+            if (a > 0.01f) { bd = d; best = int(i); bestA = a; }
+        }
+    }
+    if (best < 0 || bestA <= 0.003f) return;
+    const Dso& o = g.dso[size_t(best)];
+    const Vec3 w = g.dsoW[size_t(best)];
+    if (dot(w, w) < 0.25f) return;
+    g.dssShown = best;
+    g.dssAlpha = bestA;
+    g.dssFovRad = g.dssFov[size_t(g.dssOf[size_t(best)])] * float(kPi / 180.0);
+    // tangent-plane axes at the object in J2000: east = z x n, north = n x east
+    Vec3 n = o.d;
+    Vec3 e{-n.y, n.x, 0.f};
+    float el = std::sqrt(e.x * e.x + e.y * e.y);
+    e = el > 1e-6f ? Vec3{e.x / el, e.y / el, 0.f} : Vec3{1.f, 0.f, 0.f};
+    g.dssObj = n;
+    g.dssEast = e;
+    g.dssNorth = cross(n, e);
+    // a quad generously larger than the picture's displayed size, tangent to the dome at the object
+    Vec3 r = cross(Vec3{0.f, 1.f, 0.f}, w);
+    r = dot(r, r) > 1e-4f ? normalize(r) : Vec3{1.f, 0.f, 0.f};
+    Vec3 u = cross(w, r);
+    float ha = std::min(0.5f * g.dssFovRad * g.zoom * 1.6f + 0.02f, 1.2f);
+    float h = 995.f * std::tan(ha);
+    Vec3 c = w * 995.f;
+    Vec3 q[4] = {c - r * h - u * h, c + r * h - u * h, c + r * h + u * h, c - r * h + u * h};
+    const int idx[6] = {0, 1, 2, 0, 2, 3};
+    for (int i = 0; i < 6; ++i) {
+        g.dssQuad[i * 3] = q[idx[i]].x;
+        g.dssQuad[i * 3 + 1] = q[idx[i]].y;
+        g.dssQuad[i * 3 + 2] = q[idx[i]].z;
+    }
+}
+
+// The panel above the right controller describes the locked object. The lines are rebuilt every frame while it is
+// open (altitude and azimuth move); on release they are kept so it can shrink away.
+void updatePanel(double dt) {
+    const bool want = g.lock >= 0 && size_t(g.lock) < g.dso.size() && g.hand[1].aimOk;
+    g.panelT += ((want ? 1.f : 0.f) - g.panelT) * float(std::min(1.0, dt * 10.0));
+    if (!want) {
+        if (music::speaking()) music::stopSpeech();  // the panel is gone: stop reading it
+        if (g.panelT < 0.01f) g.panelT = 0.f;
+        return;
+    }
+    const Hand& h = g.hand[1];
+    // The card lies along the pointer axis A and faces the head: n is the direction to the head with A removed, the text
+    // runs along +-A (whichever reads left to right for the viewer) and up is n x right. The bottom edge sits just
+    // beside the controller body, towards the user.
+    const Vec3 up{0.f, 1.f, 0.f};
+    Vec3 A = aimDir(h.aimQ);
+    Vec3 toHead = g.headPos - h.gripPos;
+    Vec3 perp = toHead - A * dot(toHead, A);
+    perp = dot(perp, perp) > 1e-6f ? normalize(perp) : normalize(cross(A, up));
+    Vec3 hr = cross(g.headFwd, up);
+    hr = dot(hr, hr) > 1e-6f ? normalize(hr) : Vec3{1.f, 0.f, 0.f};
+    Vec3 r = dot(A, hr) >= 0.f ? A : A * -1.f;
+    g.panelR = r;
+    g.panelU = normalize(cross(perp, r));
+    g.panelO = h.gripPos + A * 0.02f + perp * 0.03f;
+
+    const size_t idx = size_t(g.lock);
+    if (g.panelFor != g.lock) {
+        g.panelFor = g.lock;
+        g.panelScroll = 0.f;
+        music::stopSpeech();  // a different object: whatever was being read is stale
+    }
+    const Dso& o = g.dso[idx];
+    const Info* inf = nullptr;
+    {
+        auto it = g.info.find(o.label);  // catalogue objects and the Sun, Moon and planets have panel text
+        if (it != g.info.end() && (idx < g.nStatic || o.type <= 8)) inf = &it->second;
+    }
+    // second trigger (right grip) reads the panel aloud, or stops it
+    if (h.sqzEdge && g.panelT > 0.5f) {
+        if (music::speaking()) music::stopSpeech();
+        else music::say(g.android->activity->assetManager, o.label);
+    }
+    auto title = [](const char* up) {
+        std::string t = up;
+        for (size_t i = 1; i < t.size(); ++i) t[i] = char(tolower((unsigned char)t[i]));
+        return t;
+    };
+    auto fmt = [](const char* f, auto... a) {
+        char b[160];
+        snprintf(b, sizeof b, f, a...);
+        return std::string(b);
+    };
+    std::vector<PanelLine>& L = g.panelLines;
+    L.clear();
+    std::string name = o.label;
+    if (inf && !inf->common.empty()) name += "  " + inf->common;
+    L.push_back({name, 0});
+    std::string kind = title(kDsoTypeName[std::min<int>(o.type, 10)]);
+    if (inf && !inf->con.empty()) kind += " in " + inf->con;
+    L.push_back({kind, 1});
+    if (inf && !inf->also.empty()) L.push_back({"Also " + inf->also, 2});
+    L.push_back({"", 2});
+
+    if (o.type == 7) {
+        L.push_back({fmt("Phase %.0f%% illuminated", o.mag * 100.0), 1});
+    } else if (o.type != 6) {
+        std::string m = o.mag >= 14.95f ? "Magnitude unknown" : fmt("Magnitude %.1f", o.mag);
+        if (o.type <= 5 || o.size > 0.f) {
+            if (o.size >= 1.f) m += fmt("    Size %.1f arcmin", o.size);
+            else if (o.size > 0.f) m += fmt("    Size %.0f arcsec", o.size * 60.f);
+        }
+        L.push_back({m, 1});
+    } else {
+        L.push_back({fmt("Apparent size %.1f arcmin", o.size), 1});
+    }
+    double ra = std::fmod(std::atan2(double(o.d.y), double(o.d.x)) * 12.0 / kPi + 24.0, 24.0);
+    double dec = std::asin(std::min(std::max(double(o.d.z), -1.0), 1.0)) * 180.0 / kPi;
+    int rh = int(ra), dd = int(std::fabs(dec));
+    L.push_back({fmt("RA %dh %04.1fm    Dec %c%d deg %02d min", rh, (ra - rh) * 60.0, dec < 0 ? '-' : '+', dd,
+                     int((std::fabs(dec) - dd) * 60.0)), 1});
+    Vec3 w = toWorld(o.d);
+    double alt = std::asin(double(std::min(std::max(w.y, -1.f), 1.f))) * 180.0 / kPi;
+    double az = std::fmod(std::atan2(double(w.x), double(-w.z)) * 180.0 / kPi + 360.0, 360.0);
+    L.push_back({fmt("Altitude %.1f deg    Azimuth %.0f deg%s", alt, az, alt < 0 ? "    below the horizon" : ""), 1});
+    if (inf && !inf->desc.empty()) {
+        L.push_back({"", 2});
+        L.push_back({inf->desc, 1});
+    }
+    if (music::hasSpeech(o.label)) {
+        L.push_back({"", 2});
+        L.push_back({music::speaking() ? "Reading aloud. Press the right grip to stop." : "Press the right grip to hear this read aloud.", 3});
+    }
+    if (idx < g.nStatic && g.dssOf[idx] >= 0) {
+        L.push_back({"", 2});
+        if (g.dssShown == int(idx) && g.dssAlpha > 0.5f) L.push_back({"DSS2 survey image, north up, east left.", 3});
+        else L.push_back({"Zoom in with the left stick to see the DSS2 survey image.", 3});
+    }
+}
+
 void frame() {
     auto t0 = Clock::now();
     XrFrameState fs{XR_TYPE_FRAME_STATE};
@@ -2228,7 +3256,9 @@ void frame() {
     prev = t0;
     pollInput(dt);
     updateSky();
+    updateBodies();
     updateZoomMap();
+    if (g.sessionRunning) loadControllerModels();
 
     if (g.tier > 0 && g.stressReady && !g.stressUploaded) {
         uploadSet(g.stress, g.stressStars);
@@ -2255,6 +3285,8 @@ void frame() {
         if (XR_SUCCEEDED(xrLocateViews(g.sess, &li, &vs, 2, &nv, views)) &&
             (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT)) {
             updateHands(fs.predictedDisplayTime, views, dt);
+            updateDss();
+            updatePanel(dt);
             for (int e = 0; e < 2; ++e) {
                 EyeSwapchain& sc = g.eye[e];
                 uint32_t idx = 0;
@@ -2296,8 +3328,8 @@ void frame() {
 
 void onCmd(android_app* app, int32_t cmd) {
     (void)app;
-    if (cmd == APP_CMD_RESUME) g.resumed = true;
-    else if (cmd == APP_CMD_PAUSE) g.resumed = false;
+    if (cmd == APP_CMD_RESUME) { g.resumed = true; music::setPaused(false); }
+    else if (cmd == APP_CMD_PAUSE) { g.resumed = false; music::setPaused(true); }
     else if (cmd == APP_CMD_DESTROY) g.quit = true;
 }
 
@@ -2322,6 +3354,7 @@ void android_main(android_app* app) {
             LOGI("loaded %zu stars", g.realStars.size());
             loadConstellations(app->activity->assetManager);
             loadSkyAssets(app->activity->assetManager);
+            music::start(app->activity->assetManager);
             if (!createInstance() || !createSession()) { LOGE("OpenXR init failed"); break; }
             g.initDone = true;
         }
@@ -2331,6 +3364,7 @@ void android_main(android_app* app) {
         }
         if (g.quit) break;
     }
+    music::stop();
     destroyAll();
     LOGI("exiting");
 }

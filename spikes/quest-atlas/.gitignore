@@ -15,3 +15,15 @@ app/src/main/assets/dssbg.bin
 app/src/main/assets/fontarial.bin
 app/src/main/assets/site.txt
 app/src/main/assets/deepsky.bin
+app/src/main/assets/asteroids.bin
+app/src/main/assets/satellites.bin
+# SkyView DSS2 cutouts (STScI, research/education use) baked by tools/make_dss.py, and its download cache
+app/src/main/assets/dss.bin
+tools/.dsscache/
+app/src/main/assets/deepinfo.txt
+tools/.infocache.json
+# Music is the user's own; only the folder is tracked
+app/src/main/assets/music/*
+!app/src/main/assets/music/.gitkeep
+app/src/main/assets/speech/
+tools/.speechcache/
