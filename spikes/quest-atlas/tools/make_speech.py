@@ -1,15 +1,15 @@
 """Bake the spoken version of each object's panel text for the Quest star-atlas spike.
 
 The Quest has no text-to-speech engine and the app has no Java, so the speech is made here: the Windows "Microsoft Zira"
-(female) voice reads the text, ffmpeg turns it into small mono MP3s, and the app plays the file when the right grip
-is pressed while an object's panel is open. Covers every object that has a DSS2 picture (dss.bin) plus the Sun, Moon and
-planets. The spoken text is the panel's own: name, common name, type and constellation, other designations, magnitude and
-size, then the description. Altitude/azimuth change with the sky and are not read.
+(female) voice reads the text, ffmpeg turns it into small mono Opus (Ogg) files, and the app plays the file when the right
+grip is pressed while an object's panel is open. Covers every catalogue object plus the Sun, Moon and planets. The spoken
+text is the panel's own: name, common name, what it is (the OpenNGC summary: galaxy type, distance, size), constellation,
+other designations, magnitude and size, then the description. Altitude/azimuth change with the sky and are not read.
 
-    app/src/main/assets/speech/<label with non-alphanumerics as _>.mp3
+    app/src/main/assets/speech/<label with non-alphanumerics as _>.ogg
 
-Needs deepsky.bin, dss.bin and deepinfo.txt (make_dso.py, make_dss.py, make_info.py first), Windows PowerShell with
-System.Speech, and ffmpeg on PATH. WAVs are cached in tools/.speechcache so a rerun only speaks what is missing.
+Needs deepsky.bin and deepinfo.txt (make_dso.py, make_info.py first), Windows PowerShell with System.Speech, and ffmpeg
+(with libopus) on PATH. WAVs are cached in tools/.speechcache2 so a rerun only speaks what is missing.
 
 Run with the Galileo venv:  python -I tools/make_speech.py [--shards 4]
 """
@@ -28,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / "app" / "src" / "main" / "assets"
 OUT = ASSETS / "speech"
-CACHE = HERE / ".speechcache"
+CACHE = HERE / ".speechcache2"
 # Runs inside PowerShell (as a -Command, so no execution-policy change is needed): speaks each {file, text} of the manifest
 # named by $env:SPEECH_MANIFEST to a WAV with the Windows "Zira" (female) voice.
 SPEAK = """
@@ -79,40 +79,39 @@ def objects() -> dict[str, tuple[int, float, float]]:
     return out
 
 
-def imaged() -> list[str]:
-    raw = (ASSETS / "dss.bin").read_bytes()
-    n = struct.unpack_from("<I", raw, 4)[0]
-    return [struct.unpack_from("<12s", raw, 12 + 16 * i)[0].split(b"\0")[0].decode() for i in range(n)]
-
-
 def build_texts() -> dict[str, str]:
     info = {}
     for line in (ASSETS / "deepinfo.txt").read_text("utf-8").splitlines():
         f = line.split("\t")
-        if len(f) == 5:
-            info[f[0]] = f[1:]
+        if len(f) >= 5:
+            info[f[0]] = (f[1:] + [""])[:5]
     objs = objects()
     texts: dict[str, str] = {}
-    for label in imaged() + sorted(BODIES):
-        common, also, con, desc = info.get(label, ["", "", "", ""])
+    for label in list(objs) + sorted(BODIES):
+        common, also, con, desc, facts = info.get(label, ["", "", "", "", ""])
         if label in BODIES:
             texts[label] = f"{label}. {desc}"
             continue
         typ, mag, size = objs[label]
         parts = [speakable(label) + (f", the {common.split(' / ')[0]}" if common else "") + "."]
-        kind = TYPE_WORDS[min(typ, 5)] if typ < 5 else "Located"
-        parts.append(kind + (f" in the constellation {con}." if con else "."))
+        if facts:
+            parts.append(speakable(facts))
+            if con:
+                parts.append(f"It lies in the constellation {con}.")
+        else:
+            kind = TYPE_WORDS[min(typ, 5)] if typ < 5 else "Located"
+            parts.append(kind + (f" in the constellation {con}." if con else "."))
         if also:
             parts.append("Also catalogued as " + speakable(also) + ".")
-        facts = []
+        sizes = []
         if mag < 14.95:
-            facts.append(f"it shines at magnitude {mag:.1f}")
+            sizes.append(f"it shines at magnitude {mag:.1f}")
         if size >= 1:
-            facts.append(f"it spans {size:.0f} arcminutes of sky")
+            sizes.append(f"it spans {size:.0f} arcminutes of sky")
         elif size > 0:
-            facts.append(f"it spans {size * 60:.0f} arcseconds of sky")
-        if facts:
-            parts.append(" and ".join(facts).capitalize() + ".")
+            sizes.append(f"it spans {size * 60:.0f} arcseconds of sky")
+        if sizes:
+            parts.append(" and ".join(sizes).capitalize() + ".")
         if desc:
             parts.append(speakable(first_sentences(desc)))
         texts[label] = " ".join(parts)
@@ -141,16 +140,16 @@ def main() -> int:
 
     def encode(it) -> bool:
         wav = Path(it["file"])
-        mp3 = OUT / (wav.stem + ".mp3")
+        ogg = OUT / (wav.stem + ".ogg")
         if not wav.exists():
             return False
-        r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(wav), "-ac", "1", "-ar", "22050",
-                            "-codec:a", "libmp3lame", "-b:a", "16k", str(mp3)])
+        r = subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-i", str(wav), "-ac", "1", "-ar", "16000",
+                            "-codec:a", "libopus", "-b:a", "12k", "-application", "voip", str(ogg)])
         return r.returncode == 0
 
     with ThreadPoolExecutor(8) as ex:
         ok = sum(ex.map(encode, items))
-    total = sum(f.stat().st_size for f in OUT.glob("*.mp3"))
+    total = sum(f.stat().st_size for f in OUT.glob("*.ogg"))
     print(f"speech: {ok}/{len(items)} clips, {total / 1e6:.1f} MB")
     return 0
 

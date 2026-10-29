@@ -48,13 +48,20 @@ of your gaze; the ~7,100 other NGC objects fade in by magnitude (about 270 at 1x
 ellipse = galaxy, dashed circle = open cluster, circle with a cross = globular, small circle with ticks = planetary nebula,
 square = nebula/remnant. Symbol size follows the object's real size and grows with the zoom.
 
-**DSS2 pictures.** Zoom in on a Messier, Caldwell or brighter NGC object (635 have a picture) and a DSS2 survey image fades
-in over the sky. It is not a flat sticker: the shader runs every displayed ray back through the zoom, the sky rotation and
-precession to J2000 and projects it onto the object's tangent plane, so the picture is oriented by the sky itself (north up,
-east left at the object, rotating with the view as the sky turns) and its stars sit exactly under the catalogue stars. It
-fades in as the object's displayed size passes ~2.5 to 5 degrees (so M31 at ~2x, a small planetary nebula at ~20x+); with
-nothing locked it is the imaged object nearest your gaze. Images are 256 px, DSS2 Red, one per object, with a field of
-2.4x the object's size (0.2 to 6 degrees), so the biggest objects are soft.
+**DSS2 pictures.** Zoom in on any Messier, Caldwell or NGC object (all 7,366 have one) and a DSS2 survey image fades in over the
+sky. It is not a flat sticker: the shader runs every displayed ray back through the zoom, the sky rotation and precession to
+J2000 and projects it onto the object's tangent plane, so the picture is oriented by the sky itself (north up, east left at
+the object, rotating with the view as the sky turns), its stars sit exactly under the catalogue stars, and it carries no frame:
+the plate's own sky level is subtracted and what is left is added to the background, with a radial fade at the edge. It fades in
+as the object's displayed size passes ~2.5 to 5 degrees (M31 at ~2x, a small planetary nebula at ~20x+); with nothing locked
+it is the pictured object nearest your gaze.
+
+Resolution fits the object: the zoom stops at 40x and the Quest 2 shows ~20 pixels per degree, so 800 px/deg (4.5"/px) is the most
+the screen can use. Small objects (7,098) need only 256 px; larger ones get 512 (180), 1024 (58) or 2048 px (30, e.g. M31). The
+field is 2.4x the object's size (0.2 to 6 degrees). Pictures are grayscale JPEGs (125 MB for all) decoded by the NDK's
+`AImageDecoder` on a worker thread, so nothing stalls a frame: the coarse 256 px picture shows as soon as the object is
+hovered or locked (it is decoded then, before any zoom), and the fine one swaps in when it has decoded. Only one picture is
+in memory at a time, however many objects there are.
 
 **Controller models.** Each hand is drawn with the runtime's own Touch controller model (`XR_FB_render_model`, loaded as a GLB
 and flattened to coloured triangles in grip space; needs both the `com.oculus.permission.RENDER_MODEL` permission and the `com.oculus.feature.RENDER_MODEL` uses-feature in the manifest; without the feature the runtime hides the extension). Meta's
@@ -70,13 +77,12 @@ gitignored. Decoding is Java-free (NDK `AMediaExtractor` + `AMediaCodec`, output
 
 **Read aloud.** With an object's panel open, the **right grip (second trigger)** reads it aloud in a female voice; press again
 to stop. The Quest has no text-to-speech engine and the app has no Java, so the speech is pre-rendered on the PC
-(`tools/make_speech.py`: Windows "Microsoft Zira" voice, ffmpeg to 16 kbps mono MP3, ~38 MB for the 635 pictured objects plus the
-Sun, Moon and planets) and played from `assets/speech/`. The clip says the panel's text: name, type, constellation,
-designations, magnitude, size and description; altitude/azimuth change with the sky so they are not read. Objects without a
-picture have no clip (the panel's hint line only appears when one exists). The music is ducked to 25% while it speaks, and
+(`tools/make_speech.py`: Windows "Microsoft Zira" voice, ffmpeg to 12 kbps mono Opus/Ogg, ~300 MB for all 7,375 objects) and played from
+`assets/speech/`. The clip says the panel's text: name, what it is, constellation, designations, magnitude, size and
+description; altitude/azimuth change with the sky so they are not read. The music is ducked to 25% while it speaks, and
 changing or releasing the object, or taking the headset off, stops it.
 
-**Object panel.** Locking an object pops up a small card on the right controller: its bottom edge runs along the pointer axis and it faces your head, so turning your palm towards you reads it like a wrist display. It shows name and common name, type and constellation, other designations, magnitude and size, RA/Dec, current altitude/azimuth, and the opening of the Wikipedia article for the 526 objects that have one. The card is a fixed 11 cm window; **right stick Y scrolls it** (down reads on) while it is open (the stick sets the star magnitude limit otherwise), with a bar on its right edge showing the position. It shrinks away on release. The Sun, Moon, planets, asteroids and satellites get the same card without the article text.
+**Object panel.** Locking an object pops up a small card on the right controller: its bottom edge runs along the pointer axis and it faces your head, so turning your palm towards you reads it like a wrist display. It shows name and common name, type and constellation, other designations, magnitude and size, RA/Dec, current altitude/azimuth, a one-line summary built from the full OpenNGC table for every object (galaxy type, distance from redshift or parallax, physical size), and the opening of the Wikipedia article for the 3,032 objects that have one. The card is a fixed 11 cm window; **right stick Y scrolls it** (down reads on) while it is open (the stick sets the star magnitude limit otherwise), with a bar on its right edge showing the position. It shrinks away on release. The Sun, Moon and planets have a short description; asteroids and satellites just the numbers.
 
 **Solar system.** The Sun, Moon, the seven planets, the 250 brightest asteroids and 70 bright satellites (ISS, Tiangong, the
 CelesTrak "visual" group) move with the simulated time, so the left stick runs them forward and back like the stars. They can be
@@ -122,8 +128,9 @@ C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_background.py   # Mel
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_font.py         # Arial glyph atlas (needs arial.ttf)
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_bodies.py       # asteroid elements (JPL SBDB) + satellite tracks (CelesTrak, SGP4) - REBAKE every week or two
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_dso.py          # Messier/Caldwell/NGC from Galileo's cached OpenNGC catalogue
-C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_dss.py          # DSS2 cutouts from NASA SkyView (635 images, ~42 MB, a few minutes)
-C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_info.py         # panel text: names, constellations, Wikipedia openings (run after make_dss.py)
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_dss2.py         # DSS2 pictures for all 7,366 objects, adaptive resolution (NASA SkyView; ~1 hour, 125 MB)
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_info.py         # panel text for every object: names, constellation, OpenNGC facts, Wikipedia (~1 hour; needs tools\.openngc_*.csv)
+C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_speech.py       # spoken clips for every object (Windows Zira voice + ffmpeg/Opus; ~10 minutes, 300 MB; run after make_info.py)
 C:\Projects\Galileo\.venv\Scripts\python.exe -I tools\make_site.py         # observing site from Galileo's DB (name/lat/lon/elev/tz only)
 
 # build, sideload, launch, stream metrics

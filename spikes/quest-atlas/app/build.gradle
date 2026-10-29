@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId 'org.galileo.questatlas'
-        minSdk 29
+        minSdk 30  // AImageDecoder (the DSS2 JPEGs) is API 30; the Quest 2 runs Android 12L or newer
         targetSdk 32
         versionCode 1
         versionName '0.1-spike'

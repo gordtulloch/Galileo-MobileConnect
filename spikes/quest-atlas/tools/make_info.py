@@ -1,21 +1,23 @@
-"""Bake the text for the object panel of the Quest star-atlas spike: common names, other designations, the
-constellation, and a short description for the brighter objects.
-
-Reads Galileo's cached OpenNGC-derived catalogue (same selection and labels as make_dso.py) and the object list in
-dss.bin (the objects that get a description are the ones that also get a picture). Descriptions are the opening
-sentences of the matching Wikipedia article (CC BY-SA 4.0), fetched through the REST summary endpoint.
+"""Bake the text for the object panel of the Quest star-atlas spike, for every catalogue object: common names, other
+designations, the constellation, a one-sentence summary built from the full OpenNGC table (galaxy type, distance from
+redshift or parallax, physical size) and, where there is one, the opening of the matching Wikipedia article (CC BY-SA 4.0,
+REST summary endpoint; tried under the NGC/Messier/Caldwell title and then under the common name).
 
     app/src/main/assets/deepinfo.txt     one object per line, tab separated:
-        label  common name(s)  other designations  constellation  description
+        label  common name(s)  other designations  constellation  description  facts
 
-Descriptions are cached in tools/.infocache.json so a rerun only fetches what is missing.
+The full OpenNGC tables (CC BY-SA 4.0) are expected in tools/.openngc_NGC.csv and .openngc_addendum.csv, downloaded from
+github.com/mattiaverga/OpenNGC (database_files/). Descriptions are cached in tools/.infocache2.json so a rerun only
+fetches what is missing.
 
-Run with the Galileo venv:  python -I tools/make_info.py [--no-wiki]
+Run with the Galileo venv:  python -I tools/make_info.py [--no-wiki] [--threads 4]
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import math
 import json
 import os
 import re
@@ -33,7 +35,7 @@ from astropy.coordinates import SkyCoord
 
 HERE = Path(__file__).resolve().parent
 ASSETS = HERE.parent / "app" / "src" / "main" / "assets"
-CACHE = HERE / ".infocache.json"
+CACHE = HERE / ".infocache2.json"  # v2: every object, with common-name fallbacks
 CATALOG = Path(os.environ.get("APPDATA", "")) / "Galileo" / "cache" / "galileo_dso_catalog_v2.json"
 M_RE, C_RE, N_RE, I_RE = (re.compile(p) for p in (r"^M\d+$", r"^C \d+$", r"^NGC \d+$", r"^IC \d+$"))
 SKIP = {"Star", "DoubleStar"}
@@ -54,12 +56,6 @@ BODIES = {
 }
 
 
-def imaged_labels() -> set[str]:
-    raw = (ASSETS / "dss.bin").read_bytes()
-    n = struct.unpack_from("<I", raw, 4)[0]
-    return {struct.unpack_from("<12s", raw, 12 + 16 * i)[0].split(b"\0")[0].decode() for i in range(n)}
-
-
 def wiki_title(label: str) -> str:
     if label.startswith("M"):
         return "Messier_" + label[1:]
@@ -75,9 +71,9 @@ def ascii_text(text: str) -> str:
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
 
 
-def summary(label: str) -> str | None:
-    """The article's opening sentences, "" when there is no usable article, None on a transient failure."""
-    url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(wiki_title(label))
+def fetch_summary(title: str) -> str | None:
+    """The opening sentences of a Wikipedia article: "" when there is no usable article, None on a transient failure."""
+    url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + urllib.parse.quote(title)
     for attempt in range(4):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": UA}), timeout=30) as r:
@@ -91,13 +87,15 @@ def summary(label: str) -> str | None:
             time.sleep(2 + 3 * attempt)
     else:
         return None
-    if d.get("type") != "standard":
+    if d.get("type") != "standard" or re.match(r"(List|Index) of", d.get("title", "")):
         return ""
     text = ascii_text(re.sub(r"\s*\([^()]*\)", "", d.get("extract", "")))  # parentheticals: pronunciations, alternates
     text = re.sub(r"\s+", " ", text).strip()
+    if re.search(r"\bmay refer to\b|\bis a list of\b|\bis the list of\b", text[:160]):
+        return ""
     out = ""
     for sent in re.split(r"(?<=[.!?])\s+(?=[A-Z])", text)[:4]:
-        if re.search(r"coordinates|RA \d|dec [+-]?\d", sent):
+        if re.search(r"coordinates|RA \d|dec [+-]?\d", sent):
             continue  # a coordinates sentence is noise on a panel that already shows them
         if len(out) + len(sent) > 330 and out:
             break
@@ -105,12 +103,116 @@ def summary(label: str) -> str | None:
     return out
 
 
+def summary(args: tuple[str, list[str]]) -> str | None:
+    """Description for an object: its own article, else the article under a common name."""
+    label, commons = args
+    for title in [wiki_title(label), *[c.replace(" ", "_") for c in commons]]:
+        text = fetch_summary(title)
+        if text is None:
+            return None
+        if text:
+            return text
+    return ""
+
+
+# ---- OpenNGC facts (Hubble type, distance from redshift or parallax): the one-sentence summary every object can have
+KINDS = {"G": "galaxy", "GPair": "pair of galaxies", "GTrpl": "triplet of galaxies", "GGroup": "group of galaxies",
+         "OCl": "open cluster", "GCl": "globular cluster", "Cl+N": "star cluster with nebulosity",
+         "HII": "H II region, a glowing cloud of ionized hydrogen", "DrkN": "dark nebula", "EmN": "emission nebula",
+         "Neb": "nebula", "RfN": "reflection nebula", "SNR": "supernova remnant", "Nova": "nova",
+         "PN": "planetary nebula", "*Ass": "association of stars", "**": "double star", "*": "star", "Other": "object"}
+
+
+def openngc() -> dict[str, dict[str, str]]:
+    rows: dict[str, dict[str, str]] = {}
+    for name in (".openngc_NGC.csv", ".openngc_addendum.csv"):
+        path = HERE / name
+        if not path.exists():
+            continue
+        for r in csv.DictReader(path.read_text("utf-8").splitlines(), delimiter=";"):
+            m = re.match(r"^(NGC|IC)(\d+)(\w*)$", r["Name"])
+            if m:
+                rows[f"{m.group(1)} {int(m.group(2))}{m.group(3)}"] = r
+            if r.get("M"):
+                rows[f"M{int(r['M'])}"] = r
+    return rows
+
+
+def morphology(hubble: str) -> str:
+    h = hubble.strip()
+    if h.startswith("SAB"):
+        return "weakly barred spiral"
+    if h.startswith("SB"):
+        return "barred spiral"
+    if h.startswith("S0"):
+        return "lenticular"
+    if h.startswith("S"):
+        return "spiral"
+    if h.startswith(("dE", "dSph")):
+        return "dwarf elliptical"
+    if h.startswith("E"):
+        return "elliptical"
+    if h.startswith("I"):
+        return "irregular"
+    return ""
+
+
+def light_years(row: dict[str, str]) -> float | None:
+    pax = row.get("Pax", "")
+    if pax:
+        try:
+            if float(pax) > 0.05:
+                return 3261.6 / float(pax)  # pax in mas: parsecs = 1000 / pax, light-years = 3.2616 x parsecs
+        except ValueError:
+            pass
+    z = row.get("Redshift", "")
+    if z:
+        try:
+            if float(z) >= 0.0035:  # nearer than that, peculiar motion swamps the Hubble flow
+                return 299792.458 * float(z) / 70.0 * 3.2616e6
+        except ValueError:
+            pass
+    return None
+
+
+def human(n: float) -> str:
+    if n >= 1e9:
+        return f"{n / 1e9:.1f} billion"
+    if n >= 1e6:
+        return f"{n / 1e6:.0f} million" if n >= 1e7 else f"{n / 1e6:.1f} million"
+    if n >= 1e3:
+        return f"{round(n, -3 if n >= 1e4 else -2):,.0f}"
+    return f"{n:.0f}"
+
+
+def facts(row: dict[str, str] | None, size_arcmin: float) -> str:
+    if not row:
+        return ""
+    kind = KINDS.get(row["Type"], "")
+    if not kind:
+        return ""
+    if row["Type"] == "G":
+        mo = morphology(row.get("Hubble", ""))
+        kind = (mo + " galaxy") if mo else "galaxy"
+    out = ("An " if kind[0] in "aeiou" else "A ") + kind
+    if row["Type"] == "G" and row.get("Hubble"):
+        out += f", Hubble type {row['Hubble']}"
+    d = light_years(row)
+    if d:
+        out += f", about {human(d)} light-years away"
+        if size_arcmin > 0.3:
+            out += f" and roughly {human(d * math.radians(size_arcmin / 60.0))} light-years across"
+    return out + "."
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-wiki", action="store_true")
+    ap.add_argument("--threads", type=int, default=4)
     args = ap.parse_args()
 
     rows = json.loads(CATALOG.read_text("utf-8"))
+    ngc_rows = openngc()
     picked = []
     for o in rows:
         names = [s for s in [o.get("n"), *o.get("d", [])] if isinstance(s, str)]
@@ -122,30 +224,36 @@ def main() -> int:
         label = (m or c or ngc)[:9]
         common = [s for s in names if not any(ch.isdigit() for ch in s) and len(s) >= 4]
         other = [s for s in names if (M_RE.match(s) or C_RE.match(s) or N_RE.match(s) or I_RE.match(s)) and s != label]
-        picked.append((label, o["r"], o["c"], list(dict.fromkeys(common))[:2], list(dict.fromkeys(other))[:3]))
+        row = next((ngc_rows[s] for s in names if s in ngc_rows), None)
+        picked.append((label, o["r"], o["c"], list(dict.fromkeys(common))[:2], list(dict.fromkeys(other))[:3],
+                       facts(row, float(o.get("s", 0.0)))))
     sc = SkyCoord([p[1] for p in picked] * u.deg, [p[2] for p in picked] * u.deg)
     cons = sc.get_constellation()
 
-    want = imaged_labels()
     cache = json.loads(CACHE.read_text("utf-8")) if CACHE.exists() else {}
-    todo = [p[0] for p in picked if p[0] in want and p[0] not in cache]
+    todo = [p for p in picked if p[0] not in cache]
     if todo and not args.no_wiki:
-        print(f"fetching {len(todo)} descriptions")
-        with ThreadPoolExecutor(3) as ex:
-            for lab, text in zip(todo, ex.map(summary, todo)):
+        print(f"fetching {len(todo)} descriptions", flush=True)
+        done = 0
+        with ThreadPoolExecutor(args.threads) as ex:
+            for p, text in zip(todo, ex.map(summary, [(p[0], p[3]) for p in todo])):
                 if text is not None:
-                    cache[lab] = text
+                    cache[p[0]] = text
+                done += 1
+                if done % 500 == 0:
+                    print(f"  {done}", flush=True)
+                    CACHE.write_text(json.dumps(cache, indent=0), "utf-8")
         CACHE.write_text(json.dumps(cache, indent=0), "utf-8")
 
+    clean = lambda s: s.replace("\t", " ").replace("\n", " ")  # noqa: E731
     lines = []
-    for (label, _ra, _dec, common, other, ), con in zip(picked, cons):
-        clean = lambda s: s.replace("\t", " ").replace("\n", " ")  # noqa: E731
+    for (label, _ra, _dec, common, other, fact), con in zip(picked, cons):
         lines.append("\t".join([label, clean(ascii_text(" / ".join(common))), clean(", ".join(other)), str(con),
-                                clean(ascii_text(cache.get(label, "")))]))
-    lines += [f"{name}				{text}" for name, text in BODIES.items()]
+                                clean(ascii_text(cache.get(label, ""))), clean(fact)]))
+    lines += [f"{name}\t\t\t\t{text}\t" for name, text in BODIES.items()]
     (ASSETS / "deepinfo.txt").write_text("\n".join(lines) + "\n", "utf-8", newline="\n")
     described = sum(1 for p in picked if cache.get(p[0]))
-    print(f"deepinfo.txt: {len(lines)} objects, {described} with a description")
+    print(f"deepinfo.txt: {len(lines)} objects, {described} with an article, {sum(1 for p in picked if p[5])} with facts")
     return 0
 
 

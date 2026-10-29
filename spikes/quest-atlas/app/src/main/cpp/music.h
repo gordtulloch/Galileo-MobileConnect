@@ -264,7 +264,7 @@ inline void start(AAssetManager* am) {
 }
 
 
-// ---- speech: pre-rendered clips (assets/speech/<label>.mp3, tools/make_speech.py) played on a short-lived thread of their
+// ---- speech: pre-rendered clips (assets/speech/<label>.ogg, Opus, tools/make_speech.py) played on a short-lived thread of their
 // own, over the music, which is ducked while a clip runs. Starting or stopping never blocks: a superseded clip is told to
 // stop and left to finish on its own thread.
 inline std::unordered_set<std::string> gSpeechKeys;
@@ -283,7 +283,7 @@ inline void loadSpeechIndex(AAssetManager* am) {
     if (AAssetDir* dir = AAssetManager_openDir(am, "speech")) {
         while (const char* n = AAssetDir_getNextFileName(dir)) {
             std::string s = n;
-            if (s.size() > 4 && s.compare(s.size() - 4, 4, ".mp3") == 0) gSpeechKeys.insert(s.substr(0, s.size() - 4));
+            if (s.size() > 4 && s.compare(s.size() - 4, 4, ".ogg") == 0) gSpeechKeys.insert(s.substr(0, s.size() - 4));
         }
         AAssetDir_close(dir);
     }
@@ -308,7 +308,7 @@ inline void say(AAssetManager* am, const char* label) {
     const int gen = ++gSpeechGen;
     gSpeaking = true;
     gDuck = kDuckedTo;
-    const std::string path = "speech/" + speechKey(label) + ".mp3";
+    const std::string path = "speech/" + speechKey(label) + ".ogg";
     std::thread([am, path, flag, gen]() {
         playTrack(am, path, *flag, true);
         if (gSpeechGen == gen) { gSpeaking = false; gDuck = 1.f; }  // only the newest clip restores the music

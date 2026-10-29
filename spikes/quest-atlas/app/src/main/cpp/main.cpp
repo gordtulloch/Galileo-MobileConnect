@@ -16,6 +16,7 @@
 //   HUD reads out what the right controller (else left) is pointing at.
 
 #include <jni.h>
+#include <android/imagedecoder.h>
 #include <android/asset_manager.h>
 #include <android/log.h>
 #include <android_native_app_glue.h>
@@ -30,12 +31,14 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
 #include <functional>
 #include <ctime>
 #include <random>
@@ -710,7 +713,7 @@ const char* const kDsoTypeName[11] = {"GALAXY", "OPEN CLUSTER", "GLOBULAR", "PLA
                                       "SUN", "MOON", "PLANET", "ASTEROID", "SATELLITE"};
 
 // Panel text for a catalogue object (deepinfo.txt, tools/make_info.py)
-struct Info { std::string common, also, con, desc; };
+struct Info { std::string common, also, con, desc, facts; };
 struct PanelLine { std::string s; int style; };  // style 0 title, 1 body, 2 dim, 3 hint
 
 constexpr float kDome = 1000.f;      // radius the sky is drawn at (stars, lines, labels); the background is 5x that
@@ -791,15 +794,25 @@ struct App {
     bool showDso = true, showBodies = true;
     size_t nStatic = 0;                // dso[0, nStatic) are catalogue objects; after them Sun, Moon, planets, asteroids, satellites
     size_t astStart = 0, satStart = 0;
-    // DSS2 cutouts (dss.bin) drawn over the sky once zoomed in, and the panel that pops up from the right controller
-    std::vector<uint8_t> dssRaw;
-    uint32_t dssCount = 0, dssSide = 0;
-    size_t dssPix = 0;                 // offset of the first image in dssRaw
-    std::vector<int> dssOf;            // catalogue index -> image index, -1 when there is none
-    std::vector<float> dssFov;         // degrees, per image
+    // DSS2 pictures (dss2/, tools/make_dss2.py) drawn over the sky once zoomed in, and the panel that pops up from the right controller
+    std::vector<int> dssOf;            // catalogue index -> picture index, -1 when there is none
+    std::vector<float> dssFov;         // degrees, per picture
+    std::vector<char> dssHasHi;        // per picture: a finer _hi version exists
+    std::vector<std::string> dssKey;   // per picture: asset name stem
+    uint32_t dssCount = 0;
     GLuint dssProg = 0, dssVao = 0, dssVbo = 0, dssTex = 0;
-    int dssShown = -1, dssLoaded = -1; // catalogue index being drawn, image index in the texture
+    int dssShown = -1;                 // catalogue index being drawn
+    int dssTexObj = -1;                // catalogue index whose picture is in the texture
+    bool dssTexHi = false;             // ... and whether it is the fine version
     float dssAlpha = 0.f, dssFovRad = 0.f, dssBase = 0.f;
+    // pictures are decoded on a worker thread (JPEG -> 8-bit pixels) and handed over under dssMu
+    struct DssReady { int obj = -1; int side = 0; bool hi = false; std::vector<uint8_t> px; };
+    std::mutex dssMu;
+    std::condition_variable dssCv;
+    std::thread dssThread;
+    int dssWant = -1;                  // object the worker should decode next (guarded by dssMu)
+    bool dssQuit = false;
+    DssReady dssReadyLo, dssReadyHi;
     Vec3 dssObj{0, 0, 0}, dssEast{0, 0, 0}, dssNorth{0, 0, 0};
     float dssQuad[18] = {};
     std::unordered_map<std::string, Info> info;
@@ -931,33 +944,108 @@ void loadBodies(AAssetManager* am) {
 
 // Observing site, DSS2 map and Arial atlas. All optional; the atlas degrades to
 // a plain star field at 0N 0E without them.
-// dss.bin: "GDSS", count, side, count x {label[12], fov}, count x side*side bytes (tools/make_dss.py). Optional.
+// JPEG asset -> 8-bit pixels (the pictures are grayscale, which AImageDecoder can decode straight to A8).
+bool decodeGray(AAssetManager* am, const std::string& path, std::vector<uint8_t>& px, int& side) {
+    AAsset* a = AAssetManager_open(am, path.c_str(), AASSET_MODE_BUFFER);
+    if (!a) return false;
+    AImageDecoder* dec = nullptr;
+    bool ok = false;
+    if (AImageDecoder_createFromAAsset(a, &dec) == ANDROID_IMAGE_DECODER_SUCCESS) {
+        const AImageDecoderHeaderInfo* hi = AImageDecoder_getHeaderInfo(dec);
+        const int w = AImageDecoderHeaderInfo_getWidth(hi), h = AImageDecoderHeaderInfo_getHeight(hi);
+        if (w > 0 && w == h && AImageDecoder_setAndroidBitmapFormat(dec, ANDROID_BITMAP_FORMAT_A_8) == ANDROID_IMAGE_DECODER_SUCCESS) {
+            const size_t stride = AImageDecoder_getMinimumStride(dec);
+            std::vector<uint8_t> tmp(stride * size_t(h));
+            if (AImageDecoder_decodeImage(dec, tmp.data(), stride, tmp.size()) == ANDROID_IMAGE_DECODER_SUCCESS) {
+                if (stride == size_t(w)) {
+                    px.swap(tmp);
+                } else {
+                    px.resize(size_t(w) * size_t(h));
+                    for (int y = 0; y < h; ++y) memcpy(&px[size_t(y) * size_t(w)], &tmp[size_t(y) * stride], size_t(w));
+                }
+                side = w;
+                ok = true;
+            }
+        }
+        AImageDecoder_delete(dec);
+    }
+    AAsset_close(a);
+    return ok;
+}
+
+// Worker: decodes the coarse picture of the wanted object at once and then, if there is one, the fine picture. The wanted
+// object can change at any time; results for an object nobody wants any more are simply never picked up.
+void dssWorker(AAssetManager* am) {
+    int done = -1;
+    for (;;) {
+        int obj;
+        {
+            std::unique_lock<std::mutex> lk(g.dssMu);
+            g.dssCv.wait(lk, [&] { return g.dssQuit || (g.dssWant >= 0 && g.dssWant != done); });
+            if (g.dssQuit) return;
+            obj = g.dssWant;
+        }
+        done = obj;
+        const int k = g.dssOf[size_t(obj)];
+        const std::string base = "dss2/" + g.dssKey[size_t(k)];
+        App::DssReady r;
+        r.obj = obj;
+        if (decodeGray(am, base + ".jpg", r.px, r.side)) {
+            std::lock_guard<std::mutex> lk(g.dssMu);
+            g.dssReadyLo = std::move(r);
+        }
+        if (!g.dssHasHi[size_t(k)]) continue;
+        {
+            std::lock_guard<std::mutex> lk(g.dssMu);
+            if (g.dssWant != obj) continue;  // moved on while the coarse one decoded: skip the big one
+        }
+        App::DssReady h;
+        h.obj = obj;
+        h.hi = true;
+        if (decodeGray(am, base + "_hi.jpg", h.px, h.side)) {
+            std::lock_guard<std::mutex> lk(g.dssMu);
+            g.dssReadyHi = std::move(h);
+        }
+    }
+}
+
+void dssRequest(int obj) {
+    std::lock_guard<std::mutex> lk(g.dssMu);
+    if (g.dssWant == obj) return;
+    g.dssWant = obj;
+    g.dssCv.notify_one();
+}
+
+// dss2.idx: "label <TAB> field in degrees <TAB> 1 if a _hi picture exists" per object (tools/make_dss2.py). Optional.
 void loadDss(AAssetManager* am) {
-    g.dssRaw = readAsset(am, "dss.bin");
+    std::vector<uint8_t> t = readAsset(am, "dss2.idx");
     g.dssCount = 0;
-    if (g.dssRaw.size() < 12 || memcmp(g.dssRaw.data(), "GDSS", 4) != 0) { g.dssRaw.clear(); return; }
-    uint32_t n, side;
-    memcpy(&n, g.dssRaw.data() + 4, 4);
-    memcpy(&side, g.dssRaw.data() + 8, 4);
-    size_t px = size_t(side) * side;
-    if (side == 0 || g.dssRaw.size() < 12 + size_t(n) * 16 + size_t(n) * px) { g.dssRaw.clear(); return; }
-    g.dssSide = side;
-    g.dssPix = 12 + size_t(n) * 16;
     g.dssOf.assign(g.nStatic, -1);
-    g.dssFov.assign(n, 0.f);
     std::unordered_map<std::string, size_t> byLabel;
     for (size_t i = 0; i < g.nStatic; ++i) byLabel.emplace(g.dso[i].label, i);
-    for (uint32_t k = 0; k < n; ++k) {
-        const uint8_t* e = g.dssRaw.data() + 12 + size_t(k) * 16;
-        char lab[13];
-        memcpy(lab, e, 12);
-        lab[12] = 0;
-        memcpy(&g.dssFov[k], e + 12, 4);
-        auto it = byLabel.find(lab);
-        if (it != byLabel.end()) g.dssOf[it->second] = int(k);
+    size_t pos = 0;
+    while (pos < t.size()) {
+        size_t end = pos;
+        while (end < t.size() && t[end] != '\n') ++end;
+        std::string line(reinterpret_cast<const char*>(t.data()) + pos, end - pos);
+        pos = end + 1;
+        size_t a = line.find('\t'), b = a == std::string::npos ? a : line.find('\t', a + 1);
+        if (b == std::string::npos) continue;
+        std::string label = line.substr(0, a);
+        auto it = byLabel.find(label);
+        if (it == byLabel.end()) continue;
+        g.dssOf[it->second] = int(g.dssFov.size());
+        g.dssFov.push_back(float(atof(line.substr(a + 1, b - a - 1).c_str())));
+        g.dssHasHi.push_back(b + 1 < line.size() && line[b + 1] == '1');
+        std::string key = label;
+        for (char& c : key) if (!isalnum((unsigned char)c)) c = '_';
+        g.dssKey.push_back(key);
     }
-    g.dssCount = n;
-    LOGI("DSS2 cutouts: %u images of %ux%u", n, side, side);
+    g.dssCount = uint32_t(g.dssFov.size());
+    if (g.dssCount) {
+        g.dssThread = std::thread(dssWorker, am);
+        LOGI("DSS2 pictures: %u objects, %zu with a fine version", g.dssCount, size_t(std::count(g.dssHasHi.begin(), g.dssHasHi.end(), 1)));
+    }
 }
 
 // deepinfo.txt: label, common name(s), other designations, constellation, description; tab separated, optional.
@@ -970,12 +1058,12 @@ void loadInfo(AAssetManager* am) {
         std::string line(reinterpret_cast<const char*>(t.data()) + pos, end - pos);
         pos = end + 1;
         if (!line.empty() && line.back() == '\r') line.pop_back();
-        std::string f[5];
+        std::string f[6];
         int k = 0;
         size_t a = 0;
-        for (size_t i = 0; i <= line.size() && k < 5; ++i)
+        for (size_t i = 0; i <= line.size() && k < 6; ++i)
             if (i == line.size() || line[i] == '\t') { f[k++] = line.substr(a, i - a); a = i + 1; }
-        if (k == 5 && !f[0].empty()) g.info[f[0]] = Info{f[1], f[2], f[3], f[4]};
+        if (k >= 5 && !f[0].empty()) g.info[f[0]] = Info{f[1], f[2], f[3], f[4], k > 5 ? f[5] : std::string()};
     }
     LOGI("object info: %zu entries", g.info.size());
 }
@@ -1931,21 +2019,29 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
 
     // DSS2 cutout of the locked (or centred) object once zoomed far enough that it is worth a picture
     if (g.dssShown >= 0 && g.dssAlpha > 0.003f && g.dssProg) {
-        const int k = g.dssOf[size_t(g.dssShown)];
-        if (g.dssLoaded != k) {
-            glBindTexture(GL_TEXTURE_2D, g.dssTex);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, GLsizei(g.dssSide), GLsizei(g.dssSide), 0, GL_RED, GL_UNSIGNED_BYTE,
-                         g.dssRaw.data() + g.dssPix + size_t(k) * g.dssSide * g.dssSide);
-            glGenerateMipmap(GL_TEXTURE_2D);
-            {  // sky level: the 20th percentile of the plate (an object rarely covers most of it, the sky always does)
-                const uint8_t* img = g.dssRaw.data() + g.dssPix + size_t(k) * g.dssSide * g.dssSide;
-                std::vector<uint8_t> tmp(img, img + size_t(g.dssSide) * g.dssSide);
-                std::nth_element(tmp.begin(), tmp.begin() + ptrdiff_t(tmp.size() / 5), tmp.end());
-                g.dssBase = float(tmp[tmp.size() / 5]) / 255.f;
+        {   // take what the worker has finished: the fine picture if it is ready, else the coarse one
+            std::lock_guard<std::mutex> lk(g.dssMu);
+            for (App::DssReady* r : {&g.dssReadyHi, &g.dssReadyLo}) {
+                if (r->obj != g.dssShown || r->px.empty()) continue;
+                if (!r->hi && g.dssTexObj == r->obj) { r->px.clear(); continue; }  // already showing this object, at least as sharp
+                glBindTexture(GL_TEXTURE_2D, g.dssTex);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, r->side, r->side, 0, GL_RED, GL_UNSIGNED_BYTE, r->px.data());
+                glGenerateMipmap(GL_TEXTURE_2D);
+                {  // sky level: the 20th percentile of a sample of the plate (an object rarely covers most of it, the sky always does)
+                    std::vector<uint8_t> tmp;
+                    tmp.reserve(r->px.size() / 7 + 1);
+                    for (size_t i = 0; i < r->px.size(); i += 7) tmp.push_back(r->px[i]);
+                    std::nth_element(tmp.begin(), tmp.begin() + ptrdiff_t(tmp.size() / 5), tmp.end());
+                    g.dssBase = float(tmp[tmp.size() / 5]) / 255.f;
+                }
+                g.dssTexObj = r->obj;
+                g.dssTexHi = r->hi;
+                r->px.clear();
+                r->px.shrink_to_fit();
             }
-            g.dssLoaded = k;
         }
+        if (g.dssTexObj != g.dssShown) goto skipDss;  // the picture is still being decoded
         glUseProgram(g.dssProg);
         glUniformMatrix4fv(glGetUniformLocation(g.dssProg, "uVP"), 1, GL_FALSE, vp.m);
         glUniformMatrix3fv(glGetUniformLocation(g.dssProg, "uPrec"), 1, GL_FALSE, g.prec);
@@ -1968,6 +2064,7 @@ void renderEye(int e, const XrView& view, uint32_t fbo) {
         glBlendFunc(GL_ONE, GL_ONE);  // additive onto the sky
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
+    skipDss:;
 
     // stars
     const StarSet* set = &g.real;
@@ -3087,6 +3184,17 @@ void loadControllerModels() {
 void updateDss() {
     g.dssShown = -1;
     g.dssAlpha = 0.f;
+    if (!g.dssCount) return;
+    // decode ahead: the locked object, else the one under the pointer, as soon as it is known (before any zoom)
+    {
+        int req = -1;
+        if (g.lock >= 0 && size_t(g.lock) < g.nStatic && g.dssOf[size_t(g.lock)] >= 0) req = g.lock;
+        else if (g.hover >= 0 && size_t(g.hover) < g.nStatic && g.dssOf[size_t(g.hover)] >= 0) req = g.hover;
+        if (req >= 0) dssRequest(req);
+    }
+    if (g.zoom < 1.2f) return;
+    g.dssShown = -1;
+    g.dssAlpha = 0.f;
     if (!g.dssCount || g.zoom < 1.2f) return;
     auto sstep = [](float a, float b, float x) {
         float t = std::min(std::max((x - a) / (b - a), 0.f), 1.f);
@@ -3112,6 +3220,7 @@ void updateDss() {
             if (a > 0.01f) { bd = d; best = int(i); bestA = a; }
         }
     }
+    if (best >= 0) dssRequest(best);
     if (best < 0 || bestA <= 0.003f) return;
     const Dso& o = g.dso[size_t(best)];
     const Vec3 w = g.dsoW[size_t(best)];
@@ -3228,7 +3337,11 @@ void updatePanel(double dt) {
     double alt = std::asin(double(std::min(std::max(w.y, -1.f), 1.f))) * 180.0 / kPi;
     double az = std::fmod(std::atan2(double(w.x), double(-w.z)) * 180.0 / kPi + 360.0, 360.0);
     L.push_back({fmt("Altitude %.1f deg    Azimuth %.0f deg%s", alt, az, alt < 0 ? "    below the horizon" : ""), 1});
-    if (inf && !inf->desc.empty()) {
+    if (inf && (!inf->facts.empty() || !inf->desc.empty())) {
+        L.push_back({"", 2});
+        if (!inf->facts.empty()) L.push_back({inf->facts, 1});
+        if (!inf->desc.empty()) L.push_back({inf->desc, 1});
+    }    if (inf && !inf->desc.empty()) {
         L.push_back({"", 2});
         L.push_back({inf->desc, 1});
     }
@@ -3364,6 +3477,12 @@ void android_main(android_app* app) {
         }
         if (g.quit) break;
     }
+    {
+        std::lock_guard<std::mutex> lk(g.dssMu);
+        g.dssQuit = true;
+        g.dssCv.notify_all();
+    }
+    if (g.dssThread.joinable()) g.dssThread.join();
     music::stop();
     destroyAll();
     LOGI("exiting");
