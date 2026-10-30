@@ -1,0 +1,3 @@
+.speechcache*/
+.infocache*.json
+__pycache__/

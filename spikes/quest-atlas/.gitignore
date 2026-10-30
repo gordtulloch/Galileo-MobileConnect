@@ -27,3 +27,6 @@ app/src/main/assets/music/*
 !app/src/main/assets/music/.gitkeep
 app/src/main/assets/speech/
 tools/.speechcache/
+app/src/main/assets/dss2/
+app/src/main/assets/dss2.idx
+tools/.openngc_*.csv
