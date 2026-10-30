@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Document** | Analysis (not a requirements document), v0.4, draft — updated for the decision that Quest 2 is the primary target |
+| **Document** | Analysis (not a requirements document), v0.5, draft — the Quest 2 spike succeeded; the VR client is confirmed — updated for the decision that Quest 2 is the primary target |
 | **Date** | 2026-10-27 |
 | **Written for** | The product owner, to decide which Galileo facets the Meta Quest 2/3 edition adapts beyond the two required scenes |
 | **Context** | [PSD](../PSD.md) §4a (Meta Quest edition). The immersive **planetarium** (Q-9) and **image viewer** (Q-10) are required; this analysis looks at everything else |
@@ -84,7 +84,7 @@ None of these changes the principle that the headset operates, never configures:
 
 ## 5. Platform and technical considerations
 
-- **Rendering stack** (PSD Q6). The dome and image wall need real-time 3D. A native Android route (Meta's Android SDK, Kotlin) keeps the shared Kotlin layer and the Compose panel screens in one app and one language; a game engine (Unity) eases heavy 3D and tooling at the cost of a second runtime and a bridge to the shared layer. Recommend a short spike of the dome with 100,000 stars on a Quest 2 before deciding. The star count, not the UI, is the performance risk.
+- **Rendering stack** (PSD Q6). The dome and image wall need real-time 3D. A native Android route (Meta's Android SDK, Kotlin) keeps the shared Kotlin layer and the Compose panel screens in one app and one language; a game engine (Unity) eases heavy 3D and tooling at the cost of a second runtime and a bridge to the shared layer. A spike of the VR client on a Quest 2 has since been run and was very successful (PSD §4a); its stack and measurements are to be recorded in the Quest SDD. The star count, not the UI, is the performance risk.
 - **Quest 2 is the target; Quest 3 follows by demand (PSD Q-12).** Quest 2's GPU and memory are the design budget, not a limit to apologise for: level-of-detail by magnitude, point-sprite stars, a bounded tile cache and a modest scene count are requirements from the start, and the same build then runs well on a Quest 3. Quest 3-specific features (colour passthrough, mixed-reality anchoring of the sky to the room, higher-resolution textures) are only worth building once Quest 2 use justifies them. Because the Quest 2 is cheap and available second-hand, it is realistic to plan for a **dedicated astronomy headset**, so first-run setup, pairing and reconnection should be quick and need no other apps.
 - **Dark adaptation.** The red-only palette (PSD G10) applies to the 3D scenes, and so do dim defaults: a bright sky texture in an otherwise dark room defeats the purpose. Star colour is lost in red-only mode, so the dome needs a mode that keeps stars legible without white.
 - **Comfort.** No camera motion not initiated by the user: the dome is fixed around them, time scrubbing moves the *sky*, not the viewer, and the horizon stays level. Short, seated sessions; text kept large (PSD PC10).
@@ -97,7 +97,7 @@ None of these changes the principle that the headset operates, never configures:
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | Quest 2, the primary target, cannot render a large catalog smoothly | The Quest 2 budget is the design budget: level-of-detail by magnitude, point sprites, bounded caches; spike first on a real Quest 2 |
+| R1 | Quest 2, the primary target, cannot render a large catalog smoothly | The Quest 2 budget is the design budget: level-of-detail by magnitude, point sprites, bounded caches; the spike on a real Quest 2 was successful; the SDD records the measured limits |
 | R2 | A mis-selected go-to slews the mount toward an obstruction | Operator role, lease, confirmation panel with horizon/limit check; the Master's safety and mount limits remain the authority |
 | R3 | Scope creep: the "wow" features (flythroughs, 3D space) crowd out operating value | Section 2 ranking; only items tied to an operating task are scheduled before v2 |
 | R4 | The Master's streaming load (several viewers, imaging at the same time) or a weak link starves the scenes or the session | VR is served only by a PC/Mac-class Master (PSD Q-14); per-client limits, compact delta-coded binary protocol, streaming yields to the session, progressive detail, short-lived local cache |
@@ -113,7 +113,7 @@ None of these changes the principle that the headset operates, never configures:
 3. **v1.2:** all-sky overlay, the equipment twin with flip visualisation, guiding/focus diagnostics, plate-solve and polar-alignment overlays.
 4. **v2:** spatial schedule, Library frame wall, variable-star views, shared viewing.
 5. Treat the Quest 2 as the acceptance device throughout; plan Quest 3-specific features (colour passthrough, mixed-reality, higher resolution) only after Quest 2 utilisation justifies them.
-6. Decide the rendering stack from a Quest 2 spike **before** writing the Quest SDD; the streaming protocol for the data in Section 4 (PSD Q-13) belongs in that SDD and drives the wire-API additions Galileo needs.
+6. Record the rendering stack and measurements from the successful Quest 2 spike in the Quest SDD; the streaming protocol for the data in Section 4 (PSD Q-13) belongs in that SDD and drives the wire-API additions Galileo needs.
 
 ## 8. Questions for the owner
 

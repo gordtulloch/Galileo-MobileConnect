@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | **Project** | Galileo MobileConnect — iOS/iPadOS and Android apps |
-| **Document** | PSD (Project Scope Document), v0.7, draft — **common to both platforms**, plus the Meta Quest edition (Section 4a) |
+| **Document** | PSD (Project Scope Document), v0.8, draft — **common to both platforms**, plus the Meta Quest edition (Section 4a) |
 | **Status** | Draft — for review |
 | **Date** | 2026-10-27 |
 | **Server-side counterpart** | MobileConnect plugin — `docs/plugins/mobileconnect/PSD.md` in the [Galileo](https://github.com/gordtulloch/Galileo) repository (operational scope, proxying, control model) |
@@ -38,9 +38,11 @@ Galileo's desktop application runs the imaging session, usually at or near the t
 | G9 | **Safe by design**: Viewer/Operator roles, the per-Pier control lease, confirmation for destructive actions, an always-reachable stop/park, and deadman behaviour for held motion are all honoured in the UI, with the node as the authority |
 | G10 | **Built for the dark**: a night-vision (red-only) theme and low-brightness defaults, since the apps are used at the telescope in the dark |
 | G11 | **Free to users initially**, distributed through the Apple App Store and Google Play under accounts held by Gord Tulloch |
-| G12 | **Meta Quest edition** (Section 4a): a version of the Android app that runs on Meta Quest 2 and Meta Quest 3 headsets, which are Android-based, with the same operating functions as the Android app presented for a headset |
+| G12 | **Meta Quest VR client — confirmed.** A VR client for Meta Quest headsets (Quest 2 primary, Quest 3 later) is part of MobileConnect's committed scope, not a proposal: a feasibility spike on the Quest 2 was successful (Section 4a). It runs the Android app's operating screens as panels and adds the immersive planetarium and image viewer, with its own SDD |
 
 ## 4a. Meta Quest Edition (Meta Quest 2 and Meta Quest 3)
+
+**Status: confirmed.** A spike of the VR client was run on the Quest 2 and was very successful, so the VR client is confirmed as part of the product. What the spike settles is feasibility: that the immersive scenes can be built and run on the Quest 2, the primary target. Its detailed findings (the rendering stack used, measured star counts and frame rates, tile and streaming behaviour) are to be recorded in the Quest SDD (`docs/quest/SDD.md`) and the requirements they support in the SRS; this PSD does not restate them.
 
 **Meta Quest 2 is the primary target and the initial test environment**; Quest 3-specific support follows, based on how the Quest 2 edition is used (Q-12). Both run Meta's Android-based operating system (Meta Horizon OS), so an Android app can run on them as a **floating 2D panel** in the headset. The Quest edition starts there, but it is **required to go further**: an **immersive planetarium** and an **immersive image viewer** are part of v1, which makes it a distinct product with its own rendering stack and its own SDD. The wider opportunities are analysed in [analysis/QuestVR.md](analysis/QuestVR.md).
 
@@ -172,7 +174,7 @@ The shared-architecture SDD exists because splitting the design only by platform
 | Q3 | Minimum OS versions | Fix in the SRS from store statistics and API needs (PC2) |
 | Q4 | Mock node for development and store review | Yes — a scripted fake Master, also used by the test suite |
 | Q5 | App name and bundle identifiers | Decide before the first store submission; **Galileo MobileConnect** is the working name |
-| Q6 | Rendering technology for the immersive scenes: Meta's native Android SDK (Kotlin) or a game engine such as Unity? | Decide in the Quest SDD by a spike; a native Android SDK keeps the shared Kotlin layer and the panel screens in one app, an engine eases heavy 3D at the cost of a second runtime |
+| Q6 | Rendering technology for the immersive scenes: Meta's native Android SDK (Kotlin) or a game engine such as Unity? | *Spike completed successfully on the Quest 2.* The stack the spike used and validated is to be named, with its measured performance, in the Quest SDD; this question closes when it is |
 | Q7 | When is Quest 3-specific support worth building? | When utilisation of the Quest 2 edition shows demand (Q-12); the trigger and the figures to use are set in the SRS |
 | Q8 | Who holds the Meta developer account and Meta Horizon Store listing? | To be confirmed (the Apple and Google accounts are held by Gord Tulloch) |
 | Q9 | How long and how large should the headset's cache of streamed data be? | Small and short-lived (minutes, bounded memory) to bridge dropouts and avoid re-fetching a region the user keeps looking at; no persistent catalog on the device |

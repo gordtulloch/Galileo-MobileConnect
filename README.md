@@ -2,7 +2,7 @@
 
 Native **iOS/iPadOS and Android** client apps — plus a **Meta Quest 2/3 edition** of the Android app — for [Galileo](https://github.com/gordtulloch/Galileo), the cross-platform astrophotography imaging application. The apps let you watch and operate a running Galileo observatory from a **tablet** (the primary target) or a phone — connect equipment, find and centre targets, focus, guide, run and author sessions and schedules, and respond to safety events — without going back to the computer. They **operate** an observatory; they never **configure** one.
 
-> **Status: In Design.** There is no code yet. The scope document is written and under review; requirements, design and the first build follow its approval. See [Status](#status).
+> **Status: In Design** (a feasibility spike of the Meta Quest VR client on the Quest 2 has succeeded and the VR client is confirmed). There is no code yet. The scope document is written and under review; requirements, design and the first build follow its approval. See [Status](#status).
 
 ---
 
@@ -66,7 +66,7 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 | Document | Scope | Status |
 |---|---|---|
 | [PSD](docs/PSD.md) | Both apps | Draft v0.1 — for review |
-| SRS | Both apps (common) | Not yet written |
+| [SRS](docs/SRS.md) | All platforms (common) | Draft v0.1 — for review |
 | RTM | Both apps (common) | Not yet written |
 | SDD (shared) | Shared architecture | Not yet written |
 | SDD (iOS), SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
@@ -78,7 +78,7 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 |---|---|
 | Stage | **In Design** |
 | Done | Scope document (PSD) |
-| Next | Wire-API and Control Surface definition in Galileo; SRS; wireframes (tablet first); shared-layer spike |
+| Next | Wire-API and Control Surface definition in Galileo; SRS review; RTM; wireframes (tablet first); shared-layer spike; Quest SDD recording the VR spike's findings |
 | Depends on | Galileo core additions *Connect Link* and *Control Surface* (proposed; see the Galileo PSDs) |
 
 ## Licence
