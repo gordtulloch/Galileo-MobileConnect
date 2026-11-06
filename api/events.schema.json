@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://galileo-imaging.com/schemas/mobileconnect/events.schema.json",
+  "title": "Galileo Connect Link event stream messages",
+  "description": "Frames received on GET /connect/v1/stream (WebSocket). The envelope (hello, resync, and {seq, data}) is IMPLEMENTED (galileo/connect_link/stream.py, checked 2026-11-06). The payload carried in `data` is the MobileConnect plugin's and is PLANNED (plugin SDD section 5.3). The client sends nothing on this socket; the Master ignores anything it receives. Resume with ?epoch=<epoch>&last=<seq>; a changed epoch, or a gap the replay ring no longer holds, arrives as `resync`, after which the client discards its state and requests a snapshot.",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/resync" },
+    { "$ref": "#/$defs/frame" }
+  ],
+  "$defs": {
+    "hello": {
+      "type": "object",
+      "required": ["type", "epoch", "seq"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "hello" },
+        "epoch": { "type": "string" },
+        "seq": { "type": "integer", "minimum": 0, "description": "Highest sequence id so far; nothing is missed if the client starts from here." }
+      }
+    },
+    "resync": {
+      "type": "object",
+      "required": ["type", "epoch", "seq"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "resync" },
+        "epoch": { "type": "string" },
+        "seq": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "required": ["seq", "data"],
+      "additionalProperties": false,
+      "properties": {
+        "seq": { "type": "integer", "minimum": 1 },
+        "data": { "$ref": "#/$defs/event" }
+      }
+    },
+    "event": {
+      "description": "PLANNED. The MobileConnect plugin's payload. Unknown `type` values must be ignored, not treated as errors.",
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "type": "string" } },
+      "oneOf": [
+        { "$ref": "#/$defs/snapshot" },
+        { "$ref": "#/$defs/delta" },
+        { "$ref": "#/$defs/opEvent" },
+        { "$ref": "#/$defs/alert" },
+        { "$ref": "#/$defs/lease" },
+        { "$ref": "#/$defs/access" },
+        { "$ref": "#/$defs/closing" }
+      ]
+    },
+    "snapshot": {
+      "type": "object",
+      "required": ["type", "piers", "as_of"],
+      "properties": {
+        "type": { "const": "snapshot" },
+        "as_of": { "type": "string", "format": "date-time" },
+        "piers": {
+          "type": "object",
+          "description": "PierState by pier id. The shape of a PierState is specified in docs/SDD.md section 3.3.",
+          "additionalProperties": { "type": "object" }
+        }
+      }
+    },
+    "delta": {
+      "type": "object",
+      "required": ["type", "pier", "key", "value", "as_of"],
+      "properties": {
+        "type": { "const": "delta" },
+        "pier": { "type": "string" },
+        "key": { "type": "string", "description": "Dotted path into PierState, for example `mount.tracking`." },
+        "value": {},
+        "as_of": { "type": "string", "format": "date-time", "description": "The Master's clock; the client derives value age from it." }
+      }
+    },
+    "opEvent": {
+      "type": "object",
+      "required": ["type", "correlation_id"],
+      "properties": {
+        "type": { "enum": ["op.started", "op.progress", "op.finished"] },
+        "correlation_id": { "type": "string" },
+        "request_id": { "type": "string", "description": "The Idempotency-Key of the originating request, so the client can tie them." },
+        "pier": { "type": "string" },
+        "operation": { "type": "string" },
+        "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+        "outcome": { "enum": ["ok", "refused", "invalid", "unavailable", "busy", "unreachable"] },
+        "reason": { "type": "string" }
+      }
+    },
+    "alert": {
+      "type": "object",
+      "required": ["type", "id", "severity", "time", "message"],
+      "properties": {
+        "type": { "const": "alert" },
+        "id": { "type": "string" },
+        "severity": { "enum": ["info", "warning", "critical"] },
+        "time": { "type": "string", "format": "date-time" },
+        "pier": { "type": "string" },
+        "message": { "type": "string" },
+        "important": { "type": "boolean" }
+      }
+    },
+    "lease": {
+      "type": "object",
+      "required": ["type", "pier"],
+      "properties": {
+        "type": { "const": "lease" },
+        "pier": { "type": "string" },
+        "holder": { "type": ["string", "null"] }
+      }
+    },
+    "access": {
+      "type": "object",
+      "required": ["type", "pier", "access"],
+      "properties": {
+        "type": { "const": "access" },
+        "pier": { "type": "string" },
+        "access": { "enum": ["control", "view", "none"] },
+        "reachable": { "type": "boolean" },
+        "reason": { "type": "string" }
+      }
+    },
+    "closing": {
+      "type": "object",
+      "required": ["type", "reason"],
+      "properties": {
+        "type": { "const": "closing" },
+        "reason": { "type": "string", "description": "For example `slow` or `revoked`." }
+      }
+    }
+  }
+}

@@ -1,0 +1,1112 @@
+openapi: 3.0.3
+info:
+  title: Galileo Connect Link and MobileConnect wire API
+  version: 0.1.0
+  description: |
+    The contract the Galileo MobileConnect apps (iOS/iPadOS, Android, Meta Quest) are written against.
+    Both native API clients are **generated from this file** (docs/SDD.md, ADR-APP-001); do not edit
+    the generated code, edit this file and regenerate.
+
+    **Status of each operation** is in `x-galileo-status`:
+
+    * `implemented` - checked against the Galileo source (`galileo/connect_link/`) on 2026-11-06.
+    * `planned` - taken from the MobileConnect plugin SDD (`docs/plugins/mobileconnect/SDD.md` in the
+      Galileo repository, section 5.2). The plugin does not exist yet, so these shapes are intent, not fact.
+
+    **Not described here (OpenAPI cannot):** the event stream. It is a WebSocket at
+    `GET /connect/v1/stream?epoch=<epoch>&last=<seq>` with bearer authentication; its messages are
+    described by `events.schema.json`. The stream client is hand-written on each platform.
+
+    **Transport:** HTTPS only. The Master presents a self-signed certificate whose SHA-256 fingerprint
+    is returned by `POST /connect/v1/pair` and pinned by the app; there is no unauthenticated route
+    other than requesting and polling a pairing.
+  license:
+    name: GPL-3.0-or-later
+    url: https://www.gnu.org/licenses/gpl-3.0.html
+servers:
+  - url: https://{host}:{port}
+    description: A Galileo Master node on the user's own network.
+    variables:
+      host:
+        default: galileo.local
+      port:
+        default: "8765"
+tags:
+  - name: pairing
+    description: Request and collect a pairing. The only routes that need no token.
+  - name: session
+    description: Identity, version handshake.
+  - name: transfer
+    description: Chunked, resumable, checksummed object transfer (used for FITS download).
+  - name: catalogue
+    description: What the Master offers.
+  - name: operations
+    description: Invoking Control Surface operations and the control lease.
+  - name: images
+    description: Node-rendered previews, tiles, alerts.
+  - name: sky
+    description: Streamed sky data. The Master is the source of truth; the app ships no catalog.
+
+security:
+  - bearerAuth: []
+
+paths:
+  /connect/v1/pair:
+    post:
+      tags: [pairing]
+      operationId: requestPairing
+      summary: Ask to pair with this Master.
+      description: |
+        Starts a pairing request that a person must approve on the Master. The response carries a
+        six-digit `code` that is shown on both screens, and the certificate `fingerprint` to pin.
+        Rate-limited per source address (429); refused with 503 when the Master's pending list is full.
+      x-galileo-status: implemented
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairingRequest"
+      responses:
+        "202":
+          description: Request accepted; waiting for approval on the Master.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingStarted"
+        "400":
+          description: Malformed request, or refused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "429":
+          description: Too many pairing requests from this address.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "503":
+          description: Too many pairing requests are waiting on the Master.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /connect/v1/pair/{request_id}:
+    get:
+      tags: [pairing]
+      operationId: pollPairing
+      summary: Poll a pairing request.
+      description: |
+        `state` is `pending`, `approved`, `rejected`, `expired` or `collected`. The `token` is returned
+        exactly once, with `approved`; a second poll returns `collected` with no token.
+      x-galileo-status: implemented
+      security: []
+      parameters:
+        - name: request_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The request's state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairingState"
+
+  /connect/v1/whoami:
+    get:
+      tags: [session]
+      operationId: whoami
+      summary: Who the Master thinks this client is.
+      description: A 401 on any authenticated route means the pairing was revoked or has expired.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: This client's identity and permissions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WhoAmI"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /connect/v1/handshake:
+    post:
+      tags: [session]
+      operationId: handshake
+      summary: Exchange versions; learn what this client may do.
+      description: |
+        A different `protocol` is refused. A different database `schema` level restricts the exchange to
+        `control` and `view`. The MobileConnect plugin adds its own payload under `plugin`
+        (capabilities, areas, sky-stream limits).
+      x-galileo-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HandshakeRequest"
+      responses:
+        "200":
+          description: The verdict. `refused` is still a 200; read `verdict`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HandshakeResult"
+        "400":
+          description: Malformed request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /connect/v1/transfer/{sha}:
+    parameters:
+      - $ref: "#/components/parameters/ObjectSha"
+    get:
+      tags: [transfer]
+      operationId: transferStatus
+      summary: How much of an object the Master has or can send.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: Transfer status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransferStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    delete:
+      tags: [transfer]
+      operationId: transferAbort
+      summary: Discard a partial upload.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: Aborted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /connect/v1/transfer/{sha}/chunk:
+    parameters:
+      - $ref: "#/components/parameters/ObjectSha"
+    get:
+      tags: [transfer]
+      operationId: transferGetChunk
+      summary: Download a byte range of an object.
+      description: |
+        Resumable: ask for the next range after the last verified one. The response carries
+        `X-Chunk-SHA256` (verify it) and `X-Object-Size`.
+      x-galileo-status: implemented
+      parameters:
+        - name: offset
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: length
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "200":
+          description: The bytes.
+          headers:
+            X-Chunk-SHA256:
+              schema:
+                type: string
+            X-Object-Size:
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: offset and length are required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /mobileconnect/v1/capabilities:
+    get:
+      tags: [catalogue]
+      operationId: getCapabilities
+      summary: Which areas, sky-stream limits and API version this Master offers.
+      x-galileo-status: planned
+      responses:
+        "200":
+          description: Capabilities.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Capabilities"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/catalogue:
+    get:
+      tags: [catalogue]
+      operationId: getCatalogue
+      summary: The operations available, by area, with typed arguments.
+      description: |
+        The app builds its controls from this: argument ranges, units and choices come from here, and
+        an operation absent from the list is unavailable. Entries of class `config` are never present.
+      x-galileo-status: planned
+      parameters:
+        - name: pier
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The catalogue.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalogue"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/piers:
+    get:
+      tags: [catalogue]
+      operationId: listPiers
+      summary: Observatories and Piers, including spoke Piers reached through this Master.
+      x-galileo-status: planned
+      responses:
+        "200":
+          description: The Piers this client may see.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PierList"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/pier/{pier}/ops/{name}:
+    post:
+      tags: [operations]
+      operationId: invokeOperation
+      summary: Invoke an operation on a Pier.
+      description: |
+        Send an `Idempotency-Key` on every state-changing call; repeat the same key to retry after an
+        uncertain outcome. An operation of class `confirm` is answered `confirmation_required` with a
+        token; repeat the request with `X-Confirm-Token` to execute it.
+
+        **Open point (SDD D9):** the plugin SDD does not fix HTTP status codes for the typed outcomes
+        (`refused`, `invalid`, `unavailable`, `busy`, `unreachable`, `confirmation_required`). They are
+        modelled here by the response body, on the `default` response.
+      x-galileo-status: planned
+      parameters:
+        - $ref: "#/components/parameters/Pier"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: A catalogue operation name, for example `mount.slew`.
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+        - name: X-Confirm-Token
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationRequest"
+      responses:
+        "200":
+          description: The operation ran; `result` is its value.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationOk"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        default:
+          description: A typed refusal or error. The body says which.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationError"
+
+  /mobileconnect/v1/pier/{pier}/lease:
+    parameters:
+      - $ref: "#/components/parameters/Pier"
+    post:
+      tags: [operations]
+      operationId: acquireLease
+      summary: Take the control lease for a Pier (or take it over with a confirm token).
+      x-galileo-status: planned
+      parameters:
+        - name: X-Confirm-Token
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The lease is held by this client.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaseState"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        default:
+          description: Held by another client, or refused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationError"
+    delete:
+      tags: [operations]
+      operationId: releaseLease
+      summary: Release the control lease.
+      x-galileo-status: planned
+      responses:
+        "200":
+          description: Released.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaseState"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/alerts:
+    get:
+      tags: [images]
+      operationId: listAlerts
+      summary: Recent alerts.
+      x-galileo-status: planned
+      responses:
+        "200":
+          description: Recent alerts, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [alerts]
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Alert"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/pier/{pier}/preview:
+    get:
+      tags: [images]
+      operationId: getPreview
+      summary: A node-rendered preview of the current frame.
+      x-galileo-status: planned
+      parameters:
+        - $ref: "#/components/parameters/Pier"
+        - name: w
+          in: query
+          required: false
+          description: Requested width in pixels; clamped by the Master.
+          schema:
+            type: integer
+            minimum: 1
+        - name: q
+          in: query
+          required: false
+          description: JPEG quality, 1-100; clamped by the Master.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: black
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: mid
+          in: query
+          required: false
+          schema:
+            type: number
+        - name: white
+          in: query
+          required: false
+          schema:
+            type: number
+      responses:
+        "200":
+          description: The image.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: No frame yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /mobileconnect/v1/frame/{id}/tiles/{z}/{x}/{y}:
+    get:
+      tags: [images]
+      operationId: getTile
+      summary: One tile of a frame's zoom pyramid.
+      description: Frames are addressed by id, so a client can hold tiles of two frames at once (blink, side by side).
+      x-galileo-status: planned
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: z
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: x
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: "y"
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The tile.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: No such tile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /mobileconnect/v1/sky/catalog:
+    get:
+      tags: [sky]
+      operationId: getSkyCatalog
+      summary: Stars and deep-sky objects for a region, brightest first.
+      description: |
+        Returns a compact binary delta frame (format owned by the core streaming service, SDD D4). The
+        `cursor` is opaque and stateless, so an interrupted request resumes anywhere.
+      x-galileo-status: planned
+      parameters:
+        - name: ra
+          in: query
+          required: true
+          description: Region centre, right ascension in degrees.
+          schema:
+            type: number
+        - name: dec
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: radius
+          in: query
+          required: true
+          description: Region radius in degrees.
+          schema:
+            type: number
+        - name: mag
+          in: query
+          required: true
+          description: Limiting magnitude.
+          schema:
+            type: number
+        - name: lod
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A binary sky frame.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "429":
+          description: Over the per-client rate or region limit; back off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /mobileconnect/v1/sky/ephemeris:
+    get:
+      tags: [sky]
+      operationId: getEphemeris
+      summary: Positions of the Sun, Moon, planets and minor bodies for an instant or a range.
+      x-galileo-status: planned
+      parameters:
+        - name: t
+          in: query
+          required: false
+          description: An instant (RFC 3339). Use `from`/`to` for a range.
+          schema:
+            type: string
+            format: date-time
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: A sampled time series the client interpolates.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ephemeris"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/sky/site:
+    get:
+      tags: [sky]
+      operationId: getSite
+      summary: The Observatory's location and horizon profile.
+      x-galileo-status: planned
+      responses:
+        "200":
+          description: Site block; `version` changes only when the site or horizon does.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Site"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The token issued once on approval of a pairing.
+
+  parameters:
+    Pier:
+      name: pier
+      in: path
+      required: true
+      schema:
+        type: string
+    ObjectSha:
+      name: sha
+      in: path
+      required: true
+      description: SHA-256 of the object, lower-case hex.
+      schema:
+        type: string
+        pattern: "^[0-9a-f]{64}$"
+
+  responses:
+    Unauthorised:
+      description: No valid token. The pairing was revoked or has expired; discard the token and pair again.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SimpleError"
+    Forbidden:
+      description: The client's permissions do not allow this.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SimpleError"
+
+  schemas:
+    SimpleError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    Ok:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+
+    PairingRequest:
+      type: object
+      required: [plugin, name]
+      properties:
+        plugin:
+          type: string
+          description: Always `mobileconnect` for these apps.
+          example: mobileconnect
+        name:
+          type: string
+          maxLength: 80
+          description: The device's display name, shown to the person approving on the Master.
+        kind:
+          type: string
+          example: app
+        platform:
+          type: string
+          description: ios, ipados, android or quest.
+          example: ipados
+
+    PairingStarted:
+      type: object
+      required: [request_id, code, expires_in, fingerprint, protocol]
+      properties:
+        request_id:
+          type: string
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+          description: Shown on both screens for the person to compare.
+        expires_in:
+          type: number
+          description: Seconds until the request lapses.
+        fingerprint:
+          type: string
+          description: SHA-256 of the Master's certificate, lower-case hex. This is the pin.
+        protocol:
+          type: integer
+
+    PairingState:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [pending, approved, rejected, expired, collected]
+        token:
+          type: string
+          description: Present once, with `approved`. Store it only in secure storage.
+
+    WhoAmI:
+      type: object
+      required: [peer_id, name, plugin, permissions]
+      properties:
+        peer_id:
+          type: string
+        name:
+          type: string
+        plugin:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+          description: "`control` (Operator), `view` (Viewer). The app refuses a grant containing `config.*`."
+
+    HandshakeRequest:
+      type: object
+      required: [protocol, schema]
+      properties:
+        protocol:
+          type: integer
+          description: Connect Link protocol version this client speaks.
+        schema:
+          type: integer
+          description: Database schema level (apps report the level of their pinned contract; 0 if not applicable).
+        galileo:
+          type: string
+        plugin_api:
+          type: string
+        plugin:
+          $ref: "#/components/schemas/ClientInfo"
+
+    ClientInfo:
+      type: object
+      properties:
+        app_version:
+          type: string
+        platform:
+          type: string
+        client_class:
+          type: string
+          description: tablet, phone or quest. Lets the Master say whether VR streaming is available.
+        plugin_api:
+          type: string
+
+    NodeVersions:
+      type: object
+      required: [galileo, plugin_api, schema, protocol]
+      properties:
+        galileo:
+          type: string
+        plugin_api:
+          type: string
+        schema:
+          type: integer
+        protocol:
+          type: integer
+
+    HandshakeResult:
+      type: object
+      required: [verdict, message, allowed, node]
+      properties:
+        verdict:
+          type: string
+          enum: [ok, restricted, refused]
+        message:
+          type: string
+          description: Written for a person; show it as is.
+        allowed:
+          type: array
+          items:
+            type: string
+        node:
+          $ref: "#/components/schemas/NodeVersions"
+        plugin:
+          type: object
+          additionalProperties: true
+          description: The MobileConnect plugin's extension payload (see `Capabilities`).
+
+    TransferStatus:
+      type: object
+      required: [have, size, received]
+      properties:
+        have:
+          type: boolean
+        size:
+          type: integer
+          format: int64
+        received:
+          type: integer
+          format: int64
+
+    Capabilities:
+      type: object
+      required: [plugin_api, areas]
+      properties:
+        plugin_api:
+          type: string
+        areas:
+          type: array
+          items:
+            type: string
+          description: Operation areas this node offers. An old node lacks this whole object.
+        sky_stream:
+          $ref: "#/components/schemas/SkyStreamCapability"
+
+    SkyStreamCapability:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+        reduced:
+          type: boolean
+        reason:
+          type: string
+          description: Why not, for example `master_hardware`. Show it; it is not an error.
+        max_lod:
+          type: integer
+        max_concurrent:
+          type: integer
+
+    Arg:
+      type: object
+      required: [name, type, required]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [int, float, str, bool, enum]
+        required:
+          type: boolean
+        unit:
+          type: string
+        description:
+          type: string
+        default: {}
+        min:
+          type: number
+        max:
+          type: number
+        choices:
+          type: array
+          items:
+            type: string
+
+    Operation:
+      type: object
+      required: [name, area, class, lease, args]
+      properties:
+        name:
+          type: string
+          example: mount.slew
+        area:
+          type: string
+        class:
+          type: string
+          enum: [read, operate, confirm, emergency]
+        lease:
+          type: boolean
+          description: True if the client must hold the Pier's lease to call it.
+        args:
+          type: array
+          items:
+            $ref: "#/components/schemas/Arg"
+        description:
+          type: string
+        available:
+          type: boolean
+        unavailable_because:
+          type: string
+          description: Present when `available` is false; show it on the disabled control.
+        long_running:
+          type: boolean
+
+    Catalogue:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Operation"
+
+    PierRef:
+      type: object
+      required: [id, name, node, access, reachable]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        node:
+          type: string
+        observatory:
+          type: string
+        access:
+          type: string
+          enum: [control, view, none]
+        reachable:
+          type: boolean
+        unreachable_since:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
+    PierList:
+      type: object
+      required: [piers]
+      properties:
+        piers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PierRef"
+
+    OperationRequest:
+      type: object
+      required: [args]
+      properties:
+        args:
+          type: object
+          additionalProperties: true
+          description: Validated against the catalogue entry's `args`.
+        confirmed:
+          type: boolean
+          description: Emergency operations only - the client's own deliberate confirmation. Accepted only from an Operator.
+
+    OperationOk:
+      type: object
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+        result:
+          description: The operation's value, if any.
+        correlation_id:
+          type: string
+          description: Ties this call to later `op.*` events on the stream.
+
+    OperationError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [refused, invalid, unavailable, busy, unreachable, confirmation_required]
+        reason:
+          type: string
+          description: Written for a person; show it as is.
+        detail:
+          type: object
+          additionalProperties: true
+          description: |
+            `invalid`: `{path}` names the faulty argument. `refused`: `{kind}` may be `lease_held`
+            (with `holder` and `can_take`) or `safety`.
+        confirm_token:
+          type: string
+          description: With `confirmation_required`; single-use, bound to the operation and its arguments.
+        expires_in:
+          type: number
+
+    LeaseState:
+      type: object
+      required: [pier, held_by_me]
+      properties:
+        pier:
+          type: string
+        held_by_me:
+          type: boolean
+        holder:
+          type: string
+
+    Alert:
+      type: object
+      required: [id, severity, time, message]
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        time:
+          type: string
+          format: date-time
+        pier:
+          type: string
+        message:
+          type: string
+        important:
+          type: boolean
+          description: The Master marks alerts worth a local notification.
+
+    EphemerisBody:
+      type: object
+      required: [name, ra_deg, dec_deg]
+      properties:
+        name:
+          type: string
+        ra_deg:
+          type: number
+        dec_deg:
+          type: number
+        magnitude:
+          type: number
+
+    EphemerisSample:
+      type: object
+      required: [t, bodies]
+      properties:
+        t:
+          type: string
+          format: date-time
+        bodies:
+          type: array
+          items:
+            $ref: "#/components/schemas/EphemerisBody"
+
+    Ephemeris:
+      type: object
+      required: [as_of, samples]
+      properties:
+        as_of:
+          type: string
+          format: date-time
+        samples:
+          type: array
+          items:
+            $ref: "#/components/schemas/EphemerisSample"
+
+    HorizonPoint:
+      type: object
+      required: [az_deg, alt_deg]
+      properties:
+        az_deg:
+          type: number
+        alt_deg:
+          type: number
+
+    Site:
+      type: object
+      required: [version, latitude_deg, longitude_deg, horizon]
+      properties:
+        version:
+          type: string
+        name:
+          type: string
+        latitude_deg:
+          type: number
+        longitude_deg:
+          type: number
+        elevation_m:
+          type: number
+        horizon:
+          type: array
+          items:
+            $ref: "#/components/schemas/HorizonPoint"

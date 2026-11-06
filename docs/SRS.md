@@ -324,7 +324,7 @@ PSD PC1, PC2, PC6, PC8, G3, G11.
 | ID | Platforms | Requirement | Priority |
 |---|---|---|---|
 | MAPP-PLT-010 | Mobile | The iOS/iPadOS app shall run on iOS/iPadOS 17 or later, and the Android app on Android 10 (API 29) or later (to be confirmed against the device base, Section 5). | MVP |
-| MAPP-PLT-020 | All | The apps shall be built with each platform's native UI toolkit (SwiftUI on iOS, Jetpack Compose on Android), sharing a model and logic layer, a generated API client, design tokens, icons and strings below the UI (PSD G1, G2). | MVP |
+| MAPP-PLT-020 | All | The apps shall be built with each platform's native UI toolkit (SwiftUI on iOS, Jetpack Compose on Android), with an API client generated from one OpenAPI description, one specification of the client logic implemented natively on each platform, and shared design tokens, icons and strings below the UI (PSD G1, G2). | MVP |
 | MAPP-PLT-030 | All | Each feature shall be released on all platforms together, or recorded as staged in the release notes with the reason; a parity checklist shall be completed for each release. | MVP |
 | MAPP-PLT-040 | All | The apps shall pass one shared suite of wire-protocol test vectors on every platform. | MVP |
 | MAPP-PLT-050 | Mobile | The apps shall be distributed free of charge through the Apple App Store and Google Play, without advertising or in-app purchases. | MVP |

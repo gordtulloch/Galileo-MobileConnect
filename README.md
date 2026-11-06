@@ -49,11 +49,12 @@ docs/ios/SDD.md      iOS/iPadOS design
 docs/android/SDD.md  Android design
 docs/quest/SDD.md    Meta Quest 2/3 design (immersive planetarium and image viewer)
 docs/analysis/       analyses, e.g. QuestVR.md
-shared/              Kotlin Multiplatform: model, state, API client, session/schedule logic
-ios/                 Swift / SwiftUI app
-android/             Kotlin / Jetpack Compose app
-quest/               Meta Quest 2/3 edition (reuses shared/ and the Android panel screens)
-api/                 pinned copy of the Galileo wire-API description
+api/                 the contract: openapi.yaml, events.schema.json, test vectors, mock-Master scenarios
+scripts/             sync_api.py (copies the contract to each generator), gen_rtm.py
+tools/mock-master/   standalone scripted Master for contract tests (planned)
+ios/                 Swift / SwiftUI app; Packages/GalileoAPI (generated), Packages/GalileoCore (hand-written)
+android/             Kotlin / Jetpack Compose app; api-client (generated), core (hand-written, pure Kotlin)
+quest/               Meta Quest 2/3 edition (reuses android/core and the Android panel screens)
 design/              design tokens, icons, strings
 ```
 
@@ -67,9 +68,10 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 |---|---|---|
 | [PSD](docs/PSD.md) | Both apps | Draft v0.1 — for review |
 | [SRS](docs/SRS.md) | All platforms (common) | Draft v0.1 — for review |
-| RTM | Both apps (common) | Not yet written |
-| SDD (shared) | Shared architecture | Not yet written |
-| SDD (iOS), SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
+| [RTM](docs/RTM.md) | Both apps (common) | Draft v0.1 — generated from the SRS by `scripts/gen_rtm.py`; Android and Quest columns are `GAP` |
+| [SDD (shared)](docs/SDD.md) | Shared architecture | Draft v0.1 — for review |
+| [SDD (iOS)](docs/ios/SDD.md) | iOS/iPadOS design | Draft v0.1 — for review |
+| SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
 | [Meta Quest VR analysis](docs/analysis/QuestVR.md) | Opportunities for the Quest edition | Draft — for review |
 
 ## Status
@@ -77,8 +79,8 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 | | |
 |---|---|
 | Stage | **In Design** |
-| Done | Scope document (PSD) |
-| Next | Wire-API and Control Surface definition in Galileo; SRS review; RTM; wireframes (tablet first); shared-layer spike; Quest SDD recording the VR spike's findings |
+| Done | Scope document (PSD); SRS, RTM, shared SDD and iOS SDD drafted (2026-11-06) |
+| Next | Review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the two generators (Swift needs a Mac; Kotlin needs a JDK); SRS review; wireframes (tablet first); core `S-LINK` in Kotlin and Swift against the vectors; Quest SDD recording the VR spike's findings |
 | Depends on | Galileo core additions *Connect Link* and *Control Surface* (proposed; see the Galileo PSDs) |
 
 ## Licence

@@ -1,3 +1,8 @@
 .speechcache*/
 .infocache*.json
 __pycache__/
+# generated clients are built, never committed
+build/
+.build/
+.gradle/
+*.xcodeproj/xcuserdata/

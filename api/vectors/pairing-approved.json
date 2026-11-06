@@ -1,0 +1,21 @@
+{
+  "name": "pairing-approved",
+  "description": "A client requests pairing, shows the code, polls while pending, receives its token exactly once on approval, and only then offers operations. A second poll must not return the token again.",
+  "status": "implemented",
+  "requirements": ["MAPP-CON-030", "MAPP-CON-040"],
+  "steps": [
+    { "do": "send", "method": "POST", "path": "/connect/v1/pair", "auth": false,
+      "body": { "plugin": "mobileconnect", "name": "Gord's iPad", "kind": "app", "platform": "ipados" } },
+    { "do": "receive", "status": 202,
+      "body": { "request_id": "r1", "code": "482913", "expires_in": 300, "fingerprint": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233", "protocol": 1 } },
+    { "do": "expect", "outcome": "Waiting", "state": { "code": "482913", "operations_offered": false, "token_stored": false } },
+    { "do": "send", "method": "GET", "path": "/connect/v1/pair/r1", "auth": false },
+    { "do": "receive", "status": 200, "body": { "state": "pending" } },
+    { "do": "expect", "outcome": "Waiting", "state": { "operations_offered": false } },
+    { "do": "clock", "advance_s": 5 },
+    { "do": "send", "method": "GET", "path": "/connect/v1/pair/r1", "auth": false },
+    { "do": "receive", "status": 200, "body": { "state": "approved", "token": "tok-abc" } },
+    { "do": "expect", "outcome": "Paired", "state": { "token_stored": true, "pinned_fingerprint": "aa11bb22cc33dd44ee55ff6600112233445566778899aabbccddeeff00112233", "operations_offered": true } },
+    { "do": "send", "method": "POST", "path": "/connect/v1/handshake", "auth": true, "note": "the client proceeds to the version handshake with the new token" }
+  ]
+}

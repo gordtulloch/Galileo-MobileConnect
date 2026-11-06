@@ -28,7 +28,7 @@ Galileo's desktop application runs the imaging session, usually at or near the t
 | # | Goal |
 |---|---|
 | G1 | **Two native apps from one repository**: iOS/iPadOS (Swift, SwiftUI) and Android (Kotlin, Jetpack Compose), each using its platform's native UI and conventions |
-| G2 | **Maximum sharing below the UI**: one generated API client, one shared model and logic layer (Kotlin Multiplatform is the candidate), one set of design tokens, icons, strings and wire-protocol test vectors. Only the screens and platform integration differ |
+| G2 | **Maximum sharing below the UI**: one OpenAPI description from which both native API clients are generated, one specification of the client logic (implemented natively on each platform and kept identical by one shared suite of test vectors), one set of design tokens, icons and strings. Only the screens and platform integration differ |
 | G3 | **Behavioural parity**: the same feature set, wording and results on both platforms at each release; a feature ships on both or is explicitly staged |
 | G4 | **Tablet-first design**: layouts designed for a tablet's size (several panels side by side) first; the phone layout is a reduction — the choice of what is dropped is TBD from wireframes |
 | G5 | **Full operational coverage** of the areas listed in the plugin PSD §6.4: devices, imaging, sky and framing, plate solving, focus (manual through the focus module, and automatic), guiding, meridian flip, **session authoring and running**, **schedule authoring and running**, calibration, safety, Library/history, emergency stop. No configuration screen exists |
@@ -132,11 +132,11 @@ The PSD, SRS and RTM are **common** to both apps: they describe one product and 
 | Document | Scope |
 |---|---|
 | `docs/PSD.md`, `docs/SRS.md`, `docs/RTM.md` | Both platforms. The RTM maps each requirement to its design component on **each** platform and to a test, so a gap in either platform shows up |
-| `docs/SDD.md` | **Shared architecture**: the shared module (model, state, session/schedule logic, API client), the contract with the wire API, security design, the parity test-vector suite |
+| `docs/SDD.md` | **Shared architecture**: the specified client core (transport, state, control safety, session/schedule logic, API client), the contract with the wire API, security design, the parity test-vector suite |
 | `docs/ios/SDD.md`, `docs/android/SDD.md` | **Per platform**: UI architecture, navigation, secure storage, discovery, background behaviour, packaging and release. |
 | `docs/quest/SDD.md` | **Meta Quest edition**, its own SDD because of the immersive scenes (Q-9, Q-10): rendering stack, scene graph, catalog/ephemeris and tile data handling on the headset, input, comfort and performance budgets, Horizon Store packaging. It builds on the shared SDD and on the Android SDD for the panel screens |
 
-The shared-architecture SDD exists because splitting the design only by platform would duplicate the shared module's design in two places and let them drift.
+The shared-architecture SDD exists because splitting the design only by platform would duplicate the core's design in two places and let them drift.
 
 ## 11. Risks
 
@@ -144,7 +144,7 @@ The shared-architecture SDD exists because splitting the design only by platform
 |---|---|---|
 | R1 | The server side (Connect Link, Control Surface) does not exist yet and the apps' scope depends on it | Develop against the wire-API description and a mock node; the apps' SRS follows the plugin SRS |
 | R2 | The two apps diverge | Shared layer, shared test vectors, a parity checklist per release, RTM entries per platform |
-| R3 | Kotlin Multiplatform in an iOS app adds toolchain complexity | Spike before committing (Section 12, Q2); the fall-back is two native clients generated from the same OpenAPI description with a shared test suite |
+| R3 | The client logic is implemented twice and could drift | **Decided 2026-11-06:** two native clients generated from one OpenAPI description (Q2 resolved); one specification in the shared SDD and one shared suite of test vectors run on both platforms |
 | R4 | Session/schedule authoring is a large UI task on a touch screen | Tablet-first; stage after the operating screens if needed |
 | R12 | Streaming moves load and a dependency onto the Master: several headsets and tablets looking at the sky, or a weak link, could starve the session or leave a scene empty | VR requires a PC/Mac-class Master (Q-14), which removes the Raspberry Pi case; even so, compact binary protocol with delta updates, per-client rate and region limits, streaming at lower priority than the session, progressive detail (bright stars first), a short-lived on-device cache for dropouts, and a clear "link down" state in the scenes |
 | R13 | A user with only a Raspberry Pi Master cannot use the Meta Quest edition | Stated up front in the store listing, first-run screen and documentation; the handshake tells the headset why; tablets, phones and the web remain available on a Pi Master |
@@ -170,7 +170,7 @@ The shared-architecture SDD exists because splitting the design only by platform
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | Which parts of the phone layout may be dropped? | **TBD** from tablet wireframes |
-| Q2 | Is Kotlin Multiplatform the shared layer, or a generated client plus shared specifications only? | Spike KMP first; keep the generated-client fall-back (R3) |
+| Q2 | Is Kotlin Multiplatform the shared layer, or a generated client plus shared specifications only? | **Resolved 2026-11-06: generated clients plus shared specifications** (shared SDD ADR-APP-001). No Kotlin Multiplatform |
 | Q3 | Minimum OS versions | Fix in the SRS from store statistics and API needs (PC2) |
 | Q4 | Mock node for development and store review | Yes — a scripted fake Master, also used by the test suite |
 | Q5 | App name and bundle identifiers | Decide before the first store submission; **Galileo MobileConnect** is the working name |
