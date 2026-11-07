@@ -424,8 +424,8 @@ def ssl_context(cert: bytes, key: bytes) -> ssl.SSLContext:
 async def advertise(port: int):
     from zeroconf import InterfaceChoice, IPVersion
     from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
-    # The default interface only: binding all of them fails on a Mac with "address in use" when another program
-    # has an mDNS socket open, such as a Chromium browser.
+    # The default interface only: binding all of them can fail on a Mac with "address in use", seen on a
+    # link-local address.
     zc = AsyncZeroconf(ip_version=IPVersion.V4Only, interfaces=InterfaceChoice.Default)
     host = socket.gethostname().split(".")[0]
     info = AsyncServiceInfo("_galileo-link._tcp.local.", f"mock-master.{'_galileo-link._tcp.local.'}", port=port,

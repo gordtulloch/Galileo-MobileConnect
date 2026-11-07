@@ -27,5 +27,5 @@ All notable changes to this repository are recorded here, in [Keep a Changelog](
 
 ### Fixed
 
-- The standalone mock Master advertises on Bonjour on a Mac with another program holding an mDNS socket open: binding every interface failed with "address in use".
+- The standalone mock Master advertises on Bonjour on a Mac where binding every interface fails with "address in use", as it did on a link-local address.
 - **API description, corrected against the Galileo source.** A 403 is now described as plain text, as the server sends it; described as JSON, the generated client would have thrown a decoding error instead of reporting "forbidden". `transferGetChunk` gains its 404 and 503 (busy, with `Retry-After`) responses, and `transferStatus` its 400. `Operation.class` is no longer an enum, so an unknown class drops one entry rather than failing the whole catalogue.
