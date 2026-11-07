@@ -1,0 +1,6 @@
+{ "extends": "normal-night", "name": "meridian-flip", "description": "A flip comes due and runs.",
+  "loop_s": 0, "timeline": [
+    { "at_s": 3, "pier": "p1", "set": { "flip.state": "Due", "flip.minutes": 1, "activity.flip": "Due" } },
+    { "at_s": 8, "pier": "p1", "set": { "flip.state": "Flipping", "flip.minutes": 0, "activity.flip": "Flipping", "activity.mount": "Slewing", "activity.capture": "Idle", "mount.slewing": true } },
+    { "at_s": 16, "pier": "p1", "set": { "flip.state": "Done", "activity.flip": "Done", "activity.mount": "Tracking", "activity.capture": "Exposing", "mount.slewing": false } }
+  ] }

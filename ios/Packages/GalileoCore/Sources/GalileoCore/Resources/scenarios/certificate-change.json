@@ -1,0 +1,2 @@
+{ "extends": "normal-night", "name": "certificate-change", "description": "The Master starts presenting a different certificate. Standalone server only: the in-process player has no TLS.",
+  "loop_s": 0, "timeline": [ { "at_s": 3, "do": "rotate_certificate" } ] }

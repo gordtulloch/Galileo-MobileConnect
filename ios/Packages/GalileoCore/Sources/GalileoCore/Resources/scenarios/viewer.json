@@ -1,0 +1,3 @@
+{ "extends": "normal-night", "name": "viewer", "description": "The Master granted this device view only.", "permissions": ["view"], "piers": [
+    { "id": "p1", "name": "East Pier", "node": "Observatory PC", "observatory": "Home Observatory", "access": "view", "reachable": true },
+    { "id": "p2", "name": "West Pier", "node": "Pi 5 (spoke)", "observatory": "Home Observatory", "access": "view", "reachable": false, "reason": "Spoke offline since 21:14" } ] }

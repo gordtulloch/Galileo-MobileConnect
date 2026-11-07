@@ -5,7 +5,7 @@
 // source in the repository; edit api/openapi.yaml, run `python scripts/sync_api.py`, and build.
 //
 // Needs macOS with Xcode 15+ (the generator is a SwiftPM build-tool plugin).
-// Dependency versions are minimums, to be pinned the first time this is built on a Mac.
+// Versions are pinned exactly; Package.resolved pins their transitive dependencies. Move them on purpose.
 
 import PackageDescription
 
@@ -16,9 +16,9 @@ let package = Package(
         .library(name: "GalileoAPI", targets: ["GalileoAPI"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.2.0"),
-        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.4.0"),
-        .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.0.0"),
+        .package(url: "https://github.com/apple/swift-openapi-generator", exact: "1.14.4"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", exact: "1.13.4"),
+        .package(url: "https://github.com/apple/swift-openapi-urlsession", exact: "1.4.0"),
     ],
     targets: [
         .target(

@@ -1,0 +1,1 @@
+{ "extends": "normal-night", "name": "first-pairing-refused", "description": "The person at the Master refuses the pairing request.", "pairing": "reject" }

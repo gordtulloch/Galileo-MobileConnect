@@ -1,0 +1,16 @@
+{
+  "name": "pairing-refused",
+  "description": "The person at the Master refuses. Nothing is stored and polling stops.",
+  "status": "implemented",
+  "requirements": ["MAPP-CON-030"],
+  "steps": [
+    { "do": "act", "action": "pair_start" },
+    { "do": "send", "method": "POST", "path": "/connect/v1/pair", "auth": false },
+    { "do": "receive", "status": 202, "body": { "request_id": "r1", "code": "000111", "expires_in": 300, "fingerprint": "ff", "protocol": 1 } },
+    { "do": "expect", "outcome": "Waiting" },
+    { "do": "act", "action": "pair_poll" },
+    { "do": "send", "method": "GET", "path": "/connect/v1/pair/r1", "auth": false },
+    { "do": "receive", "status": 200, "body": { "state": "rejected" } },
+    { "do": "expect", "outcome": "Refused", "state": { "token_stored": false, "operations_offered": false } }
+  ]
+}

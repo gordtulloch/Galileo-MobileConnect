@@ -1,0 +1,2 @@
+{ "extends": "normal-night", "name": "revoked-pairing", "description": "The Master's owner removes this device while it is connected.",
+  "loop_s": 0, "timeline": [ { "at_s": 3, "do": "revoke" } ] }

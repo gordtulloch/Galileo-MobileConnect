@@ -1,0 +1,120 @@
+{
+  "name": "normal-night",
+  "description": "Two Piers imaging normally: the base scenario, and what demonstration mode plays.",
+  "pair_approval_s": 2,
+  "pairing": "approve",
+  "permissions": ["control", "view"],
+  "handshake": { "verdict": "ok", "message": "", "node": { "galileo": "0.9.05alpha", "plugin_api": "1.0", "schema": 0, "protocol": 1 } },
+  "capabilities": { "plugin_api": "1.0", "areas": ["mount", "camera", "filter", "rotator", "dome", "focus", "guiding", "imaging", "flip", "safety", "session"], "sky_stream": { "available": true } },
+  "piers": [
+    { "id": "p1", "name": "East Pier", "node": "Observatory PC", "observatory": "Home Observatory", "access": "control", "reachable": true },
+    { "id": "p2", "name": "West Pier", "node": "Pi 5 (spoke)", "observatory": "Home Observatory", "access": "view", "reachable": true }
+  ],
+  "lease_holders": {},
+  "alerts": [
+    { "id": "a0", "severity": "info", "pier": "p1", "message": "Session “M42 — LRGB” started", "important": false }
+  ],
+  "unavailable": { "p2": { "dome.open": "This Pier has no dome", "dome.close": "This Pier has no dome" } },
+  "state": {
+    "p1": {
+      "mount.connected": true, "mount.tracking": true, "mount.slewing": false, "mount.parked": false,
+      "mount.position": { "ra_deg": 83.82, "dec_deg": -5.39, "alt_deg": 41.2, "az_deg": 168.4 },
+      "mount.target": "M42",
+      "camera.connected": true, "camera.state": "Exposing", "camera.temperature": -10.0, "camera.cooling": true,
+      "filter.connected": true, "filter.current": "Red", "filter.names": ["Luminance", "Red", "Green", "Blue", "Ha", "OIII", "SII"],
+      "rotator.connected": true, "rotator.angle": 92.0,
+      "dome.connected": true, "dome.state": "Open", "dome.azimuth": 168.0,
+      "focus.connected": true, "focus.position": 21430, "focus.temperature": 4.6, "focus.moving": false, "focus.state": "Idle",
+      "focus.compensation": "On, 12 steps per degree",
+      "guiding.connected": true, "guiding.state": "Guiding", "guiding.rms_ra": 0.41, "guiding.rms_dec": 0.33, "guiding.star_snr": 42,
+      "imaging.state": "Series", "imaging.exposure_s": 300, "imaging.frame": 7, "imaging.count": 30, "imaging.progress": 0.2,
+      "imaging.stats": { "stars": 1284, "hfr": 2.31, "fwhm": 3.4 },
+      "imaging.histogram": [2, 6, 18, 60, 180, 420, 610, 480, 300, 190, 120, 80, 52, 34, 22, 15, 10, 7, 5, 3],
+      "session.name": "M42 — LRGB", "session.state": "Running", "session.progress": 0.23, "session.block": "Series: Red 300 s × 30",
+      "flip.state": "Scheduled", "flip.minutes": 74,
+      "safety.overall": "safe", "safety.inputs": { "Rain": "Dry", "Wind": "8 km/h", "Cloud": "Clear", "Sun altitude": "-34°", "Roof": "Open", "Power": "Mains" },
+      "weather.temperature_c": 3.9, "weather.humidity_pct": 61, "weather.wind_kmh": 8,
+      "activity.session": "Running", "activity.mount": "Tracking", "activity.flip": "Scheduled", "activity.guiding": "Guiding", "activity.solve": "Idle", "activity.focus": "Idle", "activity.capture": "Exposing"
+    },
+    "p2": {
+      "mount.connected": true, "mount.tracking": false, "mount.slewing": false, "mount.parked": true,
+      "mount.position": { "ra_deg": 0, "dec_deg": 90, "alt_deg": 49.9, "az_deg": 0 },
+      "camera.connected": true, "camera.state": "Idle", "camera.temperature": 2.0, "camera.cooling": false,
+      "focus.connected": true, "focus.position": 8120, "focus.temperature": 4.2, "focus.moving": false, "focus.state": "Idle",
+      "guiding.connected": false, "guiding.state": "Stopped",
+      "imaging.state": "Idle",
+      "session.state": "Idle",
+      "safety.overall": "safe", "safety.inputs": { "Rain": "Dry", "Roof": "Open" },
+      "activity.session": "Idle", "activity.mount": "Parked", "activity.flip": "Idle", "activity.guiding": "Stopped", "activity.solve": "Idle", "activity.focus": "Idle", "activity.capture": "Idle"
+    }
+  },
+  "waves": [
+    { "pier": "p1", "key": "guiding.error", "every_s": 1, "fields": { "ra": { "amp": 0.55, "period_s": 7 }, "dec": { "amp": 0.38, "period_s": 11 } } },
+    { "pier": "p1", "key": "mount.position", "every_s": 3, "fields": { "ra_deg": { "base": 83.82, "amp": 0.002, "period_s": 60 }, "dec_deg": { "base": -5.39, "amp": 0.001, "period_s": 45 }, "alt_deg": { "base": 41.2, "amp": 0.2, "period_s": 600 }, "az_deg": { "base": 168.4, "amp": 0.4, "period_s": 600 } } },
+    { "pier": "p2", "key": "mount.position", "every_s": 5, "fields": { "ra_deg": { "base": 0, "amp": 0, "period_s": 60 }, "dec_deg": { "base": 90, "amp": 0, "period_s": 60 }, "alt_deg": { "base": 49.9, "amp": 0, "period_s": 60 }, "az_deg": { "base": 0, "amp": 0, "period_s": 60 } } },
+    { "pier": "p1", "key": "imaging.progress", "every_s": 5, "ramp_s": 60 },
+    { "pier": "p1", "key": "camera.temperature", "every_s": 10, "base": -10.0, "amp": 0.05, "period_s": 90 }
+  ],
+  "loop_s": 120,
+  "timeline": [
+    { "at_s": 20, "pier": "p1", "set": { "imaging.frame": 8, "imaging.stats": { "stars": 1301, "hfr": 2.28, "fwhm": 3.3 } } },
+    { "at_s": 45, "alert": { "severity": "info", "pier": "p1", "message": "Frame 8 of 30 saved (HFR 2.28)" } },
+    { "at_s": 60, "pier": "p1", "set": { "activity.guiding": "Dithering", "guiding.state": "Dithering" } },
+    { "at_s": 66, "pier": "p1", "set": { "activity.guiding": "Guiding", "guiding.state": "Guiding" } },
+    { "at_s": 90, "alert": { "severity": "warning", "pier": "p1", "message": "Guide star SNR fell to 18", "important": true } },
+    { "at_s": 100, "pier": "p1", "set": { "imaging.frame": 9, "imaging.stats": { "stars": 1190, "hfr": 2.44, "fwhm": 3.6 } } }
+  ],
+  "results": {
+    "system.stop_everything": { "parts": [ { "name": "Session", "ok": true }, { "name": "Exposure", "ok": true }, { "name": "Mount motion", "ok": true }, { "name": "Focuser", "ok": true } ] },
+    "mount.emergency_park": { "parts": [ { "name": "Park mount", "ok": true } ] },
+    "dome.emergency_close": { "parts": [ { "name": "Close dome", "ok": true } ] }
+  },
+  "consequences": {
+    "mount.park": "The mount will stop tracking and move to its park position. A running exposure will be spoiled.",
+    "flip.now": "The mount will flip across the meridian now. The current exposure is lost and guiding restarts."
+  },
+  "durations": { "imaging.capture": 8, "camera.expose": 6, "mount.slew": 6, "focus.autofocus": 12, "flip.now": 8 },
+  "effects": {
+    "mount.park": [ { "after_s": 0, "set": { "mount.slewing": true, "mount.tracking": false, "activity.mount": "Parking" } }, { "after_s": 4, "set": { "mount.slewing": false, "mount.parked": true, "activity.mount": "Parked" } } ],
+    "mount.unpark": [ { "after_s": 1, "set": { "mount.parked": false, "activity.mount": "Idle" } } ],
+    "mount.track": [ { "after_s": 0, "set": { "mount.tracking": { "$arg": "enabled" } } } ],
+    "mount.slew": [ { "after_s": 0, "set": { "mount.slewing": true, "activity.mount": "Slewing" } }, { "after_s": 6, "set": { "mount.slewing": false, "mount.tracking": true, "activity.mount": "Tracking" } } ],
+    "mount.abort_slew": [ { "after_s": 0, "set": { "mount.slewing": false, "activity.mount": "Stopped" } } ],
+    "mount.emergency_park": [ { "after_s": 0, "set": { "mount.slewing": true, "mount.tracking": false, "activity.mount": "Parking" } }, { "after_s": 3, "set": { "mount.slewing": false, "mount.parked": true, "activity.mount": "Parked" } } ],
+    "system.stop_everything": [ { "after_s": 0, "set": { "imaging.state": "Idle", "camera.state": "Idle", "session.state": "Stopped", "session.stop_reason": "Stopped by emergency stop", "mount.slewing": false, "focus.moving": false, "activity.session": "Stopped", "activity.capture": "Idle" } } ],
+    "dome.emergency_close": [ { "after_s": 0, "set": { "dome.state": "Closing" } }, { "after_s": 4, "set": { "dome.state": "Closed" } } ],
+    "dome.open": [ { "after_s": 0, "set": { "dome.state": "Opening" } }, { "after_s": 4, "set": { "dome.state": "Open" } } ],
+    "dome.close": [ { "after_s": 0, "set": { "dome.state": "Closing" } }, { "after_s": 4, "set": { "dome.state": "Closed" } } ],
+    "camera.set_temperature": [ { "after_s": 1, "set": { "camera.cooling": true, "camera.temperature": { "$arg": "celsius" } } } ],
+    "camera.abort": [ { "after_s": 0, "set": { "camera.state": "Idle", "activity.capture": "Idle" } } ],
+    "camera.expose": [ { "after_s": 0, "set": { "camera.state": "Exposing", "activity.capture": "Exposing" } }, { "after_s": 6, "set": { "camera.state": "Idle", "activity.capture": "Idle" } } ],
+    "imaging.capture": [ { "after_s": 0, "set": { "imaging.state": "Series", "camera.state": "Exposing", "activity.capture": "Exposing" } }, { "after_s": 8, "set": { "imaging.state": "Idle", "camera.state": "Idle", "activity.capture": "Idle" } } ],
+    "imaging.stop": [ { "after_s": 0, "set": { "imaging.state": "Idle", "camera.state": "Idle", "activity.capture": "Idle" } } ],
+    "filter.select": [ { "after_s": 1, "set": { "filter.current": { "$arg": "name" } } } ],
+    "rotator.move": [ { "after_s": 2, "set": { "rotator.angle": { "$arg": "angle" } } } ],
+    "focus.move_to": [ { "after_s": 0, "set": { "focus.moving": true } }, { "after_s": 2, "set": { "focus.moving": false, "focus.position": { "$arg": "position" } } } ],
+    "focus.move_by": [ { "after_s": 0, "set": { "focus.moving": true } }, { "after_s": 1, "set": { "focus.moving": false, "focus.position": { "$add": ["focus.position", "steps"] } } } ],
+    "focus.halt": [ { "after_s": 0, "set": { "focus.moving": false } } ],
+    "focus.hold_start": [ { "after_s": 0, "set": { "focus.moving": true } } ],
+    "focus.hold_stop": [ { "after_s": 0, "set": { "focus.moving": false } } ],
+    "mount.hold_start": [ { "after_s": 0, "set": { "mount.slewing": true, "activity.mount": "Moving (held)" } } ],
+    "mount.hold_stop": [ { "after_s": 0, "set": { "mount.slewing": false, "activity.mount": "Tracking" } } ],
+    "focus.autofocus": [
+      { "after_s": 0, "set": { "focus.state": "Autofocus", "activity.focus": "Autofocus", "focus.vcurve": { "position": 21000, "hfr": 4.1 } } },
+      { "after_s": 2, "set": { "focus.vcurve": { "position": 21200, "hfr": 3.2 } } },
+      { "after_s": 4, "set": { "focus.vcurve": { "position": 21400, "hfr": 2.3 } } },
+      { "after_s": 6, "set": { "focus.vcurve": { "position": 21600, "hfr": 2.6 } } },
+      { "after_s": 8, "set": { "focus.vcurve": { "position": 21800, "hfr": 3.5 } } },
+      { "after_s": 12, "set": { "focus.state": "Idle", "activity.focus": "Idle", "focus.position": 21440, "focus.last_result": "Best focus 21440, HFR 2.25" } }
+    ],
+    "focus.autofocus_cancel": [ { "after_s": 0, "set": { "focus.state": "Idle", "activity.focus": "Idle" } } ],
+    "guiding.start": [ { "after_s": 0, "set": { "guiding.state": "Guiding", "activity.guiding": "Guiding" } } ],
+    "guiding.stop": [ { "after_s": 0, "set": { "guiding.state": "Stopped", "activity.guiding": "Stopped" } } ],
+    "guiding.connect": [ { "after_s": 1, "set": { "guiding.connected": true, "guiding.state": "Connected" } } ],
+    "guiding.disconnect": [ { "after_s": 0, "set": { "guiding.connected": false, "guiding.state": "Disconnected" } } ],
+    "guiding.dither": [ { "after_s": 0, "set": { "guiding.state": "Dithering", "activity.guiding": "Dithering" } }, { "after_s": 5, "set": { "guiding.state": "Guiding", "activity.guiding": "Guiding" } } ],
+    "guiding.recalibrate": [ { "after_s": 0, "set": { "guiding.state": "Calibrating", "activity.guiding": "Calibrating" } }, { "after_s": 8, "set": { "guiding.state": "Guiding", "activity.guiding": "Guiding" } } ],
+    "safety.acknowledge": [ { "after_s": 0, "set": { "safety.acknowledged": true } } ],
+    "flip.now": [ { "after_s": 0, "set": { "flip.state": "Flipping", "activity.flip": "Flipping" } }, { "after_s": 8, "set": { "flip.state": "Done", "flip.minutes": 0, "activity.flip": "Done" } } ]
+  }
+}

@@ -1,0 +1,465 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		916035300FF81FB392091508 /* GalileoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 91A10180556E6A8BF4A00E93 /* GalileoCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		D44D0BE409E623670A6F95C1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 614C7C10DD7AB88114998331 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E482AABCA80B506FB7708805;
+			remoteInfo = GalileoMobileConnect;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		27062F8CE1DEA4B7F59E81A8 /* GalileoAPI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GalileoAPI; path = Packages/GalileoAPI; sourceTree = SOURCE_ROOT; };
+		5725A1E48329FB6304C5BF33 /* GalileoMobileConnectUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GalileoMobileConnectUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		941CD69CC3465921851131BB /* GalileoMobileConnect.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GalileoMobileConnect.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADB5C222919B2529E4656A68 /* GalileoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GalileoCore; path = Packages/GalileoCore; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		0CB2A5D2C31E41EB33CEEB90 /* UITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = UITests;
+			sourceTree = "<group>";
+		};
+		E0FE44403B9AC65AD2F21818 /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		47F346674D4244CDF83C3FC4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				916035300FF81FB392091508 /* GalileoCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		315BA858294DD102612BC7F8 = {
+			isa = PBXGroup;
+			children = (
+				E0FE44403B9AC65AD2F21818 /* App */,
+				83AAAA52EBD6F229006B8CC4 /* Packages */,
+				0CB2A5D2C31E41EB33CEEB90 /* UITests */,
+				F236BD4F1773B0628568F0D4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		83AAAA52EBD6F229006B8CC4 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				27062F8CE1DEA4B7F59E81A8 /* GalileoAPI */,
+				ADB5C222919B2529E4656A68 /* GalileoCore */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		F236BD4F1773B0628568F0D4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				941CD69CC3465921851131BB /* GalileoMobileConnect.app */,
+				5725A1E48329FB6304C5BF33 /* GalileoMobileConnectUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		E482AABCA80B506FB7708805 /* GalileoMobileConnect */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5534729EAC2CF07A3C6E47FF /* Build configuration list for PBXNativeTarget "GalileoMobileConnect" */;
+			buildPhases = (
+				A6C0828012DC324FD5BDD8B9 /* Sources */,
+				03E8235247DAD56B3F74EBC7 /* Resources */,
+				47F346674D4244CDF83C3FC4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E0FE44403B9AC65AD2F21818 /* App */,
+			);
+			name = GalileoMobileConnect;
+			packageProductDependencies = (
+				91A10180556E6A8BF4A00E93 /* GalileoCore */,
+			);
+			productName = GalileoMobileConnect;
+			productReference = 941CD69CC3465921851131BB /* GalileoMobileConnect.app */;
+			productType = "com.apple.product-type.application";
+		};
+		E5721130C92CE802C9BE241F /* GalileoMobileConnectUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F0A1241C10A009AE6EA3CE35 /* Build configuration list for PBXNativeTarget "GalileoMobileConnectUITests" */;
+			buildPhases = (
+				5C3C2FC98052AF085B125C90 /* Sources */,
+				3EDAEB776B5A53999DE61445 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D142AD9071AC8A8A8724BE3A /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				0CB2A5D2C31E41EB33CEEB90 /* UITests */,
+			);
+			name = GalileoMobileConnectUITests;
+			packageProductDependencies = (
+			);
+			productName = GalileoMobileConnectUITests;
+			productReference = 5725A1E48329FB6304C5BF33 /* GalileoMobileConnectUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		614C7C10DD7AB88114998331 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					E482AABCA80B506FB7708805 = {
+						ProvisioningStyle = Automatic;
+					};
+					E5721130C92CE802C9BE241F = {
+						TestTargetID = E482AABCA80B506FB7708805;
+					};
+				};
+			};
+			buildConfigurationList = B966D455D22D5C05A4C8B83B /* Build configuration list for PBXProject "GalileoMobileConnect" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 315BA858294DD102612BC7F8;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				BDD74816304EAADAD476280F /* XCLocalSwiftPackageReference "Packages/GalileoAPI" */,
+				0640521DCE18DAB1ED25BE63 /* XCLocalSwiftPackageReference "Packages/GalileoCore" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = F236BD4F1773B0628568F0D4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E482AABCA80B506FB7708805 /* GalileoMobileConnect */,
+				E5721130C92CE802C9BE241F /* GalileoMobileConnectUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		03E8235247DAD56B3F74EBC7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3EDAEB776B5A53999DE61445 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		5C3C2FC98052AF085B125C90 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A6C0828012DC324FD5BDD8B9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		D142AD9071AC8A8A8724BE3A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E482AABCA80B506FB7708805 /* GalileoMobileConnect */;
+			targetProxy = D44D0BE409E623670A6F95C1 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0730E34B4995DC5CCA573D55 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordtulloch.galileo.mobileconnect.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = GalileoMobileConnect;
+			};
+			name = Debug;
+		};
+		0929B4B8A3582A8F09C2C83F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		4A35649174917A3157FA058D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordtulloch.galileo.mobileconnect;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		AB9D99A8C32DAD85155B126F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordtulloch.galileo.mobileconnect.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = GalileoMobileConnect;
+			};
+			name = Release;
+		};
+		EDAB586B35B6E1C8E523FBA3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 0.1.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		F6AF4C90884D0A1D93D40939 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				INFOPLIST_FILE = Config/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gordtulloch.galileo.mobileconnect;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5534729EAC2CF07A3C6E47FF /* Build configuration list for PBXNativeTarget "GalileoMobileConnect" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4A35649174917A3157FA058D /* Debug */,
+				F6AF4C90884D0A1D93D40939 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B966D455D22D5C05A4C8B83B /* Build configuration list for PBXProject "GalileoMobileConnect" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0929B4B8A3582A8F09C2C83F /* Debug */,
+				EDAB586B35B6E1C8E523FBA3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		F0A1241C10A009AE6EA3CE35 /* Build configuration list for PBXNativeTarget "GalileoMobileConnectUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0730E34B4995DC5CCA573D55 /* Debug */,
+				AB9D99A8C32DAD85155B126F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0640521DCE18DAB1ED25BE63 /* XCLocalSwiftPackageReference "Packages/GalileoCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/GalileoCore;
+		};
+		BDD74816304EAADAD476280F /* XCLocalSwiftPackageReference "Packages/GalileoAPI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/GalileoAPI;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		91A10180556E6A8BF4A00E93 /* GalileoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = GalileoCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 614C7C10DD7AB88114998331 /* Project object */;
+}

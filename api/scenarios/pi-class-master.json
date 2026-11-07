@@ -1,0 +1,2 @@
+{ "extends": "normal-night", "name": "pi-class-master", "description": "A Raspberry Pi Master: no sky streaming.",
+  "capabilities": { "plugin_api": "1.0", "areas": ["mount", "camera", "focus", "guiding", "imaging", "safety", "session"], "sky_stream": { "available": false, "reason": "master_hardware" } } }

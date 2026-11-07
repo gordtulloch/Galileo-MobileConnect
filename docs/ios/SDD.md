@@ -19,7 +19,7 @@ How the iPadOS/iOS app puts a native SwiftUI interface on the core specified in 
 
 ### 1.2 Status
 
-Design only; no code. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
+Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications, and of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Guiding and Safety screens. Not built: `I-SKY`, `I-SES`, Solve, Flip, Library. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
 
 ---
 
@@ -27,7 +27,7 @@ Design only; no code. Choices that depend on a spike or a device measurement are
 
 ### 2.1 iPad first, one adaptive app (ADR-IOS-001)
 
-**Decision:** a single universal app. The layout is built for a 11"–13" iPad in landscape first (PSD G4) with SwiftUI's adaptive containers: `NavigationSplitView` for the sidebar of areas, and multi-column content that collapses by size class. iPhone is the same screens at compact width, with the secondary panels folded into navigation (which panels fold is PSD Q1, decided from wireframes).
+**Decision:** a single universal app. The layout is built for a 11"–13" iPad in landscape first (PSD G4) with SwiftUI's adaptive containers: `NavigationSplitView` for the sidebar of areas, and multi-column content that collapses by size class. iPhone is the same screens at compact width, in one column, reached from a strip of areas across the top (`I-SHELL`). Which panels to drop altogether is PSD Q1, decided from wireframes.
 
 **Rationale:** one codebase and one set of screens is what parity (PSD G3) needs; size classes, not device checks, drive layout so Stage Manager, Split View and rotation work with no extra code.
 
@@ -63,6 +63,8 @@ Design only; no code. Choices that depend on a spike or a device measurement are
 
 **Rationale:** a single stray white sheet, alert or share sheet destroys dark adaptation. The tokens and a lint rule that forbids literal colours in view code make Night complete by construction.
 
+**System controls.** Some can't be held to red at all, so the app doesn't use them: `Slider` (white thumb), `ProgressView(value:)` (grey track), `Menu` and `Picker` (system menu), `.sheet`, `.alert` and `.confirmationDialog`. The app has themed equivalents, and `scripts/check_ios.sh` refuses these names in `ios/App`. It also checks every Night screenshot from the UI tests pixel by pixel (`scripts/check_night.py`), which is how the slider and the grey track were found. The keyboard remains the one system surface in app flows (risk I5).
+
 ---
 
 ## 3. Component Design
@@ -85,7 +87,7 @@ Design only; no code. Choices that depend on a spike or a device measurement are
 
 ### 3.1 `I-SHELL` — App shell and navigation
 
-- **Structure.** A `NavigationSplitView`: sidebar of areas (Overview, Equipment, Imaging, Sky, Solve & Focus, Guiding, Sessions, Schedule, Safety, Library), content, and an inspector column on iPad. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
+- **Structure.** On iPad a `NavigationSplitView`: sidebar of areas, content in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas instead: the system navigation bar's back button can't be held to Night. Areas built so far: Overview, Equipment, Imaging, Focus, Guiding, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
 - **Overview** (`MAPP-OVR-010`–`070`): Pier list with node, state and grant; per-Pier activity timeline drawn from the Dashboard lanes (`S-STATE`); alert list with severity and time; a banner for a new alert while connected.
 - **No configuration.** There is no Settings screen for the observatory. The app's own **Settings** screen contains only app preferences (theme, data saver, units display) and the list of paired Masters with *Unpair* (`MAPP-CFG-010`); read-only Pier and optical-train information appears as detail views (`MAPP-CFG-020`).
 - **Satisfies:** `MAPP-OVR-*`, `MAPP-CFG-010`, `020`, `MAPP-LAY-010`, `020`.
@@ -161,9 +163,9 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 - **Roles.** A Viewer sees no control that issues an operation; the controls are not rendered rather than rendered disabled, so there is nothing to tap; read-only equivalents show state (`MAPP-CTL-010`).
 - **Lease.** A lease chip in the top bar; tapping opens a sheet to take or release, or to *Ask to take over* when another client holds it, with the Master's wording (`MAPP-CTL-020`, `030`).
-- **Confirmation sheets.** One reusable `ConfirmationSheet` fed by `S-CTL`'s summary: title naming the operation, the arguments in words, the Master's consequence text, a destructive-styled confirm button, and *Cancel* as the default action (`MAPP-CTL-040`).
+- **Confirmation dialogs.** One reusable dialog, drawn by the app in a layer under the top bar, not as a system sheet, so that it holds to Night and the emergency button stays reachable above it. It is fed by `S-CTL`'s summary: title naming the operation, the arguments in words, the Master's consequence text, a destructive-styled confirm button, and *Cancel* as the default action (`MAPP-CTL-040`).
 - **Outcome states.** Pending shows an indeterminate indicator on the control that was used; `OutcomeUnknown` shows a "check state" badge and the control stays disabled until resolved; a refusal shows the Master's reason inline (`MAPP-CTL-030`, `050`, `070`).
-- **Emergency.** A fixed red-on-dark control in the top bar. One tap opens a sheet with *Stop everything*, *Park*, *Close dome*; each requires a **press-and-hold** (about one second) or a swipe-to-confirm, reachable in two interactions from any screen including during a modal presentation (it is attached at the scene root via an overlay window). The result sheet lists each part and any that failed (`MAPP-EMG-010`, `020`).
+- **Emergency.** A fixed red-on-dark control in the top bar. One tap opens a sheet with *Stop everything*, *Park*, *Close dome*; each requires a **press-and-hold** (about one second) or a swipe-to-confirm, reachable in two interactions from any screen, including with a dialog open (the top bar is above the dialog layer). The result sheet lists each part and any that failed (`MAPP-EMG-010`, `020`).
 - **Safety screen.** Every input with its state and the overall state; *Acknowledge* for an Operator; the reason a session stopped; no control to override, clear or disable (`MAPP-SAF-010`–`040`).
 - **Satisfies:** `MAPP-CTL-*`, `MAPP-SAF-*`, `MAPP-EMG-*`, `MAPP-SKY-040`.
 
@@ -176,7 +178,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 ### 3.11 `I-BRIDGE` — View-model layer
 
-`I-BRIDGE` provides `@MainActor @Observable` view models, one per screen, wrapping `GalileoCore`'s async sequences, mapping its result types (`OpResult`, `Stamped`) to view state, and a `TestHarness` that injects the `S-MOCK` player for previews, UI tests and demo mode. Cancellation propagates through Swift concurrency from the view down to the request.
+`I-BRIDGE` is one `@MainActor @Observable` `AppModel`, holding the latest immutable `SessionSnapshot` from `ObservatorySession`. Screens read it and bind controls to catalogue operations through it; form state stays in the views. This replaces the one-view-model-per-screen first proposed: every screen shows the same snapshot, so per-screen models would only have copied it. Launch arguments (`-GalileoDemo <scenario>`, `-GalileoTheme`) inject the `S-MOCK` player for UI tests. Cancellation propagates through Swift concurrency from the view down to the request.
 
 ### 3.12 `I-REL` — Packaging, privacy and release
 
@@ -186,7 +188,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 - **Review.** The App Review notes describe the app plainly, point at demonstration mode (no hardware needed), and explain the local-network permission (PSD R7).
 - **Distribution.** Free, no ads, no in-app purchases (`MAPP-PLT-050`); TestFlight for beta; the licence text is added before the first release (`MAPP-PLT-100`).
 - **Minimum OS:** iOS/iPadOS 17 (`MAPP-PLT-010`).
-- **Build.** Xcode project in `ios/` depending on the local Swift packages `GalileoAPI` (generated from `api/openapi.yaml` at build time by the SwiftPM plugin) and `GalileoCore`; `swift test` on `GalileoCore` replays the `S-TEST` vectors; UI tests run against `S-MOCK`. Building, signing and TestFlight upload require macOS (Shared SDD Section 6).
+- **Build.** Xcode project in `ios/`, generated by XcodeGen from `ios/project.yml` (the source of truth; both are committed, so a clone opens without XcodeGen), depending on the local Swift packages `GalileoAPI` (generated from `api/openapi.yaml` at build time by the SwiftPM plugin) and `GalileoCore`; `swift test` on `GalileoCore` replays the `S-TEST` vectors; UI tests (`ios/UITests`) run against `S-MOCK`. Swift 6 language mode for hand-written code. Dependencies are pinned exactly, and each `Package.resolved` is committed. Unattended `xcodebuild` needs `-skipPackagePluginValidation` for the generator plugin (Xcode's UI asks once instead); `scripts/check_ios.sh` passes it. Building, signing and TestFlight upload require macOS (Shared SDD Section 6).
 - **Satisfies:** `MAPP-PLT-010`, `020`, `050`, `060`, `070`, `100`.
 
 ---
@@ -208,9 +210,9 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 | # | Point |
 |---|---|
-| IO1 | Bonjour TXT fields (display name, node id, protocol): read them from Connect Link's advertisement and decode in `Discovery` |
+| IO1 | ~~Bonjour TXT fields~~ **Closed:** `name`, `node`, `proto`, `role` (`galileo/connect_link/discovery.py`), decoded in `BonjourDiscovery` |
 | IO2 | Metal vs an alternative for the sky view: decided by a prototype on the oldest supported iPad |
-| IO3 | Whether the emergency control uses press-and-hold or swipe; user-test on a tablet at night |
+| IO3 | Emergency control: **press-and-hold (one second) is built**; user-test on a tablet at night, with gloves |
 | IO4 | Which iPhone panels fold (PSD Q1) |
 | IO5 | Bundle identifier and name (PSD Q5) |
 | IO6 | Whether the Keychain accessibility class should be stricter once background use is understood |

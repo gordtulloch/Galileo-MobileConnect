@@ -1,0 +1,13 @@
+{
+  "name": "viewer",
+  "description": "A Viewer's request for anything but a read is refused here, without a request.",
+  "status": "planned",
+  "requirements": ["MAPP-CTL-010"],
+  "setup": { "role": "Viewer" },
+  "steps": [
+    { "do": "act", "action": "invoke", "pier": "p1", "operation": "mount.track", "args": { "enabled": false } },
+    { "do": "expect", "outcome": "NotAllowed", "state": { "requests_sent": 0 } },
+    { "do": "act", "action": "emergency", "pier": "p1", "operation": "system.stop_everything" },
+    { "do": "expect", "outcome": "NotAllowed", "state": { "requests_sent": 0 } }
+  ]
+}

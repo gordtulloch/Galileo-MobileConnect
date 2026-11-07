@@ -136,19 +136,19 @@ Components named `S-*` below. A requirement in the [SRS](SRS.md) is mapped to it
 
 - **Model.** `ObservatoryState` → `PierState` per Pier: connection/reachability and grant (`control | view | none`), device status by category, session progress by block, guiding error, focus state, flip state and time to flip, safety inputs and overall state, weather, activity timeline lanes (as the Dashboard of `OBS-150`), lease holder, recent alerts. Each leaf is `Stamped<T>(value, asOf)`.
 - **Reduction.** A pure function `reduce(state, message) → state` over stream messages. It is deterministic and has no clock or I/O, so the shared test-vector suite (`S-TEST`, Section 3.12) can replay recorded streams on every platform and require identical state.
-- **Snapshot/resync.** On `hello` without prior state, or on `resync`, the store requests a snapshot and holds the UI in *Loading* until it arrives, targeting a first usable state in 5 s (`MAPP-OVR-070`). Deltas received before the snapshot completes are buffered, then applied in order.
-- **Staleness.** `age(key) = now − asOf`; each key has a *freshness limit* (seconds for position, tens of seconds for weather). Over the limit, or whenever `S-LINK` is not `Connected`, `StateView` marks the value stale and the UI must dim it and show its age; unreachable/detached/not-granted Piers carry an explicit reason from the Master and show no values (`MAPP-OVR-040`).
+- **Snapshot/resync.** On `hello` without prior state, or on `resync`, the store waits for the snapshot the Master sends by itself (plugin ADR-MCON-004; there is no request for one) and holds the UI in *Loading* until it arrives, targeting a first usable state in 5 s (`MAPP-OVR-070`). Deltas received before the snapshot are buffered, then applied in order, except any older than the snapshot, which would otherwise overwrite it with an old value.
+- **Staleness.** `age(key) = now − asOf`. The Master publishes a value only when it changes (`ObservableState.publish`), so silence means "unchanged", and only keys that move continuously have a *freshness limit* (seconds for position, minutes for weather). Over the limit, or whenever `S-LINK` is not `Connected`, `StateView` marks the value stale and the UI must dim it and show its age; unreachable/detached/not-granted Piers carry an explicit reason from the Master and show no values (`MAPP-OVR-040`).
 - **Operation events.** `op.started | progress | finished` tie to the originating request via correlation id; `S-CTL` consumes them (Section 3.4).
 - **Satisfies:** `MAPP-OVR-010`–`070`, `MAPP-FLP-010`, `MAPP-SES-030`, `MAPP-SAF-010`, `030`, `MAPP-GUI-020`, `MAPP-DEV-070`.
 
 ### 3.4 `S-CTL` — Control safety
 
-- **Role.** Derived from the handshake's `allowed` set and the Master's own statement of the client's role: `Viewer` (read-class only) or `Operator`. In Viewer mode `S-CTL` exposes no invocable operation other than reads, so a UI cannot call one by mistake; the Master enforces regardless (`MAPP-CTL-010`).
+- **Role.** Derived from the grant in `whoami` (Section 4.2, item 8): `Viewer` (read-class only) or `Operator`. In Viewer mode `S-CTL` exposes no invocable operation other than reads, so a UI cannot call one by mistake; the Master enforces regardless (`MAPP-CTL-010`).
 - **Lease.** Per Pier: `Free | HeldByMe | HeldByOther(who)`; `acquire`, `release`, `request(take)` with the Master's confirmation; every lease-requiring operation checks local state first for a better message but trusts the Master's refusal (`MAPP-CTL-020`, `030`). A refused operation is shown with the Master's reason and **never retried automatically**.
 - **Confirmation.** Implements ADR-APP-005 and the list of operations that always require a dialog on the client side (`MAPP-CTL-040`): abort series, stop session, park, unpark, flip, reject frame, delete job/session. This list is a *minimum*; whatever the Master marks `confirm` also prompts.
 - **Outcome.** Each in-flight operation is `Pending(requestId)` → `Done(result)` or `OutcomeUnknown`. If the stream drops while an operation is `Pending`, it becomes `OutcomeUnknown`, is shown as such until `S-STATE` has resynchronised and the finish event or the resulting state resolves it, and is **never re-sent automatically** (`MAPP-CTL-070`). The user may re-issue it deliberately (a new idempotency key).
 - **Holds (jog, focus nudge).** `HoldSession.start(op, args)` → starts the hold via the operation, then sends beats at a fixed period (initially 250 ms, plugin SDD P4) until `stop()`. `stop()` is called by: release, platform lifecycle callback (background/inactive), connection loss, lease loss, or any error from a beat. On connection loss the client cannot reach the Master to stop it, so it relies on the Master's deadman (600 ms proposed); the UI says so. The shared code owns the timing and stop conditions; the platform only forwards lifecycle events and the press/release of the control (`MAPP-DEV-030`, `MAPP-CTL-060`). Beats are sent as HTTP operations (`*.hold_beat`) **[verified]** — see Section 4, item 3.
-- **Emergency.** `emergency.stop_everything | park | close_dome` are available to any paired Operator without the lease, with the client's confirmation flag after a deliberate gesture; the result lists each part and any that failed (`MAPP-EMG-010`, `020`).
+- **Emergency.** `system.stop_everything`, `mount.emergency_park` and `dome.emergency_close` are available to any paired Operator without the lease, with the client's confirmation flag after a deliberate gesture; the result lists each part and any that failed (`MAPP-EMG-010`, `020`).
 - **Safety.** `S-CTL` has no function that disables the monitor, clears an unsafe state, resumes after a safety stop or overrides a limit. The only safety action is *acknowledge* (`MAPP-SAF-020`, `040`).
 - **Satisfies:** `MAPP-CTL-010`–`080`, `MAPP-DEV-030`, `MAPP-SAF-020`, `040`, `MAPP-EMG-*`, `MAPP-SKY-040`, `MAPP-FLP-020`, `MAPP-SES-020`, `MAPP-IMG-070`.
 
@@ -188,7 +188,7 @@ See ADR-APP-006. It is two things driven by the same data: a small **in-process 
 
 ### 3.10 `S-DSN` — Design tokens, icons, strings
 
-Data files in `design/` compiled into platform resources by a build step: colour tokens for the **standard** and **night** themes (the night theme is red-only, `MAPP-LAY-030`) with contrast checked in a build-time test; type scale; spacing and minimum target size (`MAPP-LAY-050`); icons as SVG; strings as a single key→text table per language with placeholders, so both platforms use the same wording (`MAPP-LAY-060`). **Satisfies:** `MAPP-LAY-030`, `040` (tokens), `050`, `060`, `MAPP-PLT-020`.
+Data files in `design/` compiled into platform resources by `scripts/gen_tokens.py`: colour tokens for the **standard** and **night** themes (the night theme is red-only, `MAPP-LAY-030`) with contrast checked in a build-time test; type scale; spacing and minimum target size (`MAPP-LAY-050`); icons as SVG; strings as a single key→text table per language with placeholders, so both platforms use the same wording (`MAPP-LAY-060`). **Satisfies:** `MAPP-LAY-030`, `040` (tokens), `050`, `060`, `MAPP-PLT-020`.
 
 ### 3.11 `S-SEC` — Security design
 
@@ -204,7 +204,7 @@ Data files in `design/` compiled into platform resources by a build step: colour
 
 ### 3.12 `S-TEST` — Parity test-vector suite and release checklist
 
-- **Test vectors.** Recorded conversations (pairing, handshake, a stream with drops, operation results of every typed outcome, confirmation flow, lease contention, hold start/beat/stop, sky frames) as files in `api/vectors/`, produced from the Galileo plugin's tests once they exist and from `S-MOCK` until then. Each platform's test run replays every vector through its own implementation and compares the resulting state/outcome to the expected file; a vector that passes on one platform and fails on another fails the build (`MAPP-PLT-040`).
+- **Test vectors.** Recorded conversations (pairing, handshake, a stream with drops, operation results of every typed outcome, confirmation flow, lease contention, hold start/beat/stop, sky frames) as files in `api/vectors/`, produced from the Galileo plugin's tests once they exist and from `S-MOCK` until then. Each file also carries the user's and platform's actions as `act` steps, so a runner needs no knowledge of individual vectors (`api/vectors/README.md`). Each platform's test run replays every vector through its own implementation and compares the resulting state/outcome to the expected file; a vector that passes on one platform and fails on another fails the build (`MAPP-PLT-040`).
 - **Parity checklist.** A per-release checklist generated from the RTM: any requirement whose *Platforms* column includes platform X and whose design or test cell for X is missing is listed and must be resolved or recorded as staged with a reason (`MAPP-PLT-030`).
 - **Satisfies:** `MAPP-PLT-030`, `040`.
 
@@ -218,6 +218,15 @@ Data files in `design/` compiled into platform resources by a build step: colour
 
 - **`x-galileo-status: implemented`** — checked against the Galileo source on 2026-11-06 (Connect Link pairing, handshake, whoami, stream upgrade, transfer).
 - **`x-galileo-status: planned`** — taken from the plugin SDD §5.2; the shape is the plugin's intent and may change.
+
+Corrections from generating the Swift client and re-reading the source (2026-11-06), all made in the description to match the running code:
+
+- **403 is plain text, not JSON.** The listener raises aiohttp's `HTTPForbidden`, whose body reads `403: needs <permission>`. Described as JSON, the generated client would have thrown a decoding error instead of returning its `forbidden` case.
+- **`transferGetChunk` also answers 404 and 503.** 404 means no such object; 503 means busy, with `Retry-After`. **`transferStatus` also answers 400** for a malformed hash.
+- `pollPairing` has no error status: an unknown request is a 200 with `state: expired`.
+- `Operation.class` is a string, not an enum, so that an entry of an unknown class is dropped on receipt rather than failing the decoding of the whole catalogue.
+
+**The catalogue in `api/scenarios/catalogue.json` is the real one**, dumped from a Galileo checkout by `tools/mock-master/dump_catalogue.py`, so the app and the mock can't drift from the operations core really registers. **The state keys are a proposal:** `api/scenarios/normal-night.json` is what the screens read (`mount.tracking`, `imaging.stats.hfr`, `activity.mount`, and so on), written in the dotted form `galileo.control_surface.state` already publishes, and the plugin needs to agree them.
 
 When the plugin publishes its own description, `api/openapi.yaml` is replaced by a pinned copy of it and the differences are resolved in Section 4.2; until then this file is the executable statement of what the apps expect, and `S-MOCK` implements it.
 
@@ -233,6 +242,10 @@ These were found by reading the Galileo source against the plugin SDD and must b
 | 4 | Capability payload with `areas`, `sky_stream`, `outreach` | Core handshake supports a plugin `extension` payload; the plugin does not exist yet | None until built | Pin the extension schema with the plugin |
 | 5 | Roles Viewer/Operator kept in peer metadata | Core peers hold *permission sets* (`control`, `view`, `config.*`, `data.*`) | The app derives role from `allowed`; the Master must grant `control` for Operator and `view` for Viewer, and never `config.*` | Confirm the mapping with the server; make the handshake or `whoami` state the role explicitly |
 | 6 | Pairing request identity: name, platform | Core `POST /connect/v1/pair` takes `plugin`, `name`, `kind`, `platform` | Fields to fill | `plugin:"mobileconnect"`, `kind:"app"`, `platform:"ios"` etc. |
+| 8 | Role comes from the handshake's `allowed` set, and the app refuses a grant containing `config.*` | `allowed` is built from all of `PAIRED_PERMISSIONS`, so it always contains `config.*`, whatever the peer was granted | Reading `allowed` would refuse every real Master | **Implemented:** role and the refusal use `whoami.permissions` (intersected with `allowed` for the role). Confirm with the server |
+| 9 | Emergency operations named `emergency.*` (Section 3.4 said so too) | `system.stop_everything`, `mount.emergency_park`, `dome.emergency_close`, class `emergency` | Names differ | **Implemented** with core's names; Section 3.4 corrected |
+| 10 | The app reports `schema: 0` in the handshake | A schema level different from the Master's gives verdict `restricted` with a message about databases, and removes `data.*` from `allowed` | Every real Master answers `restricted`, with a message meaningless to an app user, and the handshake would remove `data.pull`, which FITS download needs | **Implemented:** `restricted` with `control` or `view` proceeds and its message isn't shown. The plugin's handshake extension should exempt app peers |
+| 11 | The SRS's MVP covers these | Core registers no operation for: connecting and disconnecting devices, held mount movement, find home, tracking rate, pulse, region of interest, autofocus, live loop. No route for the guide-star cut-out | Those controls can't work on a real Master | `api/scenarios/catalogue.planned.json` proposes names for the first few, and the screens show "doesn't offer this yet" without them. The server side decides |
 | 7 | Sky stream, previews, tiles, frames as MobileConnect routes | Core has `skystream.py` and `preview.py` services; the routes that expose them are not registered (no plugin) | `S-SKY`, `S-IMG` cannot be exercised against a real Master | Develop against `S-MOCK`; verify when the plugin lands |
 
 ---
@@ -247,6 +260,7 @@ These were found by reading the Galileo source against the plugin SDD and must b
 | D4 | Format of the sky-stream binary frame | With the core streaming service |
 | D5 | Block-type catalogue for session authoring is not yet on the wire | Server to expose block types and parameter schemas (`SES-340`) |
 | D6 | Replacing the authored description with the plugin's own (Section 4.1) | When the plugin publishes it |
+| D10 | A value's age compares the Master's clock with the device's, so skew larger than a freshness limit shows a moving value as stale (it can't show a stale one as live for long). Negative ages are clamped to 0 | Measure on real devices; correct for skew from the snapshot's `as_of` if it matters |
 | D9 | HTTP status codes for typed operation outcomes (`refused`, `invalid`, `busy`, …) are not specified by the plugin SDD; the description carries the outcome in the body and uses a `default` error response | With the server side |
 | D7 | Findings 1–7 in Section 4.2 | With the server side |
 | D8 | Phone layout reductions (PSD Q1) | After tablet wireframes |
@@ -261,7 +275,7 @@ These were found by reading the Galileo source against the plugin SDD and must b
 | Kotlin client generation, `android/core`, Android app, Quest edition, JVM tests | Windows, macOS or Linux (JDK 17+, Gradle, Android Studio) |
 | Swift client generation, `ios/Packages/*`, the iOS app, simulator, device, signing, TestFlight | **macOS with Xcode only** (local Mac, hosted Mac, or macOS CI) |
 
-Consequence: the contract, the Kotlin side and the vectors can all be developed on Windows now; the iOS side needs a Mac. `scripts/sync_api.py` copies the single description into each generator's input location and, in `--check` mode, fails if a copy has drifted, so CI on either side catches an edit made in the wrong place.
+Consequence: the contract, the Kotlin side and the vectors can all be developed on Windows now; the iOS side needs a Mac. `scripts/sync_api.py` copies the single description into each generator's input location and, in `--check` mode, fails if a copy has drifted, so CI on either side catches an edit made in the wrong place. `scripts/check_ios.sh` runs the whole iOS check on a Mac: sync, tokens, vectors, lint, the colour rule, `swift test` (including over real TLS against `tools/mock-master`, and against the real Connect Link server when a Galileo checkout is alongside), then the app, core and UI tests on a simulator, and the Night pixel check on the UI tests' screenshots.
 
 ## 7. Requirement-to-Component Summary
 

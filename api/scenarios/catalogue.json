@@ -1,0 +1,1051 @@
+{
+ "operations": [
+  {
+   "name": "camera.abort",
+   "area": "camera",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "camera.expose",
+   "area": "camera",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "seconds",
+     "type": "float",
+     "required": true,
+     "unit": "s",
+     "min": 0.001,
+     "max": 3600
+    },
+    {
+     "name": "gain",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "offset",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "binning",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 4
+    },
+    {
+     "name": "frame_type",
+     "type": "enum",
+     "required": false,
+     "default": "Light",
+     "choices": [
+      "Light",
+      "Dark",
+      "Flat",
+      "Bias"
+     ]
+    }
+   ],
+   "long_running": true
+  },
+  {
+   "name": "camera.set_temperature",
+   "area": "camera",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "celsius",
+     "type": "float",
+     "required": true,
+     "unit": "\u00b0C",
+     "min": -60,
+     "max": 40
+    }
+   ]
+  },
+  {
+   "name": "camera.status",
+   "area": "camera",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "dome.abort",
+   "area": "dome",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "dome.close",
+   "area": "dome",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "dome.emergency_close",
+   "area": "dome",
+   "class": "emergency",
+   "lease": false,
+   "args": [],
+   "description": "Close the dome or roof now"
+  },
+  {
+   "name": "dome.open",
+   "area": "dome",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "dome.slew",
+   "area": "dome",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "azimuth",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    }
+   ]
+  },
+  {
+   "name": "dome.status",
+   "area": "dome",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "filter.names",
+   "area": "filter",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "filter.select",
+   "area": "filter",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "flatpanel.brightness",
+   "area": "flatpanel",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "level",
+     "type": "int",
+     "required": true,
+     "min": 0,
+     "max": 65535
+    }
+   ]
+  },
+  {
+   "name": "flatpanel.light",
+   "area": "flatpanel",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "on",
+     "type": "bool",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "flatpanel.status",
+   "area": "flatpanel",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "flip.now",
+   "area": "flip",
+   "class": "confirm",
+   "lease": true,
+   "args": [],
+   "description": "Flip the mount across the meridian and resume tracking (asks for a second confirmation)",
+   "long_running": true
+  },
+  {
+   "name": "flip.status",
+   "area": "flip",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Meridian flip state, hour angle, pier side, minutes to the flip limit and the last outcome"
+  },
+  {
+   "name": "focus.halt",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "focus.hold_beat",
+   "area": "focus",
+   "class": "operate",
+   "lease": false,
+   "args": [
+    {
+     "name": "hold_id",
+     "type": "str",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "focus.hold_start",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "direction",
+     "type": "int",
+     "required": true,
+     "min": -1,
+     "max": 1
+    }
+   ]
+  },
+  {
+   "name": "focus.hold_stop",
+   "area": "focus",
+   "class": "operate",
+   "lease": false,
+   "args": [
+    {
+     "name": "hold_id",
+     "type": "str",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "focus.move_by",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "steps",
+     "type": "int",
+     "required": true,
+     "min": -100000,
+     "max": 100000
+    }
+   ]
+  },
+  {
+   "name": "focus.move_to",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "position",
+     "type": "int",
+     "required": true,
+     "min": 0
+    }
+   ]
+  },
+  {
+   "name": "focus.status",
+   "area": "focus",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "guiding.connect",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Connect to the Pier's saved PHD2"
+  },
+  {
+   "name": "guiding.disconnect",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Disconnect from PHD2"
+  },
+  {
+   "name": "guiding.dither",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Dither by the Options > Guiding amount and settle"
+  },
+  {
+   "name": "guiding.find_star",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Ask PHD2 to choose a guide star"
+  },
+  {
+   "name": "guiding.recalibrate",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Calibrate again, then guide"
+  },
+  {
+   "name": "guiding.star",
+   "area": "guiding",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The guide star's cut-out image and position"
+  },
+  {
+   "name": "guiding.start",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "recalibrate",
+     "type": "bool",
+     "required": false,
+     "default": false
+    }
+   ],
+   "description": "Start guiding; PHD2 settles in its own time (watch guiding.status)"
+  },
+  {
+   "name": "guiding.status",
+   "area": "guiding",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "PHD2 connection, guiding state, RMS error and the recent error trace"
+  },
+  {
+   "name": "guiding.stop",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Stop guiding and looping"
+  },
+  {
+   "name": "history.frames",
+   "area": "history",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "session",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "One session's frames: star count, HFR and guide error"
+  },
+  {
+   "name": "history.report",
+   "area": "history",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "session",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "One session's frames with the average HFR and star count"
+  },
+  {
+   "name": "history.sessions",
+   "area": "history",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The recorded sessions and how many frames each has"
+  },
+  {
+   "name": "imaging.capture",
+   "area": "imaging",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "seconds",
+     "type": "float",
+     "required": true,
+     "unit": "s",
+     "min": 0.001,
+     "max": 3600
+    },
+    {
+     "name": "count",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 1000
+    },
+    {
+     "name": "filter",
+     "type": "str",
+     "required": false
+    },
+    {
+     "name": "frame_type",
+     "type": "enum",
+     "required": false,
+     "default": "Light",
+     "choices": [
+      "Light",
+      "Dark",
+      "Flat",
+      "Bias"
+     ]
+    },
+    {
+     "name": "gain",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "offset",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Take one frame or a series; each frame is saved to the Library",
+   "long_running": true
+  },
+  {
+   "name": "imaging.status",
+   "area": "imaging",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Capture progress and the current frame's statistics and histogram"
+  },
+  {
+   "name": "imaging.stop",
+   "area": "imaging",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Stop the running capture after aborting the frame in progress"
+  },
+  {
+   "name": "mount.abort_slew",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "mount.emergency_park",
+   "area": "mount",
+   "class": "emergency",
+   "lease": false,
+   "args": [],
+   "description": "Park the mount now"
+  },
+  {
+   "name": "mount.park",
+   "area": "mount",
+   "class": "confirm",
+   "lease": true,
+   "args": [],
+   "description": "Park the mount (asks for a second confirmation)"
+  },
+  {
+   "name": "mount.slew",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    }
+   ],
+   "description": "Slew to coordinates, subject to the mount's limits and horizon",
+   "long_running": true
+  },
+  {
+   "name": "mount.status",
+   "area": "mount",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Position, tracking, slewing and pier side"
+  },
+  {
+   "name": "mount.sync",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    }
+   ]
+  },
+  {
+   "name": "mount.track",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "enabled",
+     "type": "bool",
+     "required": true
+    }
+   ]
+  },
+  {
+   "name": "mount.unpark",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": []
+  },
+  {
+   "name": "pier.list",
+   "area": "pier",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Every Pier this node runs, with its devices and running session"
+  },
+  {
+   "name": "rotator.move",
+   "area": "rotator",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "angle",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    }
+   ]
+  },
+  {
+   "name": "rotator.status",
+   "area": "rotator",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "safety.acknowledge",
+   "area": "safety",
+   "class": "operate",
+   "lease": false,
+   "args": [],
+   "description": "Acknowledge the Pier's safety stops; it does not resume anything"
+  },
+  {
+   "name": "safety.events",
+   "area": "safety",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The Pier's safety stops and whether each is acknowledged"
+  },
+  {
+   "name": "safety.status",
+   "area": "safety",
+   "class": "read",
+   "lease": false,
+   "args": []
+  },
+  {
+   "name": "scheduler.jobs",
+   "area": "scheduler",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The Pier's queued scheduler jobs, in priority order, and the next one"
+  },
+  {
+   "name": "session.pause",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Pause the running session at the next block or frame boundary"
+  },
+  {
+   "name": "session.resume",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Resume a paused session"
+  },
+  {
+   "name": "session.run",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "template",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "target_name",
+     "type": "str",
+     "required": false
+    },
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Start a saved session template, with a target for its placeholder"
+  },
+  {
+   "name": "session.status",
+   "area": "session",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The running session and its progress, block by block"
+  },
+  {
+   "name": "session.stop",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Stop the running session"
+  },
+  {
+   "name": "session.templates",
+   "area": "session",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The saved session templates that can be run"
+  },
+  {
+   "name": "sky.framing",
+   "area": "sky",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    },
+    {
+     "name": "rotation_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "default": 0.0,
+     "min": -360,
+     "max": 360
+    },
+    {
+     "name": "cols",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 10
+    },
+    {
+     "name": "rows",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 10
+    },
+    {
+     "name": "overlap_pct",
+     "type": "float",
+     "required": false,
+     "unit": "%",
+     "default": 10.0,
+     "min": 0,
+     "max": 90
+    }
+   ],
+   "description": "The Pier's field of view around a position, and the panels of a mosaic"
+  },
+  {
+   "name": "sky.object",
+   "area": "sky",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "One object's details and its rise, transit and set tonight at the Pier's site"
+  },
+  {
+   "name": "sky.search",
+   "area": "sky",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "query",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "type": "int",
+     "required": false,
+     "default": 20,
+     "min": 1,
+     "max": 50
+    }
+   ],
+   "description": "Find catalogue objects by name or designation"
+  },
+  {
+   "name": "solve.capture",
+   "area": "solve",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "exposure_s",
+     "type": "float",
+     "required": false,
+     "unit": "s",
+     "default": 5.0,
+     "min": 0.001,
+     "max": 600
+    },
+    {
+     "name": "accuracy_arcsec",
+     "type": "float",
+     "required": false,
+     "unit": "arcsec",
+     "default": 30.0,
+     "min": 1,
+     "max": 3600
+    },
+    {
+     "name": "max_iterations",
+     "type": "int",
+     "required": false,
+     "default": 5,
+     "min": 1,
+     "max": 20
+    },
+    {
+     "name": "binning",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 8
+    },
+    {
+     "name": "gain",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "filter",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Take a frame and solve it; the mount is not touched",
+   "long_running": true
+  },
+  {
+   "name": "solve.centre",
+   "area": "solve",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": true,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    },
+    {
+     "name": "name",
+     "type": "str",
+     "required": false
+    },
+    {
+     "name": "exposure_s",
+     "type": "float",
+     "required": false,
+     "unit": "s",
+     "default": 5.0,
+     "min": 0.001,
+     "max": 600
+    },
+    {
+     "name": "accuracy_arcsec",
+     "type": "float",
+     "required": false,
+     "unit": "arcsec",
+     "default": 30.0,
+     "min": 1,
+     "max": 3600
+    },
+    {
+     "name": "max_iterations",
+     "type": "int",
+     "required": false,
+     "default": 5,
+     "min": 1,
+     "max": 20
+    },
+    {
+     "name": "binning",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 8
+    },
+    {
+     "name": "gain",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "filter",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Slew to a J2000 position and correct with solved frames until within the accuracy",
+   "long_running": true
+  },
+  {
+   "name": "solve.status",
+   "area": "solve",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Whether a solve is running, its latest solutions and log"
+  },
+  {
+   "name": "solve.stop",
+   "area": "solve",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Cancel the plate solve in progress"
+  },
+  {
+   "name": "solve.sync",
+   "area": "solve",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "exposure_s",
+     "type": "float",
+     "required": false,
+     "unit": "s",
+     "default": 5.0,
+     "min": 0.001,
+     "max": 600
+    },
+    {
+     "name": "accuracy_arcsec",
+     "type": "float",
+     "required": false,
+     "unit": "arcsec",
+     "default": 30.0,
+     "min": 1,
+     "max": 3600
+    },
+    {
+     "name": "max_iterations",
+     "type": "int",
+     "required": false,
+     "default": 5,
+     "min": 1,
+     "max": 20
+    },
+    {
+     "name": "binning",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 8
+    },
+    {
+     "name": "gain",
+     "type": "int",
+     "required": false,
+     "default": 0,
+     "min": 0,
+     "max": 10000
+    },
+    {
+     "name": "filter",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Take a frame, solve it and tell the mount where it is really pointing",
+   "long_running": true
+  },
+  {
+   "name": "system.stop_everything",
+   "area": "system",
+   "class": "emergency",
+   "lease": false,
+   "args": [],
+   "description": "Stop the session, all motion and exposures"
+  },
+  {
+   "name": "weather.readings",
+   "area": "weather",
+   "class": "read",
+   "lease": false,
+   "args": []
+  }
+ ]
+}

@@ -1,0 +1,2 @@
+{ "extends": "normal-night", "name": "lease-contention", "description": "The desktop holds the lease; taking it needs a confirmation.",
+  "lease_holders": { "p1": "Desktop" }, "loop_s": 0, "timeline": [] }

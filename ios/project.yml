@@ -1,0 +1,74 @@
+# The source of truth for ios/GalileoMobileConnect.xcodeproj. Change settings here, not in Xcode, then
+# run `xcodegen` in ios/ and commit both. Swift files added under App/ need no regeneration.
+name: GalileoMobileConnect
+options:
+  deploymentTarget:
+    iOS: "17.0"           # MAPP-PLT-010
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  GalileoAPI:
+    path: Packages/GalileoAPI
+  GalileoCore:
+    path: Packages/GalileoCore
+targets:
+  GalileoMobileConnect:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+        type: syncedFolder
+    dependencies:
+      - package: GalileoCore
+    settings:
+      base:
+        # Working identifier: PSD Q5 / iOS SDD IO5 decide the final one before first submission.
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordtulloch.galileo.mobileconnect
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: Galileo MobileConnect
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # iOS SDD 3.2: the local-network prompt and the service Connect Link advertises.
+        NSLocalNetworkUsageDescription: Galileo needs to find your observatory computer on your Wi-Fi network.
+        NSBonjourServices:
+          - _galileo-link._tcp
+        # iOS SDD 3.3: the Master's self-signed certificate on a LAN address. ATS stays on for everything else.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    scheme:
+      testTargets:
+        - package: GalileoCore/GalileoCoreTests
+        - GalileoMobileConnectUITests
+  GalileoMobileConnectUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+        type: syncedFolder
+    dependencies:
+      - target: GalileoMobileConnect
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gordtulloch.galileo.mobileconnect.uitests
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: true

@@ -2,7 +2,7 @@
 
 Native **iOS/iPadOS and Android** client apps — plus a **Meta Quest 2/3 edition** of the Android app — for [Galileo](https://github.com/gordtulloch/Galileo), the cross-platform astrophotography imaging application. The apps let you watch and operate a running Galileo observatory from a **tablet** (the primary target) or a phone — connect equipment, find and centre targets, focus, guide, run and author sessions and schedules, and respond to safety events — without going back to the computer. They **operate** an observatory; they never **configure** one.
 
-> **Status: In Design** (a feasibility spike of the Meta Quest VR client on the Quest 2 has succeeded and the VR client is confirmed). There is no code yet. The scope document is written and under review; requirements, design and the first build follow its approval. See [Status](#status).
+> **Status: In Design** (a feasibility spike of the Meta Quest VR client on the Quest 2 has succeeded and the VR client is confirmed). The iOS app runs on the simulator against a scripted mock Master, with connection, pairing, the shell, safety and emergency, and the Overview, Equipment, Imaging, Focus, Guiding and Safety screens. It has not yet run on a real iPad, and a real Galileo Master can't serve it fully until the MobileConnect plugin exists. Android and Quest have not started. The design documents are drafted and under review. See [Status](#status).
 
 ---
 
@@ -39,9 +39,9 @@ Not in the app: equipment profiles, Observatories, safety limits, Options and pl
 - The server side is the **MobileConnect plugin**, built in [Galileo-Plugins](https://github.com/gordtulloch/Galileo-Plugins); its scope is in the Galileo repository at `docs/plugins/mobileconnect/PSD.md`. The wire API (OpenAPI plus an event schema) is the contract between the two.
 - The browser equivalent is [Galileo WebConnect](https://github.com/gordtulloch/Galileo-WebConnect).
 
-## Repository layout (planned)
+## Repository layout
 
-This is one monorepo for both platforms, sharing as much as possible below the UI.
+This is one monorepo for both platforms, sharing as much as possible below the UI. Not all of it exists yet (`tools/`, `design/`, `quest/`, `docs/android/` and `docs/quest/` are planned).
 
 ```
 docs/                PSD, SRS and RTM (common to both apps); SDD.md = shared architecture
@@ -72,16 +72,23 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 | [SDD (shared)](docs/SDD.md) | Shared architecture | Draft v0.1 — for review |
 | [SDD (iOS)](docs/ios/SDD.md) | iOS/iPadOS design | Draft v0.1 — for review |
 | SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
+| [Work checklist](docs/CHECKLIST.md) | What's done and what's next | Current |
 | [Meta Quest VR analysis](docs/analysis/QuestVR.md) | Opportunities for the Quest edition | Draft — for review |
 
 ## Status
 
 | | |
 |---|---|
-| Stage | **In Design** |
-| Done | Scope document (PSD); SRS, RTM, shared SDD and iOS SDD drafted (2026-11-06) |
-| Next | Review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the two generators (Swift needs a Mac; Kotlin needs a JDK); SRS review; wireframes (tablet first); core `S-LINK` in Kotlin and Swift against the vectors; Quest SDD recording the VR spike's findings |
+| Stage | **In development** (iOS); in design (Android, Quest) |
+| Done | Scope document (PSD); SRS, RTM, shared SDD and iOS SDD drafted; iOS: Swift client generated from `api/openapi.yaml`; `GalileoCore` core with shared vectors; mock Master (in-process and standalone); app with the screens above, UI-tested on iPad and iPhone simulators; pairing, pinning, handshake and stream tested against Galileo's real Connect Link server (2026-11-06) |
+| Next | First run on a real iPad; the rest of the iOS MVP ([checklist](docs/CHECKLIST.md) section 5a); review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the Kotlin generator (needs a JDK); wireframes (tablet first); Quest SDD recording the VR spike's findings |
 | Depends on | Galileo core additions *Connect Link* and *Control Surface* (proposed; see the Galileo PSDs) |
+
+## Building the iOS app
+
+On a Mac with Xcode 26, Python 3 and Node: open `ios/GalileoMobileConnect.xcodeproj` and run; *Try the demo* needs no observatory. To try the real network code, run the [standalone mock Master](tools/mock-master/README.md) and enter its address.
+
+`scripts/check_ios.sh` runs every check; its header says what it needs. Change project settings in `ios/project.yml` and run `xcodegen` in `ios/` (`brew install xcodegen`). Change the contract in `api/` and run `scripts/sync_api.py`; change colours in `design/tokens.json` and run `scripts/gen_tokens.py`.
 
 ## Licence
 

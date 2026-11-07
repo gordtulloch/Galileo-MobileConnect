@@ -182,6 +182,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TransferStatus"
+        "400":
+          description: "`sha` is not a SHA-256."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
         "401":
           $ref: "#/components/responses/Unauthorised"
         "403":
@@ -246,7 +252,7 @@ paths:
                 type: string
                 format: binary
         "400":
-          description: offset and length are required.
+          description: offset and length are required, the range is bad, or `sha` is not a SHA-256.
           content:
             application/json:
               schema:
@@ -255,6 +261,22 @@ paths:
           $ref: "#/components/responses/Unauthorised"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The Master holds no such object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "503":
+          description: The Master is busy (transfers are its lowest request class). Try again after `Retry-After` seconds.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
 
   /mobileconnect/v1/capabilities:
     get:
@@ -680,11 +702,13 @@ components:
           schema:
             $ref: "#/components/schemas/SimpleError"
     Forbidden:
-      description: The client's permissions do not allow this.
+      description: |
+        The client's permissions do not allow this. Plain text, not JSON: the listener raises aiohttp's
+        `HTTPForbidden` (`galileo/connect_link/server.py`), whose body reads `403: needs <permission>`.
       content:
-        application/json:
+        text/plain:
           schema:
-            $ref: "#/components/schemas/SimpleError"
+            type: string
 
   schemas:
     SimpleError:
@@ -910,7 +934,10 @@ components:
           type: string
         class:
           type: string
-          enum: [read, operate, confirm, emergency]
+          description: |
+            `read`, `operate`, `confirm` or `emergency`. Deliberately not an enum: an entry of a class this
+            app does not know (a newer Master, or `config`) is dropped on receipt rather than failing the
+            decoding of the whole catalogue.
         lease:
           type: boolean
           description: True if the client must hold the Pier's lease to call it.

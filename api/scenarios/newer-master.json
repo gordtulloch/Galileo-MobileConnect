@@ -1,0 +1,2 @@
+{ "extends": "normal-night", "name": "newer-master", "description": "The Master speaks a newer protocol: update the app.",
+  "handshake": { "verdict": "refused", "message": "The other side uses an older Connect Link protocol (1; this node uses 2). Update Galileo on whichever is older.", "node": { "galileo": "2.0.0", "plugin_api": "2.0", "schema": 0, "protocol": 2 } } }

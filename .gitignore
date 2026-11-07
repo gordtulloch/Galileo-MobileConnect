@@ -5,4 +5,7 @@ __pycache__/
 build/
 .build/
 .gradle/
-*.xcodeproj/xcuserdata/
+xcuserdata/
+.swiftpm/
+.DS_Store
+.venv/

@@ -1,0 +1,13 @@
+{
+  "name": "revoked",
+  "description": "A 401 on any request means the pairing was revoked: the token is discarded and the client stops trying.",
+  "status": "implemented",
+  "requirements": ["MAPP-CON-060"],
+  "setup": { "token_stored": true },
+  "steps": [
+    { "do": "act", "action": "invoke", "pier": "p1", "operation": "mount.track", "args": { "enabled": false } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/mount.track", "auth": true },
+    { "do": "receive", "status": 401, "body": { "error": "unauthorised" } },
+    { "do": "expect", "outcome": "Unpaired", "state": { "token_stored": false } }
+  ]
+}

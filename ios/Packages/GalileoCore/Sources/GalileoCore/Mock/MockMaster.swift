@@ -1,0 +1,631 @@
+import CoreImage
+import Foundation
+import GalileoAPI
+import HTTPTypes
+
+/// The Master's side of Connect Link and the Control Surface, played from a scenario in `api/scenarios/`
+/// (`S-MOCK`, ADR-APP-006). It stands behind the same transports as a real Master, so all the client code runs
+/// against it, in tests, in UI tests and in demonstration mode (`MAPP-CON-110`).
+public actor MockMaster: ClientTransport, StreamTransport {
+    public static let token = "mock-token"
+    public static let peerID = "mock-peer"
+    public static let fingerprint = String(repeating: "ab", count: 32)
+
+    private let scenario: JSONValue
+    private let clock: any LinkClock
+    private let timeScale: Double
+    private let catalogue: [String: Components.Schemas.Operation]
+    private let catalogueBodies: [JSONValue]
+    private let preview: Data?
+
+    private var values: [String: [String: JSONValue]] = [:]
+    private var pairingRequests: [String: (created: Date, collected: Bool)] = [:]
+    private var revoked = false
+    private var leases: [String: String] = [:]
+    private var alerts: [JSONValue] = []
+    private var idempotent: [String: (HTTPResponse.Status, JSONValue)] = [:]
+    private var confirmTokens: [String: (operation: String, args: JSONValue)] = [:]
+    private var holds: [String: (pier: String, family: String, lastBeat: Date)] = [:]
+    private var counter = 0
+
+    private var epoch = "mock-epoch-1"
+    private var seq = 0
+    private var ring: [(seq: Int, data: JSONValue)] = []
+    private let ringLimit = 256
+    private var stream: AsyncThrowingStream<Data, any Error>.Continuation?
+    private var started: Date?
+    private var tasks: [Task<Void, Never>] = []
+
+    /// Requests seen, for tests: `METHOD /path`.
+    public private(set) var requests: [String] = []
+
+    // MARK: Loading
+
+    public enum LoadError: Error { case missing(String) }
+
+    static func resource(_ name: String, _ ext: String) throws -> Data {
+        guard let url = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "scenarios") else {
+            throw LoadError.missing("\(name).\(ext)")
+        }
+        return try Data(contentsOf: url)
+    }
+
+    /// A scenario with `extends` resolved.
+    public static func scenario(named name: String) throws -> JSONValue {
+        let own = try JSONDecoder().decode(JSONValue.self, from: resource(name, "json"))
+        guard let parent = own["extends"]?.stringValue, case .object(var merged) = try scenario(named: parent),
+            case .object(let fields) = own
+        else { return own }
+        merged.merge(fields) { _, new in new }
+        return .object(merged)
+    }
+
+    /// `timeScale` above 1 runs the script faster; tests use it.
+    public init(scenarioNamed name: String, clock: any LinkClock = SystemClock(), timeScale: Double = 1) throws {
+        scenario = try Self.scenario(named: name)
+        self.clock = clock
+        self.timeScale = timeScale
+        var bodies: [JSONValue] = []
+        for file in ["catalogue", "catalogue.planned"] {
+            let json = try JSONDecoder().decode(JSONValue.self, from: Self.resource(file, "json"))
+            bodies += json["operations"]?.arrayValue ?? []
+        }
+        catalogueBodies = bodies
+        catalogue = Dictionary(
+            uniqueKeysWithValues: try bodies.map { body in
+                let operation = try body.converted(to: Components.Schemas.Operation.self)
+                return (operation.name, operation)
+            })
+        preview = try? Self.resource("preview", "jpg")
+        var values: [String: [String: JSONValue]] = [:]
+        for (pier, content) in scenario["state"]?.objectValue ?? [:] { values[pier] = content.objectValue ?? [:] }
+        self.values = values
+        var leases: [String: String] = [:]
+        for (pier, holder) in scenario["lease_holders"]?.objectValue ?? [:] { leases[pier] = holder.stringValue }
+        self.leases = leases
+        alerts = scenario["alerts"]?.arrayValue ?? []
+    }
+
+    deinit { for task in tasks { task.cancel() } }
+
+    /// Ends the script's timers; demonstration mode calls this when it is left.
+    public func shutDown() {
+        for task in tasks { task.cancel() }
+        tasks = []
+        stream?.finish()
+        stream = nil
+    }
+
+    // MARK: HTTP
+
+    public func send(
+        _ request: HTTPRequest, body: HTTPBody?, baseURL: URL, operationID: String
+    ) async throws -> (HTTPResponse, HTTPBody?) {
+        let bytes: Data
+        if let body { bytes = try await Data(collecting: body, upTo: 1024 * 1024) } else { bytes = Data() }
+        let json = (try? JSONDecoder().decode(JSONValue.self, from: bytes)) ?? .object([:])
+        let target = request.path ?? "/"
+        let parts = target.split(separator: "?", maxSplits: 1)
+        let path = String(parts.first ?? "")
+        let query = parts.count > 1 ? Self.parseQuery(String(parts[1])) : [:]
+        let method = request.method.rawValue
+        requests.append("\(method) \(path)")
+        let segments = path.split(separator: "/").map(String.init)
+
+        @Sendable func reply(_ status: Int, _ value: JSONValue) throws -> (HTTPResponse, HTTPBody?) {
+            let data = try JSONEncoder().encode(value)
+            return (
+                HTTPResponse(status: .init(code: status), headerFields: [.contentType: "application/json"]),
+                HTTPBody(data)
+            )
+        }
+
+        // Unauthenticated: pairing.
+        if method == "POST", path == "/connect/v1/pair" {
+            guard json["plugin"]?.stringValue != nil, let name = json["name"]?.stringValue, !name.isEmpty else {
+                return try reply(400, ["error": "bad request"])
+            }
+            counter += 1
+            let id = "req-\(counter)"
+            pairingRequests[id] = (clock.now(), false)
+            let code = String(format: "%06d", (counter * 271_828) % 1_000_000)
+            return try reply(
+                202,
+                [
+                    "request_id": .string(id), "code": .string(code), "expires_in": 300,
+                    "fingerprint": .string(Self.fingerprint),
+                    "protocol": scenario["handshake"]?["node"]?["protocol"] ?? 1,
+                ])
+        }
+        if method == "GET", segments.count == 4, segments[2] == "pair" {
+            return try reply(200, pollPairing(segments[3]))
+        }
+
+        // Everything else needs the token.
+        guard !revoked, request.headerFields[.authorization] == "Bearer \(Self.token)" else {
+            return try reply(401, ["error": "unauthorised"])
+        }
+
+        switch (method, path) {
+        case ("POST", "/connect/v1/handshake"):
+            var result = scenario["handshake"]?.objectValue ?? [:]
+            if result["allowed"] == nil {
+                result["allowed"] = result["verdict"]?.stringValue == "refused"
+                    ? [] : ["config.read", "config.write", "data.push", "data.pull", "control", "view"]
+            }
+            return try reply(200, .object(result))
+        case ("GET", "/connect/v1/whoami"):
+            return try reply(
+                200,
+                [
+                    "peer_id": .string(Self.peerID), "name": "Mock device", "plugin": "mobileconnect",
+                    "permissions": scenario["permissions"] ?? ["control", "view"],
+                ])
+        case ("GET", "/mobileconnect/v1/capabilities"):
+            return try reply(200, scenario["capabilities"] ?? ["plugin_api": "1.0", "areas": []])
+        case ("GET", "/mobileconnect/v1/piers"):
+            return try reply(200, ["piers": scenario["piers"] ?? []])
+        case ("GET", "/mobileconnect/v1/catalogue"):
+            return try reply(200, ["operations": .array(catalogueBody(pier: query["pier"]))])
+        case ("GET", "/mobileconnect/v1/alerts"):
+            return try reply(200, ["alerts": .array(alerts.map(stampedAlert).reversed())])
+        default: break
+        }
+
+        if segments.count >= 4, segments[0] == "mobileconnect", segments[2] == "pier" {
+            let pier = segments[3]
+            if segments.count == 5, segments[4] == "lease" {
+                let (status, value) = method == "POST"
+                    ? leaseAcquire(pier: pier, token: request.headerFields[.confirmToken])
+                    : leaseRelease(pier: pier)
+                return try reply(status, value)
+            }
+            if segments.count == 6, segments[4] == "ops" {
+                let (status, value) = invoke(
+                    pier: pier, name: segments[5], body: json, key: request.headerFields[.idempotencyKey],
+                    confirmToken: request.headerFields[.confirmToken])
+                return try reply(Int(status.code), value)
+            }
+            if segments.count == 5, segments[4] == "preview" {
+                guard let image = rendered(query: query) else { return try reply(404, ["error": "no frame yet"]) }
+                return (HTTPResponse(status: .ok, headerFields: [.contentType: "image/jpeg"]), HTTPBody(image))
+            }
+        }
+        return try reply(404, ["error": "no such route"])
+    }
+
+    private static func parseQuery(_ text: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for pair in text.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            if kv.count == 2 { result[kv[0]] = kv[1].removingPercentEncoding }
+        }
+        return result
+    }
+
+    private func pollPairing(_ id: String) -> JSONValue {
+        guard let request = pairingRequests[id] else { return ["state": "expired"] }
+        let waited = clock.now().timeIntervalSince(request.created) * timeScale
+        guard waited >= (scenario["pair_approval_s"]?.doubleValue ?? 0) else { return ["state": "pending"] }
+        switch scenario["pairing"]?.stringValue {
+        case "reject": return ["state": "rejected"]
+        case "never": return ["state": "pending"]
+        default:
+            if request.collected { return ["state": "collected"] }
+            pairingRequests[id]?.collected = true
+            return ["state": "approved", "token": .string(Self.token)]
+        }
+    }
+
+    private func catalogueBody(pier: String?) -> [JSONValue] {
+        let unavailable = pier.flatMap { scenario["unavailable"]?[$0]?.objectValue } ?? [:]
+        return catalogueBodies.map { body in
+            guard let name = body["name"]?.stringValue, let reason = unavailable[name],
+                case .object(var fields) = body
+            else { return body }
+            fields["available"] = false
+            fields["unavailable_because"] = reason
+            return .object(fields)
+        }
+    }
+
+    private func stampedAlert(_ alert: JSONValue) -> JSONValue {
+        guard case .object(var fields) = alert else { return alert }
+        if fields["time"] == nil { fields["time"] = .string(WireTime.string(clock.now())) }
+        return .object(fields)
+    }
+
+    // MARK: Lease
+
+    private func leaseAcquire(pier: String, token: String?) -> (Int, JSONValue) {
+        guard hasControl(pier) else {
+            return (403, ["error": "refused", "reason": "This device can only view this Pier."])
+        }
+        if let holder = leases[pier], holder != Self.peerID {
+            let taking = token.flatMap { confirmTokens.removeValue(forKey: $0)?.operation } == "lease"
+            if !taking {
+                return (
+                    409,
+                    [
+                        "error": "refused", "reason": .string("\(holder) holds the lease on this Pier."),
+                        "detail": ["kind": "lease_held", "holder": .string(holder), "can_take": true],
+                        "confirm_token": .string(makeConfirmToken(operation: "lease", args: nil)), "expires_in": 60,
+                    ]
+                )
+            }
+        }
+        leases[pier] = Self.peerID
+        emit(["type": "lease", "pier": .string(pier), "holder": .string(Self.peerID)])
+        return (200, ["pier": .string(pier), "held_by_me": true, "holder": .string(Self.peerID)])
+    }
+
+    private func leaseRelease(pier: String) -> (Int, JSONValue) {
+        if leases[pier] == Self.peerID {
+            leases[pier] = nil
+            emit(["type": "lease", "pier": .string(pier), "holder": nil])
+        }
+        return (200, ["pier": .string(pier), "held_by_me": false])
+    }
+
+    private func makeConfirmToken(operation: String, args: JSONValue?) -> String {
+        counter += 1
+        let token = "confirm-\(counter)"
+        confirmTokens[token] = (operation, args ?? .null)
+        return token
+    }
+
+    private func hasControl(_ pier: String) -> Bool {
+        let info = scenario["piers"]?.arrayValue?.first { $0["id"]?.stringValue == pier }
+        let permitted = scenario["permissions"]?.arrayValue?.contains("control") ?? true
+        return permitted && info?["access"]?.stringValue == "control" && info?["reachable"]?.boolValue != false
+    }
+
+    // MARK: Operations
+
+    private func invoke(
+        pier: String, name: String, body: JSONValue, key: String?, confirmToken: String?
+    ) -> (HTTPResponse.Status, JSONValue) {
+        let storeKey = key.map { "\(pier)/\($0)" }
+        if let storeKey, let stored = idempotent[storeKey] { return stored }
+        let answer = run(pier: pier, name: name, body: body, confirmToken: confirmToken, key: key)
+        if let storeKey { idempotent[storeKey] = answer }
+        return answer
+    }
+
+    private func refuse(
+        _ kind: String, _ reason: String, status: HTTPResponse.Status = .conflict, detail: JSONValue? = nil
+    ) -> (HTTPResponse.Status, JSONValue) {
+        var fields: [String: JSONValue] = ["error": .string(kind), "reason": .string(reason)]
+        if let detail { fields["detail"] = detail }
+        return (status, .object(fields))
+    }
+
+    private func run(
+        pier: String, name: String, body: JSONValue, confirmToken: String?, key: String?
+    ) -> (HTTPResponse.Status, JSONValue) {
+        guard let entry = catalogue[name], let info = MasterAPI.operationInfo(entry) else {
+            return refuse("unavailable", "This Master does not offer \(name).", status: .notFound)
+        }
+        let args = body["args"]?.objectValue ?? [:]
+        if let fault = info.validate(args) {
+            return refuse(
+                "invalid", "\(fault.path) \(fault.reason)", status: .badRequest, detail: ["path": .string(fault.path)])
+        }
+        if let reason = scenario["unavailable"]?[pier]?[name]?.stringValue {
+            return refuse("unavailable", reason)
+        }
+        if info.operationClass != .read, !hasControl(pier) {
+            return refuse("refused", "This device can only view this Pier.", status: .forbidden)
+        }
+        if info.operationClass == .emergency, body["confirmed"]?.boolValue != true {
+            return refuse("refused", "An emergency action needs a deliberate confirmation.", status: .forbidden)
+        }
+        if info.needsLease, leases[pier] != Self.peerID {
+            if let holder = leases[pier] {
+                return refuse(
+                    "refused", "\(holder) holds the lease on this Pier.",
+                    detail: ["kind": "lease_held", "holder": .string(holder), "can_take": true])
+            }
+            return refuse("refused", "Take the lease on this Pier first.", detail: ["kind": "no_lease"])
+        }
+        if info.operationClass == .confirm {
+            guard let confirmToken, let stored = confirmTokens.removeValue(forKey: confirmToken),
+                stored.operation == name, stored.args == .object(args)
+            else {
+                let token = makeConfirmToken(operation: name, args: .object(args))
+                let reason = scenario["consequences"]?[name]?.stringValue ?? info.description ?? name
+                return (
+                    .conflict,
+                    [
+                        "error": "confirmation_required", "reason": .string(reason), "confirm_token": .string(token),
+                        "expires_in": 60,
+                    ]
+                )
+            }
+        }
+
+        var result: JSONValue? = scenario["results"]?[name]
+        if name.hasSuffix(".hold_start") {
+            counter += 1
+            let id = "hold-\(counter)"
+            let family = String(name.dropLast(".hold_start".count))
+            holds[id] = (pier, family, clock.now())
+            schedule(after: 0, scaled: false) { master in await master.deadmanLoop(id: id) }
+            result = ["hold_id": .string(id)]
+        } else if name.hasSuffix(".hold_beat") {
+            let id = args["hold_id"]?.stringValue ?? ""
+            let alive = holds[id] != nil
+            holds[id]?.lastBeat = clock.now()
+            return (.ok, ["ok": true, "result": .bool(alive)])
+        } else if name.hasSuffix(".hold_stop") {
+            let id = args["hold_id"]?.stringValue ?? ""
+            result = .bool(holds.removeValue(forKey: id) != nil)
+        } else if name.hasSuffix(".status") || name.hasSuffix(".names") {
+            result = statusBody(pier: pier, area: info.area)
+        }
+
+        runEffects(of: name, pier: pier, args: args)
+
+        counter += 1
+        let correlation = "op-\(counter)"
+        if info.longRunning {
+            let requestID = key.map(JSONValue.string) ?? .null
+            emit([
+                "type": "op.started", "correlation_id": .string(correlation), "request_id": requestID,
+                "pier": .string(pier), "operation": .string(name),
+            ])
+            schedule(after: scenario["durations"]?[name]?.doubleValue ?? 3) { master in
+                await master.emit([
+                    "type": "op.finished", "correlation_id": .string(correlation), "request_id": requestID,
+                    "pier": .string(pier), "operation": .string(name), "outcome": "ok",
+                ])
+            }
+        }
+        var fields: [String: JSONValue] = ["ok": true, "correlation_id": .string(correlation)]
+        if let result { fields["result"] = result }
+        return (.ok, .object(fields))
+    }
+
+    private func statusBody(pier: String, area: String) -> JSONValue {
+        var result: [String: JSONValue] = [:]
+        for (key, value) in values[pier] ?? [:] where key.hasPrefix(area + ".") {
+            result[String(key.dropFirst(area.count + 1))] = value
+        }
+        return .object(result)
+    }
+
+    /// As the real Master: a hold whose keep-alives stop ends by itself (`HoldManager.check`).
+    private func deadmanLoop(id: String) async {
+        while let hold = holds[id] {
+            try? await clock.sleep(seconds: 0.1)
+            if Task.isCancelled { return }
+            guard let current = holds[id] else { return }
+            if clock.now().timeIntervalSince(current.lastBeat) >= 0.6 {
+                holds[id] = nil
+                runEffects(of: "\(hold.family).hold_stop", pier: hold.pier, args: [:])
+                return
+            }
+        }
+    }
+
+    private func runEffects(of name: String, pier: String, args: [String: JSONValue]) {
+        for step in scenario["effects"]?[name]?.arrayValue ?? [] {
+            let delay = step["after_s"]?.doubleValue ?? 0
+            let changes = step["set"]?.objectValue ?? [:]
+            if delay == 0 {
+                apply(changes, pier: pier, args: args)
+            } else {
+                schedule(after: delay) { master in await master.apply(changes, pier: pier, args: args) }
+            }
+        }
+    }
+
+    private func apply(_ changes: [String: JSONValue], pier: String, args: [String: JSONValue]) {
+        for key in changes.keys.sorted() {
+            var value = changes[key]!
+            if let name = value["$arg"]?.stringValue {
+                value = args[name] ?? .null
+            } else if let add = value["$add"]?.arrayValue, add.count == 2, let stateKey = add[0].stringValue,
+                let argName = add[1].stringValue
+            {
+                value = .number((values[pier]?[stateKey]?.doubleValue ?? 0) + (args[argName]?.doubleValue ?? 0))
+            }
+            set(key, to: value, pier: pier)
+        }
+    }
+
+    private func set(_ key: String, to value: JSONValue, pier: String) {
+        values[pier, default: [:]][key] = value
+        emit([
+            "type": "delta", "pier": .string(pier), "key": .string(key), "value": value,
+            "as_of": .string(WireTime.string(clock.now())),
+        ])
+    }
+
+    /// The mock's stand-in for the Master rendering a preview: it applies the requested stretch so the control
+    /// visibly works. A real Master does this in `galileo.control_surface.frames`.
+    private func rendered(query: [String: String]) -> Data? {
+        guard let preview else { return nil }
+        let black = query["black"].flatMap(Double.init) ?? 0
+        let mid = query["mid"].flatMap(Double.init) ?? 0.5
+        let white = query["white"].flatMap(Double.init) ?? 1
+        if black == 0, mid == 0.5, white == 1 { return preview }
+        guard let image = CIImage(data: preview) else { return preview }
+        let scale = 1 / max(0.01, white - black)
+        let gamma = log(max(0.01, min(0.99, mid))) / log(0.5)
+        let output = image
+            .applyingFilter(
+                "CIColorMatrix",
+                parameters: [
+                    "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
+                    "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
+                    "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
+                    "inputBiasVector": CIVector(x: -black * scale, y: -black * scale, z: -black * scale, w: 0),
+                ]
+            )
+            .applyingFilter("CIGammaAdjust", parameters: ["inputPower": gamma])
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        return CIContext().jpegRepresentation(of: output, colorSpace: colorSpace) ?? preview
+    }
+
+    // MARK: Stream
+
+    public func connect(epoch clientEpoch: String?, last: Int?) async throws -> AsyncThrowingStream<Data, any Error> {
+        if revoked { throw LinkError.unpaired }
+        stream?.finish()
+        let (frames, continuation) = AsyncThrowingStream<Data, any Error>.makeStream()
+        stream = continuation
+
+        if let last, let clientEpoch {
+            let oldest = ring.first?.seq ?? (seq + 1)
+            if clientEpoch == epoch, last >= oldest - 1 {
+                yield(["type": "hello", "epoch": .string(epoch), "seq": .number(Double(seq))])
+                for entry in ring where entry.seq > last {
+                    yield(["seq": .number(Double(entry.seq)), "data": entry.data])
+                }
+            } else {
+                yield(["type": "resync", "epoch": .string(epoch), "seq": .number(Double(seq))])
+                emitSnapshot()
+            }
+        } else {
+            yield(["type": "hello", "epoch": .string(epoch), "seq": .number(Double(seq))])
+            emitSnapshot()
+        }
+        startScriptOnce()
+        return frames
+    }
+
+    private func emitSnapshot() {
+        var piers: [String: JSONValue] = [:]
+        for (pier, content) in values {
+            var merged = content
+            if let holder = leases[pier] { merged["lease.holder"] = .string(holder) }
+            piers[pier] = .object(merged)
+        }
+        emit(["type": "snapshot", "as_of": .string(WireTime.string(clock.now())), "piers": .object(piers)])
+    }
+
+    private func emit(_ data: JSONValue) {
+        seq += 1
+        ring.append((seq, data))
+        if ring.count > ringLimit { ring.removeFirst(ring.count - ringLimit) }
+        yield(["seq": .number(Double(seq)), "data": data])
+    }
+
+    private func yield(_ frame: JSONValue) {
+        if let data = try? JSONEncoder().encode(frame) { stream?.yield(data) }
+    }
+
+    /// Ends the connection without warning.
+    public func dropStream() {
+        stream?.finish(throwing: URLError(.networkConnectionLost))
+        stream = nil
+    }
+
+    /// The Master restarts its stream, so nothing can be replayed.
+    public func forceResync() {
+        counter += 1
+        epoch = "mock-epoch-\(counter + 1)"
+        ring = []
+        dropStream()
+    }
+
+    public func revoke() {
+        revoked = true
+        dropStream()
+    }
+
+    // MARK: Script
+
+    private func schedule(
+        after seconds: Double, scaled: Bool = true, _ body: @escaping @Sendable (MockMaster) async -> Void
+    ) {
+        let scale = scaled ? timeScale : 1
+        let clock = self.clock
+        tasks.removeAll { $0.isCancelled }
+        tasks.append(
+            Task { [weak self] in
+                if seconds > 0 {
+                    do { try await clock.sleep(seconds: seconds / scale) } catch { return }
+                }
+                guard let self, !Task.isCancelled else { return }
+                await body(self)
+            })
+    }
+
+    private func startScriptOnce() {
+        guard started == nil else { return }
+        started = clock.now()
+        runTimeline()
+        for wave in scenario["waves"]?.arrayValue ?? [] { startWave(wave) }
+    }
+
+    private func runTimeline() {
+        let events = scenario["timeline"]?.arrayValue ?? []
+        for event in events {
+            schedule(after: event["at_s"]?.doubleValue ?? 0) { master in await master.play(event) }
+        }
+        if let loop = scenario["loop_s"]?.doubleValue, loop > 0, !events.isEmpty {
+            schedule(after: loop) { master in await master.runTimeline() }
+        }
+    }
+
+    private func play(_ event: JSONValue) {
+        if let changes = event["set"]?.objectValue, let pier = event["pier"]?.stringValue {
+            apply(changes, pier: pier, args: [:])
+        }
+        if case .object(var alert)? = event["alert"] {
+            counter += 1
+            alert["id"] = .string("a\(counter)")
+            alert["time"] = .string(WireTime.string(clock.now()))
+            alert["type"] = "alert"
+            alerts.append(.object(alert))
+            if alerts.count > 100 { alerts.removeFirst() }
+            emit(.object(alert))
+        }
+        switch event["do"]?.stringValue {
+        case "drop": dropStream()
+        case "resync": forceResync()
+        case "revoke": revoke()
+        default: break
+        }
+    }
+
+    private func startWave(_ wave: JSONValue) {
+        guard let every = wave["every_s"]?.doubleValue else { return }
+        schedule(after: every) { master in await master.waveTick(wave: wave, every: every) }
+    }
+
+    private func waveTick(wave: JSONValue, every: Double) {
+        guard let pier = wave["pier"]?.stringValue, let key = wave["key"]?.stringValue else { return }
+        let elapsed = clock.now().timeIntervalSince(started ?? clock.now()) * timeScale
+        func sine(_ spec: JSONValue) -> Double {
+            let amplitude = spec["amp"]?.doubleValue ?? 0
+            let period = max(0.001, spec["period_s"]?.doubleValue ?? 1)
+            return (spec["base"]?.doubleValue ?? 0) + amplitude * sin(2 * .pi * elapsed / period)
+        }
+        let value: JSONValue
+        if let fields = wave["fields"]?.objectValue {
+            value = .object(fields.mapValues { .number(sine($0)) })
+        } else if let ramp = wave["ramp_s"]?.doubleValue {
+            value = .number(elapsed.truncatingRemainder(dividingBy: ramp) / ramp)
+        } else {
+            value = .number(sine(wave))
+        }
+        set(key, to: value, pier: pier)
+        schedule(after: every) { master in await master.waveTick(wave: wave, every: every) }
+    }
+}
+
+extension HTTPField.Name {
+    fileprivate static let confirmToken = HTTPField.Name("X-Confirm-Token")!
+    fileprivate static let idempotencyKey = HTTPField.Name("Idempotency-Key")!
+}
+
+extension MasterConnection {
+    /// The connection demonstration mode uses: the real client code, in front of the mock.
+    public static func demo(_ master: MockMaster, identity: ClientIdentity, token: String? = nil) -> MasterConnection {
+        let api = MasterAPI(baseURL: URL(fileURLWithPath: "/"), transport: master, identity: identity, token: token)
+        return MasterConnection(api: api, stream: master)
+    }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "invalid-arguments",
+  "description": "Arguments are checked against the catalogue's schema first: an out-of-range value is reported against its field and nothing is sent.",
+  "status": "planned",
+  "requirements": ["MAPP-CTL-030"],
+  "steps": [
+    { "do": "act", "action": "invoke", "pier": "p1", "operation": "mount.slew", "args": { "ra_deg": 400, "dec_deg": 0 } },
+    { "do": "expect", "outcome": "Invalid", "state": { "invalid.path": "ra_deg", "requests_sent": 0 } }
+  ]
+}

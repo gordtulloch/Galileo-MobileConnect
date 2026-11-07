@@ -1,0 +1,17 @@
+{
+  "name": "hold-connection-lost",
+  "description": "The stream drops during a hold. The client stops beating and sends no stop it could not deliver: the Master's deadman ends the motion, and the UI says so.",
+  "status": "implemented",
+  "requirements": ["MAPP-CTL-060", "MAPP-DEV-030"],
+  "clock_start": "2026-11-06T02:00:00Z",
+  "steps": [
+    { "do": "act", "action": "stream_start" },
+    { "do": "stream", "frame": { "type": "hello", "epoch": "e1", "seq": 0 } },
+    { "do": "act", "action": "hold_press", "pier": "p1", "family": "focus", "args": { "direction": 1 } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_start" },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": { "hold_id": "h1" } } },
+    { "do": "expect", "state": { "hold": "Holding" } },
+    { "do": "drop" },
+    { "do": "expect", "state": { "hold": "Stopped: connection lost", "requests_sent": 1 } }
+  ]
+}

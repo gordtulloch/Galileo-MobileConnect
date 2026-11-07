@@ -1,0 +1,22 @@
+{
+  "name": "hold-released",
+  "description": "A held control: the start, keep-alives every 250 ms, and a stop on release. Beats use `focus.hold_beat` over HTTP, as the core does.",
+  "status": "implemented",
+  "requirements": ["MAPP-CTL-060", "MAPP-DEV-030"],
+  "steps": [
+    { "do": "act", "action": "hold_press", "pier": "p1", "family": "focus", "args": { "direction": 1 } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_start", "body": { "args": { "direction": 1 } } },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": { "hold_id": "h1" } } },
+    { "do": "expect", "state": { "hold": "Holding" } },
+    { "do": "clock", "advance_s": 0.25 },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_beat", "body": { "args": { "hold_id": "h1" } } },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": true } },
+    { "do": "clock", "advance_s": 0.25 },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_beat", "body": { "args": { "hold_id": "h1" } } },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": true } },
+    { "do": "act", "action": "hold_release" },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_stop", "body": { "args": { "hold_id": "h1" } } },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": true } },
+    { "do": "expect", "state": { "hold": "Stopped: released" } }
+  ]
+}

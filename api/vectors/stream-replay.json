@@ -1,0 +1,24 @@
+{
+  "name": "stream-replay",
+  "description": "A drop the Master can replay: the state is kept, duplicates are ignored, deltas buffered before a snapshot apply after it, and an unknown message type is ignored.",
+  "status": "planned",
+  "requirements": ["MAPP-CON-070", "MAPP-OVR-050"],
+  "clock_start": "2026-11-06T02:00:00Z",
+  "steps": [
+    { "do": "act", "action": "stream_start" },
+    { "do": "stream", "frame": { "type": "hello", "epoch": "e1", "seq": 5 } },
+    { "do": "stream", "frame": { "seq": 6, "data": { "type": "delta", "pier": "p1", "key": "camera.state", "value": "Exposing", "as_of": "2026-11-06T02:00:02Z" } } },
+    { "do": "expect", "outcome": "Loading" },
+    { "do": "stream", "frame": { "seq": 7, "data": { "type": "snapshot", "as_of": "2026-11-06T02:00:01Z", "piers": { "p1": { "camera": { "state": "Idle", "cooling": true } } } } } },
+    { "do": "expect", "outcome": "Live", "state": { "p1.camera.state": { "value": "Exposing" }, "p1.camera.cooling": { "value": true } } },
+    { "do": "stream", "frame": { "seq": 8, "data": { "type": "something_new", "x": 1 } } },
+    { "do": "expect", "outcome": "Live" },
+    { "do": "drop" },
+    { "do": "clock", "advance_s": 2 },
+    { "do": "expect_connect", "epoch": "e1", "last": 8 },
+    { "do": "stream", "frame": { "type": "hello", "epoch": "e1", "seq": 9 } },
+    { "do": "stream", "frame": { "seq": 7, "data": { "type": "delta", "pier": "p1", "key": "camera.state", "value": "OLD", "as_of": "2026-11-06T02:00:01Z" } } },
+    { "do": "stream", "frame": { "seq": 9, "data": { "type": "delta", "pier": "p1", "key": "camera.state", "value": "Idle", "as_of": "2026-11-06T02:00:03Z" } } },
+    { "do": "expect", "outcome": "Live", "state": { "p1.camera.state": { "value": "Idle", "stale": false }, "connection": "Connected" } }
+  ]
+}

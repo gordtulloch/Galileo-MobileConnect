@@ -1,0 +1,12 @@
+{
+  "name": "emergency",
+  "description": "An emergency action carries the client's confirmation flag, needs no lease and no second round trip, and its result lists each part.",
+  "status": "planned",
+  "requirements": ["MAPP-EMG-010", "MAPP-EMG-020"],
+  "steps": [
+    { "do": "act", "action": "emergency", "pier": "p1", "operation": "system.stop_everything" },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/system.stop_everything", "headers": { "Idempotency-Key": "k1" }, "body": { "args": {}, "confirmed": true } },
+    { "do": "receive", "status": 200, "body": { "ok": true, "result": { "parts": [ { "name": "Mount motion", "ok": false } ] } } },
+    { "do": "expect", "outcome": "Done", "state": { "operation.k1": "Done", "requests_sent": 1 } }
+  ]
+}

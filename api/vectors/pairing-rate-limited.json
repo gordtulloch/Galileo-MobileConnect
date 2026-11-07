@@ -1,0 +1,12 @@
+{
+  "name": "pairing-rate-limited",
+  "description": "A 429 from the Master becomes a plain message, not a retry.",
+  "status": "implemented",
+  "requirements": ["MAPP-CON-030"],
+  "steps": [
+    { "do": "act", "action": "pair_start" },
+    { "do": "send", "method": "POST", "path": "/connect/v1/pair", "auth": false },
+    { "do": "receive", "status": 429, "body": { "error": "too many requests" } },
+    { "do": "expect", "outcome": "Failed", "state": { "token_stored": false, "requests_sent": 1 } }
+  ]
+}

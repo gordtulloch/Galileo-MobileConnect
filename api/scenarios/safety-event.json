@@ -1,0 +1,5 @@
+{ "extends": "normal-night", "name": "safety-event", "description": "Rain stops the session; the app can only acknowledge.",
+  "loop_s": 0, "timeline": [
+    { "at_s": 5, "pier": "p1", "set": { "safety.overall": "unsafe", "safety.inputs": { "Rain": "RAIN DETECTED", "Wind": "8 km/h", "Cloud": "Overcast", "Sun altitude": "-34°", "Roof": "Closing", "Power": "Mains" }, "session.state": "Stopped", "session.stop_reason": "Safety monitor: rain detected", "imaging.state": "Idle", "camera.state": "Idle", "mount.tracking": false, "activity.session": "Stopped", "activity.capture": "Idle", "activity.mount": "Parking" } },
+    { "at_s": 5, "alert": { "severity": "critical", "pier": "p1", "message": "Unsafe: rain detected. Session stopped; closing up.", "important": true } }
+  ] }

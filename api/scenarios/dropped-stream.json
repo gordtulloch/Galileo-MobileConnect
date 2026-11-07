@@ -1,0 +1,7 @@
+{ "extends": "normal-night", "name": "dropped-stream", "description": "The stream drops and replays, then drops past the ring and must resynchronise.",
+  "loop_s": 0, "timeline": [
+    { "at_s": 2, "pier": "p1", "set": { "imaging.frame": 8 } },
+    { "at_s": 3, "do": "drop" },
+    { "at_s": 8, "pier": "p1", "set": { "imaging.frame": 9 } },
+    { "at_s": 10, "do": "resync" }
+  ] }

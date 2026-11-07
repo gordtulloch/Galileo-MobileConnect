@@ -1,0 +1,12 @@
+{
+  "name": "confirmation-declined",
+  "description": "An operation on the client's own always-confirm list that the Master classes as plain `operate`: the dialog comes first, and declining it sends nothing at all.",
+  "status": "planned",
+  "requirements": ["MAPP-CTL-040"],
+  "steps": [
+    { "do": "act", "action": "invoke", "pier": "p1", "operation": "camera.abort" },
+    { "do": "expect", "outcome": "ConfirmationRequired", "state": { "requests_sent": 0 } },
+    { "do": "act", "action": "decline" },
+    { "do": "expect", "state": { "requests_sent": 0 } }
+  ]
+}
