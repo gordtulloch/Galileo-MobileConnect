@@ -5,7 +5,7 @@ import HTTPTypes
 /// The typed client (`S-API`): a thin facade over the generated `Client`, adding identity, revocation handling,
 /// the catalogue filter and typed operation results. Nothing here can express a configuration operation.
 public struct MasterAPI: Sendable {
-    private let client: Client
+    let client: Client
     private let credentials: TokenHolder
     private let identity: ClientIdentity
     private let identityChanged: @Sendable () -> Bool
@@ -111,7 +111,7 @@ public struct MasterAPI: Sendable {
             let body = try response.body.json
             return Capabilities(
                 areas: body.areas, skyStreamAvailable: body.sky_stream?.available,
-                skyStreamReason: body.sky_stream?.reason)
+                skyStreamReason: body.sky_stream?.reason, skyStreamRate: body.sky_stream?.rate_per_s)
         case .unauthorized: throw LinkError.unpaired
         case .undocumented(let status, _):
             if status == 403 || status == 404 { return nil }
@@ -278,13 +278,22 @@ public struct MasterAPI: Sendable {
     }
 
     /// The Master renders the picture; the stretch (0-100) travels to it so that it agrees with the desktop (`S-IMG`).
-    public func preview(pier: String, width: Int, quality: Int, stretch: Int) async throws -> Data? {
+    public struct PreviewImage: Sendable {
+        public var data: Data
+        /// The full frame's size, which tile addressing needs. Nil from a Master that doesn't say.
+        public var frameWidth: Int?
+        public var frameHeight: Int?
+    }
+
+    public func preview(pier: String, width: Int, quality: Int, stretch: Int) async throws -> PreviewImage? {
         let output = try await calling {
             try await client.getPreview(query: .init(pier: pier, w: width, q: quality, stretch: stretch))
         }
         switch output {
         case .ok(let response):
-            return try await Data(collecting: response.body.jpeg, upTo: 64 * 1024 * 1024)
+            return PreviewImage(
+                data: try await Data(collecting: response.body.jpeg, upTo: 64 * 1024 * 1024),
+                frameWidth: response.headers.X_hyphen_Frame_hyphen_Width, frameHeight: response.headers.X_hyphen_Frame_hyphen_Height)
         case .notFound: return nil
         case .unauthorized: throw LinkError.unpaired
         case .undocumented(let status, _): throw Self.unexpected(status)
@@ -292,6 +301,26 @@ public struct MasterAPI: Sendable {
     }
 
     // MARK: Errors
+
+    func callingForSky<T>(_ call: () async throws -> T) async throws -> T { try await calling(call) }
+
+    /// One read-class operation's value, for things the screens ask about rather than do. Not in the ledger.
+    public func read(pier: String, name: String, args: [String: JSONValue], key: String) async -> JSONValue? {
+        if case .ok(let value, _) = await invoke(pier: pier, name: name, args: args, idempotencyKey: key) { return value }
+        return nil
+    }
+
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int) async throws -> Data? {
+        let output = try await calling {
+            try await client.getTile(query: .init(pier: pier, z: level, x: x, y: y, stretch: stretch))
+        }
+        switch output {
+        case .ok(let response): return try await Data(collecting: response.body.jpeg, upTo: 4 * 1024 * 1024)
+        case .notFound: return nil
+        case .unauthorized: throw LinkError.unpaired
+        case .undocumented(let status, _): throw Self.unexpected(status)
+        }
+    }
 
     private static func unexpected(_ status: Int) -> LinkError {
         .unexpected("The Master gave an unexpected answer (\(status)).")

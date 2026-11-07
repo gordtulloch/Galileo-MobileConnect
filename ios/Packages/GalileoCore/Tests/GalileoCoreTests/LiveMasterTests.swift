@@ -55,7 +55,32 @@ struct LiveMasterTests {
         }
         #expect(await eventually { await session.current.value("filter.current", pier: "p1", now: Date())?.value == "Ha" })
         let preview = try await session.preview(pier: "p1", width: 800, stretch: 50)
-        #expect((preview?.count ?? 0) > 1000)
+        #expect((preview?.data.count ?? 0) > 1000)
+        #expect(preview?.frameWidth == 1200)
+        #expect(try await session.tile(pier: "p1", level: 0, x: 0, y: 0, stretch: 50) != nil)
+        #expect(try await session.tile(pier: "p1", level: 0, x: 99, y: 99, stretch: 50) == nil)
+
+        // The standalone mock's sky: the one a real device talks to. Its encoder is Python's, decoded here.
+        #expect(await link.api.skySite(pier: "p1") != .failed)
+        let skyStore = SkyStore(api: link.api)
+        await skyStore.setRate(perSecond: 100)
+        let seen = Locked<[SkyObject]>([])
+        await skyStore.look(raDeg: 83.8, decDeg: -5.4, radius: 180, level: 4) { objects in seen.withLock { $0 = objects } }
+        #expect(await eventually(timeout: 8) { seen.current.count > 2000 })
+        await skyStore.stop()
+        #expect(seen.current.contains { $0.isDeepSky })
+        let figures = try #require(await link.api.constellations())
+        #expect(figures.names.contains { $0.name == "Orion" } && figures.lines.first?.count == 6)
+        #expect(await link.api.identify(index: 2500)?.name == "M 42")
+        let vega = try #require(await link.api.identify(index: 2500 + 6 + 7 + 7 + 5 + 5))
+        #expect(vega.name == "Vega")
+        #expect(await link.api.checkPosition(pier: "p1", raDeg: 83.8, decDeg: -5.4) != nil)
+        #expect(await link.api.ephemeris(from: Date(), to: Date().addingTimeInterval(3600), stepSeconds: 600)?.count == 7)
+        guard case .confirm(let goTo) = await session.goToQuestion(pier: "p1", name: "M 42", raDeg: 83.8, decDeg: -5.4) else {
+            Issue.record("expected the go-to question")
+            return
+        }
+        #expect(goTo.title == "Slew to M 42")
         await session.stop()
 
         // A pin that doesn't match: refused, reported as such, and no fall-back.
@@ -166,6 +191,34 @@ struct RealPluginTests {
             return
         }
         #expect(await eventually(timeout: 6) { await session.current.value("mount.parked", pier: pier, now: Date())?.value == true })
+
+        // The sky, from core's real streaming service.
+        guard case .site(let site) = await link.api.skySite(pier: pier) else {
+            Issue.record("expected the site")
+            return
+        }
+        #expect(site.latitude == 49.9 && site.horizon.count == 2)
+        #expect(await link.api.skySite(pier: "99") == .noLocation, "only this means go and set one on the desktop")
+        let realStore = SkyStore(api: link.api)
+        let seen = Locked<[SkyObject]>([])
+        await realStore.look(raDeg: 83.8, decDeg: -5.4, radius: 5, level: 4) { objects in seen.withLock { $0 = objects } }
+        #expect(await eventually(timeout: 6) { seen.current.count == 3 }, "core's encoding, decoded here")
+        await realStore.stop()
+        #expect(seen.current.contains { $0.isDeepSky && abs($0.raDeg - 83.82) < 0.001 })
+        let named = try #require(await link.api.identify(index: 3))
+        #expect(named.name == "M 42" && named.isDeepSky)
+        #expect(await link.api.identify(index: 0)?.name == "Rigel")
+        #expect(await link.api.constellations()?.names.first?.name == "Orion")
+        let check = try #require(await link.api.checkPosition(pier: pier, raDeg: 83.8, decDeg: -5.4))
+        #expect(check.aboveHorizon || check.reason != nil)
+        let moon = await link.api.ephemeris(from: Date(), to: Date().addingTimeInterval(3600), stepSeconds: 1800)
+        #expect(moon?.count == 3 && moon?.first?.bodies.first?.name == "Moon")
+        #expect(current.capabilities?.skyStreamAvailable == true)
+        guard case .confirm(let goTo) = await session.goToQuestion(pier: pier, name: "M 42", raDeg: 83.8, decDeg: -5.4) else {
+            Issue.record("expected the go-to question")
+            return
+        }
+        #expect(goTo.details.contains { $0.hasPrefix("Altitude now:") })
 
         // A held control, with real keep-alives.
         await session.startHold(pier: pier, family: "focus", args: ["direction": 1])

@@ -523,7 +523,14 @@ paths:
             maximum: 100
       responses:
         "200":
-          description: The image.
+          description: The image. The headers give the full frame's size, which tile addressing needs.
+          headers:
+            X-Frame-Width:
+              schema:
+                type: integer
+            X-Frame-Height:
+              schema:
+                type: integer
           content:
             image/jpeg:
               schema:
@@ -542,7 +549,8 @@ paths:
     get:
       tags: [images]
       operationId: getTile
-      summary: One tile of the zoom pyramid of the Pier's current frame.
+      summary: One 256-pixel tile of the zoom pyramid of the Pier's current frame.
+      description: Level `z` 0 is full resolution and each level halves it; `x` and `y` count tiles from the top left.
       x-galileo-status: implemented
       parameters:
         - name: pier
@@ -596,11 +604,14 @@ paths:
     get:
       tags: [sky]
       operationId: getSkyCatalog
-      summary: Stars and deep-sky objects for a region, brightest first.
+      summary: One page of stars and deep-sky objects for a region, brightest first.
       description: |
-        Returns a compact binary delta frame (format owned by the core streaming service, SDD D4). The
-        `cursor` is opaque and stateless, so an interrupted request resumes anywhere.
-      x-galileo-status: planned
+        The body is `galileo.skystream`'s binary frame, encoding 1: `GSK`, version, kind and count, then
+        objects sorted by RA as zigzag-varint deltas of RA and Dec (degrees x 1000), magnitude (x 100) and
+        catalog index, each followed by one byte of kind (0 star, 1 deep-sky). `X-Sky-Next` is the cursor
+        for the next page, empty when done. The cursor is opaque and stateless, so an interrupted request
+        resumes anywhere. 429 and 503 mean back off, not failure.
+      x-galileo-status: implemented
       parameters:
         - name: ra
           in: query
@@ -621,7 +632,7 @@ paths:
             type: number
         - name: mag
           in: query
-          required: true
+          required: false
           description: Limiting magnitude.
           schema:
             type: number
@@ -639,11 +650,24 @@ paths:
       responses:
         "200":
           description: A binary sky frame.
+          headers:
+            X-Sky-Next:
+              schema:
+                type: string
+            X-Sky-Total:
+              schema:
+                type: integer
           content:
             application/octet-stream:
               schema:
                 type: string
                 format: binary
+        "400":
+          description: The region or cursor is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
         "401":
           $ref: "#/components/responses/Unauthorised"
         "429":
@@ -652,18 +676,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SimpleError"
-
+        "503":
+          description: Serving as many clients as this computer can, or the Master's control surface isn't running; back off.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
   /mobileconnect/v1/sky/ephemeris:
     get:
       tags: [sky]
       operationId: getEphemeris
-      summary: Positions of the Sun, Moon, planets and minor bodies for an instant or a range.
-      x-galileo-status: planned
+      summary: Positions of the Sun, Moon and planets for an instant or a range.
+      x-galileo-status: implemented
       parameters:
         - name: t
           in: query
           required: false
-          description: An instant (RFC 3339). Use `from`/`to` for a range.
+          description: An instant (RFC 3339). Use `from`, `to` and `step` for a range.
           schema:
             type: string
             format: date-time
@@ -679,6 +708,12 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: step
+          in: query
+          required: false
+          description: Seconds between samples in a range.
+          schema:
+            type: number
       responses:
         "200":
           description: A sampled time series the client interpolates.
@@ -686,15 +721,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ephemeris"
+        "400":
+          description: Not a valid instant or range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
         "401":
           $ref: "#/components/responses/Unauthorised"
-
+        "503":
+          description: No ephemeris is available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
   /mobileconnect/v1/sky/site:
     get:
       tags: [sky]
       operationId: getSite
-      summary: The Observatory's location and horizon profile.
-      x-galileo-status: planned
+      summary: The location and horizon profile of a Pier's Observatory.
+      x-galileo-status: implemented
+      parameters:
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Site block; `version` changes only when the site or horizon does.
@@ -704,6 +756,94 @@ paths:
                 $ref: "#/components/schemas/Site"
         "401":
           $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: This Pier's Observatory has no location set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+  /mobileconnect/v1/sky/constellations:
+    get:
+      tags: [sky]
+      operationId: getConstellations
+      summary: The constellations' stick figures and names.
+      description: Fixed on the sky, so a client needs this once. Empty if the Master has no copy yet.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: The figures, as J2000 polylines of `[ra_deg, dec_deg]`, and a place for each name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Constellations"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+  /mobileconnect/v1/sky/check:
+    get:
+      tags: [sky]
+      operationId: checkPosition
+      summary: A position's altitude now and the Master's horizon check.
+      description: What the go-to confirmation shows. The Master still enforces its limits when asked to slew.
+      x-galileo-status: implemented
+      parameters:
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ra
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: dec
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        "200":
+          description: The check.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionCheck"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: This Pier's Observatory has no location set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+  /mobileconnect/v1/sky/identify:
+    get:
+      tags: [sky]
+      operationId: identifyObject
+      summary: What a catalog index is.
+      description: The stream carries positions and indexes only; this names one the user tapped.
+      x-galileo-status: implemented
+      parameters:
+        - name: index
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The object. A star may have no name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentifiedObject"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: No such index.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
 
 components:
   securitySchemes:
@@ -925,6 +1065,11 @@ components:
           type: integer
         max_concurrent:
           type: integer
+        max_page:
+          type: integer
+        rate_per_s:
+          type: number
+          description: Requests a second this client may make. Stay under it.
 
     Arg:
       type: object
@@ -1103,6 +1248,71 @@ components:
         important:
           type: boolean
           description: The Master marks alerts worth a local notification.
+
+    Constellations:
+      type: object
+      required: [lines, names]
+      properties:
+        lines:
+          type: array
+          items:
+            type: array
+            items:
+              type: array
+              items:
+                type: number
+        names:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConstellationName"
+
+    ConstellationName:
+      type: object
+      required: [name, ra_deg, dec_deg]
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        ra_deg:
+          type: number
+        dec_deg:
+          type: number
+
+    PositionCheck:
+      type: object
+      required: [altitude_deg, azimuth_deg, above_horizon]
+      properties:
+        altitude_deg:
+          type: number
+        azimuth_deg:
+          type: number
+        above_horizon:
+          type: boolean
+          description: Above this Observatory's horizon profile at that azimuth.
+        reason:
+          type: string
+          description: Written for a person; show it as is.
+
+    IdentifiedObject:
+      type: object
+      required: [index, kind, ra_deg, dec_deg]
+      properties:
+        index:
+          type: integer
+        kind:
+          type: string
+          description: "`star` or `deep_sky`."
+        name:
+          type: string
+        type:
+          type: string
+        ra_deg:
+          type: number
+        dec_deg:
+          type: number
+        magnitude:
+          type: number
 
     EphemerisBody:
       type: object

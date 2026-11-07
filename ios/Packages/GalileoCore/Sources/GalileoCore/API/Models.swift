@@ -166,11 +166,13 @@ public struct Capabilities: Sendable, Equatable {
     public var areas: [String]
     public var skyStreamAvailable: Bool?
     public var skyStreamReason: String?
+    public var skyStreamRate: Double?
 
-    public init(areas: [String] = [], skyStreamAvailable: Bool? = nil, skyStreamReason: String? = nil) {
+    public init(areas: [String] = [], skyStreamAvailable: Bool? = nil, skyStreamReason: String? = nil, skyStreamRate: Double? = nil) {
         self.areas = areas
         self.skyStreamAvailable = skyStreamAvailable
         self.skyStreamReason = skyStreamReason
+        self.skyStreamRate = skyStreamRate
     }
 }
 

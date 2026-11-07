@@ -2,7 +2,7 @@
 
 Native **iOS/iPadOS and Android** client apps — plus a **Meta Quest 2/3 edition** of the Android app — for [Galileo](https://github.com/gordtulloch/Galileo), the cross-platform astrophotography imaging application. The apps let you watch and operate a running Galileo observatory from a **tablet** (the primary target) or a phone — connect equipment, find and centre targets, focus, guide, run and author sessions and schedules, and respond to safety events — without going back to the computer. They **operate** an observatory; they never **configure** one.
 
-> **Status: In Design** (a feasibility spike of the Meta Quest VR client on the Quest 2 has succeeded and the VR client is confirmed). The iOS app runs on the simulator against a scripted mock Master, with connection, pairing, the shell, safety and emergency, and the Overview, Equipment, Imaging, Focus, Solve, Guiding, Flip, Sessions and Safety screens. It has also been tested against the draft MobileConnect plugin on Galileo's real server code with fake devices, and has paired with a mock Master from a real iPad, but hasn't yet run with real equipment. Android and Quest have not started. The design documents are drafted and under review. See [Status](#status).
+> **Status: In Design** (a feasibility spike of the Meta Quest VR client on the Quest 2 has succeeded and the VR client is confirmed). The iOS app runs on the simulator against a scripted mock Master, with connection, pairing, the shell, safety and emergency, and the Overview, Equipment, Sky, Imaging, Focus, Solve, Guiding, Flip, Sessions and Safety screens: every MVP screen. It has also been tested against the draft MobileConnect plugin on Galileo's real server code with fake devices, and has paired with a mock Master from a real iPad, but hasn't yet run with real equipment. Android and Quest have not started. The design documents are drafted and under review. See [Status](#status).
 
 ---
 
@@ -81,7 +81,7 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 |---|---|
 | Stage | **In development** (iOS); in design (Android, Quest) |
 | Done | Scope document (PSD); SRS, RTM, shared SDD and iOS SDD drafted; iOS: Swift client generated from `api/openapi.yaml`; `GalileoCore` core with shared vectors; mock Master (in-process and standalone); app with the screens above, UI-tested on iPad and iPhone simulators; draft server plugin in [Galileo-Plugins](https://github.com/gordtulloch/Galileo-Plugins), tested end to end with this client (2026-11-06) |
-| Next | The plugin with real equipment; the rest of the iOS MVP, chiefly Sky ([checklist](docs/CHECKLIST.md) section 5a); review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the Kotlin generator (needs a JDK); wireframes (tablet first); Quest SDD recording the VR spike's findings |
+| Next | The plugin with real equipment; what's left of the iOS MVP needs operations in core ([checklist](docs/CHECKLIST.md) section 5a) ([checklist](docs/CHECKLIST.md) section 5a); review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the Kotlin generator (needs a JDK); wireframes (tablet first); Quest SDD recording the VR spike's findings |
 | Depends on | Galileo core's *Connect Link* and *Control Surface*, and the operations listed in `docs/SDD.md` §4.2 item 11 |
 
 ## Building the iOS app
@@ -92,4 +92,4 @@ On a Mac with Xcode 26, Python 3 and Node: open `ios/GalileoMobileConnect.xcodep
 
 ## Licence
 
-The apps are **not open source**: proprietary, and free of charge initially. The Galileo MobileConnect plugin and the wire API they use are open (GPL-3.0-or-later and documented), so other clients are possible. A `LICENSE` file will be added before the first release.
+The apps are **not open source**: proprietary, and free of charge initially. The Galileo MobileConnect plugin and the wire API they use are open (GPL-3.0-or-later and documented), so other clients are possible. `LICENSE` is a draft, to be reviewed before the first release.

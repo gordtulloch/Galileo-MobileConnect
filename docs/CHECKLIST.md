@@ -63,18 +63,19 @@ Each item is specified in [docs/SDD.md](SDD.md) §3; write the unit tests agains
 
 ## 5a. What the iOS MVP still needs
 
-**Screens not built** (their `S-*` component too, where one is named):
 
-- [ ] `I-SKY`, `S-SKY`: sky view and streamed sky data, with the Metal prototype on the oldest iPad (`MAPP-SKY-010`-`040`, `MAPP-STR-*`).
+Every MVP screen is built. What's below can't be finished in the app alone.
 
-**Built 2026-11-06:** Solve (`MAPP-SOL-010`, `020`), Flip (`MAPP-FLP-010`, `020`), Sessions run view and job queue (`MAPP-SES-010`-`030`, `MAPP-SCH-010`).
+
+**Built 2026-11-06:** Sky (`MAPP-SKY-010`-`040`, `MAPP-STR-*`), Solve (`MAPP-SOL-010`, `020`), Flip (`MAPP-FLP-010`, `020`), Sessions run view and job queue (`MAPP-SES-010`-`030`, `MAPP-SCH-010`), the live loop, tiles, the privacy manifest, the app icon and a licence.
+
+**To measure on a device:** the star field's frame rate (iOS IO2), the cache's size and lifetime (D3), and hold timing (D2).
 
 **Built, but short of the requirement until the server offers more** (Shared SDD 4.2, item 11):
 
 - [ ] Connecting devices (`MAPP-DEV-010`), mount jog (`MAPP-DEV-030`), autofocus (`MAPP-FOC-020`): the screens are built and work on the mock's proposed operations, and say "doesn't offer this yet" on a real Master.
 - [ ] Find home, tracking rate and pulse (`MAPP-DEV-020`); per-exposure region of interest (`MAPP-DEV-040`): no operation exists yet, and no control either.
-- [ ] Live loop (`MAPP-IMG-020`), guide-star cut-out (`MAPP-GUI-020`): the Imaging and Guiding screens show the rest; these need operations first.
-- [ ] Tiles for deep zoom (`MAPP-IMG-030`): the route exists now, and the viewer doesn't use it yet.
+- [ ] Guide-star cut-out (`MAPP-GUI-020`): `guiding.star` returns raw pixels, and the app doesn't draw them yet.
 - [ ] Solve the current or last frame (`MAPP-SOL-010`): `solve.capture` takes a new one. Skip a session step (`MAPP-SES-020`), defer a flip (`MAPP-FLP-020`), nested blocks and time remaining (`MAPP-SES-030`), current filter (`MAPP-DEV-050`): no operation or state yet.
 
 **The plugin** is drafted (`Galileo-Plugins/mobileconnect`) and not yet installed in a running Galileo: see the end of this file.
@@ -105,7 +106,8 @@ Each item is specified in [docs/SDD.md](SDD.md) §3; write the unit tests agains
 
 ## 9. Release path (iOS)
 
-- [ ] Privacy manifest and "Data Not Collected" label; review notes pointing at demo mode (PSD R7); licence text before first release (`MAPP-PLT-100`).
+- [x] Privacy manifest (`ios/App/PrivacyInfo.xcprivacy`), and a draft licence (`LICENSE`), for the owner to review.
+- [ ] "Data Not Collected" label in App Store Connect; review notes pointing at demo mode (PSD R7); the App Store link for "update this app" (`MAPP-PLT-090`) once the app has a listing.
 - [ ] TestFlight beta, then App Store submission. **Do not dispatch any GitHub build or tag a release without asking** (standing rule).
 
 ## Server-side dependencies (Galileo repo — not this repo's work)
@@ -114,4 +116,4 @@ The apps cannot be completed end to end until these exist. Until then use the mo
 
 - [x] MobileConnect plugin draft (`Galileo-Plugins/mobileconnect`): routes, event stream, state translation, Options page. Tested with the real Swift client against real Connect Link and Gateway code with fake devices.
 - [ ] Try the plugin in a running Galileo with real devices: rename `plugin.toml.draft` locally and *Install from file*. Renaming it in the repository publishes it to the Marketplace on the next push.
-- [ ] Spoke Piers through `galileo.connect_link.relay`, sky routes over `skystream.py`, block-type catalogue for session authoring, the operations in `docs/SDD.md` §4.2 item 11.
+- [ ] Spoke Piers through `galileo.connect_link.relay`, block-type catalogue for session authoring, the operations in `docs/SDD.md` §4.2 item 11.

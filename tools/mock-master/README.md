@@ -17,4 +17,4 @@ In the app, enter the address printed at start-up. The simulated person approves
 | `--no-mdns` | Don't advertise `_galileo-link._tcp` |
 | `--print-ready` | Print one line `READY <port> <fingerprint>` once listening (for tests) |
 
-`dump_catalogue.py` and `make_preview.py` regenerate the catalogue and the preview picture. The tool never touches a real Galileo installation; its token and certificate exist only in memory.
+Its sky is made-up stars from `api/scenarios/`, in `galileo.skystream`'s real encoding. `dump_catalogue.py` and `make_preview.py` regenerate the catalogue and the preview picture. The tool never touches a real Galileo installation; its token and certificate exist only in memory.

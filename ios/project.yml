@@ -37,6 +37,8 @@ targets:
         CFBundleDisplayName: Galileo MobileConnect
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # Only the system's own HTTPS and WSS: exempt from export documentation.
+        ITSAppUsesNonExemptEncryption: false
         # iOS SDD 3.2: the local-network prompt and the service Connect Link advertises.
         NSLocalNetworkUsageDescription: Galileo needs to find your observatory computer on your Wi-Fi network.
         NSBonjourServices:

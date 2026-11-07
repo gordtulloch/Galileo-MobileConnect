@@ -364,8 +364,46 @@ public actor ObservatorySession {
 
     // MARK: Images
 
-    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int) async throws -> Data? {
+    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int) async throws -> MasterAPI.PreviewImage? {
         try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch)
+    }
+
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int) async throws -> Data? {
+        try await connection.api.tile(pier: pier, level: level, x: x, y: y, stretch: stretch)
+    }
+
+    // MARK: Sky (S-SKY)
+
+    /// The sky's own connection: its requests are read-only and shouldn't sit in the operations ledger.
+    public nonisolated var api: MasterAPI { connection.api }
+
+    /// One read-class operation, for something a screen wants to know. Not in the ledger: nothing is being done.
+    public func read(pier: String, operation: String, args: [String: JSONValue] = [:]) async -> JSONValue? {
+        await connection.api.read(pier: pier, name: operation, args: args, key: makeID())
+    }
+
+    /// The go-to question (`MAPP-SKY-040`): the target, its altitude now and the Master's horizon check. Nothing is
+    /// sent unless the user accepts, and the Master still enforces its limits when it is.
+    public func goToQuestion(pier: String, name: String, raDeg: Double, decDeg: Double) async -> RequestAnswer {
+        let operation = "mount.slew"
+        let info = snapshot.operation(operation, pier: pier)
+        if let refusal = refusal(for: operation, info: info, pier: pier) { return .notAllowed(refusal) }
+        let args: [String: JSONValue] = ["ra_deg": .number(raDeg), "dec_deg": .number(decDeg)]
+        if let fault = info?.validate(args) { return .invalid(path: fault.path, reason: fault.reason) }
+        let check = await connection.api.checkPosition(pier: pier, raDeg: raDeg, decDeg: decDeg)
+        var details = [String(format: "RA %.3f°, Dec %.3f°", raDeg, decDeg)]
+        var consequence: String
+        if let check {
+            details.append(String(format: "Altitude now: %.1f°", check.altitude))
+            consequence = check.aboveHorizon ? "Above this Observatory's horizon." : check.reason ?? "Below this Observatory's horizon."
+        } else {
+            consequence = "The Master couldn't check this position against the horizon. It still enforces its limits."
+        }
+        consequence += " The mount will slew now."
+        return .confirm(
+            ConfirmationRequest(
+                pier: pier, operation: operation, args: args, title: "Slew to \(name)", details: details,
+                consequence: consequence, token: nil))
     }
 
     // MARK: Test seams

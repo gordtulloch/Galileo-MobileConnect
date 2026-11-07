@@ -4,6 +4,7 @@ import SwiftUI
 enum Area: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case equipment = "Equipment"
+    case sky = "Sky"
     case imaging = "Imaging"
     case focus = "Focus"
     case solve = "Solve"
@@ -19,6 +20,7 @@ enum Area: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "rectangle.3.group"
         case .equipment: "scope"
+        case .sky: "sparkles"
         case .imaging: "camera.aperture"
         case .focus: "circle.dotted.circle"
         case .solve: "viewfinder"
@@ -86,6 +88,7 @@ struct ShellView: View {
         switch area {
         case .overview: OverviewScreen()
         case .equipment: EquipmentScreen()
+        case .sky: SkyScreen()
         case .imaging: ImagingScreen()
         case .focus: FocusScreen()
         case .solve: SolveScreen()

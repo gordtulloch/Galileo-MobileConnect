@@ -1,0 +1,40 @@
+{
+ "description": "frame-v1.bin was written by galileo.skystream.encode_objects (encoding 1). Every client must decode it to this, sorted by RA as the encoder sorts.",
+ "objects": [
+  {
+   "index": 3,
+   "ra": 0.001,
+   "dec": 89.264,
+   "mag": 1.97,
+   "kind": 0
+  },
+  {
+   "index": 0,
+   "ra": 10.5,
+   "dec": 41.25,
+   "mag": 3.44,
+   "kind": 0
+  },
+  {
+   "index": 7,
+   "ra": 83.822,
+   "dec": -5.391,
+   "mag": 4.0,
+   "kind": 1
+  },
+  {
+   "index": 250000,
+   "ra": 180.0,
+   "dec": 0.0,
+   "mag": -1.46,
+   "kind": 0
+  },
+  {
+   "index": 1200,
+   "ra": 359.999,
+   "dec": -89.5,
+   "mag": 12.5,
+   "kind": 0
+  }
+ ]
+}

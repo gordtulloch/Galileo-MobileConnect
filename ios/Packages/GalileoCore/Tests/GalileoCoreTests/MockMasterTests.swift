@@ -278,8 +278,12 @@ struct MockMasterTests {
         #expect(await live(session))
         let plain = try #require(try await session.preview(pier: "p1", width: 800, stretch: 50))
         let stretched = try #require(try await session.preview(pier: "p1", width: 800, stretch: 80))
-        #expect(plain.count > 1000)
-        #expect(plain != stretched)
+        #expect(plain.data.count > 1000)
+        #expect(plain.data != stretched.data)
+        #expect(plain.frameWidth == 1200 && plain.frameHeight == 800, "tile addressing needs the frame's size")
+        let tile = try await session.tile(pier: "p1", level: 0, x: 1, y: 1, stretch: 50)
+        #expect((tile?.count ?? 0) > 100)
+        #expect(try await session.tile(pier: "p1", level: 0, x: 99, y: 99, stretch: 50) == nil)
         await session.stop()
     }
 }

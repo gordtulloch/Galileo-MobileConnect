@@ -2,6 +2,7 @@ import CoreImage
 import Foundation
 import GalileoAPI
 import HTTPTypes
+import simd
 
 /// The Master's side of Connect Link and the Control Surface, played from a scenario in `api/scenarios/`
 /// (`S-MOCK`, ADR-APP-006). It stands behind the same transports as a real Master, so all the client code runs
@@ -27,6 +28,7 @@ public actor MockMaster: ClientTransport, StreamTransport {
     private var confirmTokens: [String: (operation: String, args: JSONValue)] = [:]
     private var holds: [String: (pier: String, family: String, lastBeat: Date)] = [:]
     private var counter = 0
+    private var cachedSkyObjects: [SkyObject]?
 
     private var epoch = "mock-epoch-1"
     private var seq = 0
@@ -191,7 +193,30 @@ public actor MockMaster: ClientTransport, StreamTransport {
             return try reply(Int(status.code), value)
         case ("GET", "/mobileconnect/v1/preview"):
             guard let image = rendered(query: query) else { return try reply(404, ["error": "no frame yet"]) }
+            var fields: HTTPFields = [.contentType: "image/jpeg"]
+            if let extent = previewImage?.extent {
+                fields[HTTPField.Name("X-Frame-Width")!] = String(Int(extent.width))
+                fields[HTTPField.Name("X-Frame-Height")!] = String(Int(extent.height))
+            }
+            return (HTTPResponse(status: .ok, headerFields: fields), HTTPBody(image))
+        case ("GET", "/mobileconnect/v1/tile"):
+            guard let image = renderedTile(query: query) else { return try reply(404, ["error": "no such tile"]) }
             return (HTTPResponse(status: .ok, headerFields: [.contentType: "image/jpeg"]), HTTPBody(image))
+        case ("GET", "/mobileconnect/v1/sky/catalog"):
+            return skyCatalog(query: query)
+        case ("GET", "/mobileconnect/v1/sky/ephemeris"):
+            return try reply(200, skyEphemeris(query: query))
+        case ("GET", "/mobileconnect/v1/sky/site"):
+            guard let site = scenario["sky"]?["site"] else { return try reply(404, ["error": "no location set"]) }
+            return try reply(200, site)
+        case ("GET", "/mobileconnect/v1/sky/constellations"):
+            return try reply(200, skyConstellations())
+        case ("GET", "/mobileconnect/v1/sky/check"):
+            guard let check = skyCheck(query: query) else { return try reply(404, ["error": "no location set"]) }
+            return try reply(200, check)
+        case ("GET", "/mobileconnect/v1/sky/identify"):
+            guard let found = skyIdentify(query: query) else { return try reply(404, ["error": "no such object"]) }
+            return try reply(200, found)
         default:
             return try reply(404, ["error": "no such route"])
         }
@@ -348,6 +373,12 @@ public actor MockMaster: ClientTransport, StreamTransport {
         }
 
         var result: JSONValue? = scenario["results"]?[name]
+        if name.hasPrefix("sky.") {
+            guard let answer = skyOperation(name, args: args) else {
+                return refuse("refused", "There is no catalogue object called that.")
+            }
+            return (.ok, ["ok": true, "result": answer])
+        }
         if name.hasSuffix(".hold_start") {
             counter += 1
             let id = "hold-\(counter)"
@@ -457,6 +488,200 @@ public actor MockMaster: ClientTransport, StreamTransport {
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         return CIContext().jpegRepresentation(of: output, colorSpace: colorSpace) ?? preview
     }
+
+    // MARK: Sky
+
+    /// Deterministic made-up stars: this is a demonstration, and the app ships no catalog (`MAPP-STR-010`).
+    private var skyObjects: [SkyObject] {
+        if let cachedSkyObjects { return cachedSkyObjects }
+        let built = buildSkyObjects()
+        cachedSkyObjects = built
+        return built
+    }
+
+    private func buildSkyObjects() -> [SkyObject] {
+        var state = UInt64(scenario["sky"]?["seed"]?.intValue ?? 1)
+        func next() -> Double {
+            state = (state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407)
+            return Double(state >> 11) / Double(1 << 53)
+        }
+        var list: [SkyObject] = []
+        let stars = scenario["sky"]?["stars"]?.intValue ?? 0
+        for i in 0..<stars {
+            let ra = next() * 360
+            let dec = asin(next() * 2 - 1) * 180 / .pi
+            let mag = 13 - 13.5 * pow(next(), 0.33)  // many faint, few bright
+            list.append(SkyObject(index: Int32(i), raDeg: Float(ra), decDeg: Float(dec), magnitude: Float(mag), kind: 0))
+        }
+        for (i, object) in (scenario["sky"]?["objects"]?.arrayValue ?? []).enumerated() {
+            list.append(
+                SkyObject(
+                    index: Int32(stars + i), raDeg: Float(object["ra_deg"]?.doubleValue ?? 0),
+                    decDeg: Float(object["dec_deg"]?.doubleValue ?? 0), magnitude: Float(object["magnitude"]?.doubleValue ?? 99), kind: 1))
+        }
+        // The stars of the demo's constellations are real, so that their figures have something to join.
+        for star in figureStars {
+            list.append(SkyObject(index: Int32(list.count), raDeg: Float(star.ra), decDeg: Float(star.dec), magnitude: Float(star.magnitude), kind: 0))
+        }
+        return list
+    }
+
+    private var figureStars: [(name: String, ra: Double, dec: Double, magnitude: Double)] {
+        (scenario["sky"]?["constellations"]?.arrayValue ?? []).flatMap { figure in
+            (figure["stars"]?.arrayValue ?? []).compactMap { star -> (String, Double, Double, Double)? in
+                guard let row = star.arrayValue, row.count == 4, let name = row[0].stringValue, let ra = row[1].doubleValue,
+                    let dec = row[2].doubleValue, let magnitude = row[3].doubleValue
+                else { return nil }
+                return (name, ra, dec, magnitude)
+            }
+        }
+    }
+
+    private func skyConstellations() -> JSONValue {
+        var lines: [JSONValue] = []
+        var names: [JSONValue] = []
+        for figure in scenario["sky"]?["constellations"]?.arrayValue ?? [] {
+            let stars = figure["stars"]?.arrayValue ?? []
+            for line in figure["lines"]?.arrayValue ?? [] {
+                lines.append(.array((line.arrayValue ?? []).compactMap { $0.intValue }.map { index -> JSONValue in
+                    let star = stars[index].arrayValue ?? []
+                    return [star[1], star[2]]
+                }))
+            }
+            names.append(["name": figure["name"] ?? "", "code": figure["code"] ?? "", "ra_deg": figure["ra_deg"] ?? 0, "dec_deg": figure["dec_deg"] ?? 0])
+        }
+        return ["lines": .array(lines), "names": .array(names)]
+    }
+
+    private func skyCatalog(query: [String: String]) -> (HTTPResponse, HTTPBody?) {
+        let ra = query["ra"].flatMap(Double.init) ?? 0
+        let dec = query["dec"].flatMap(Double.init) ?? 0
+        let radius = query["radius"].flatMap(Double.init) ?? 180
+        let level = query["lod"].flatMap(Int.init) ?? 4
+        let limit = Float([4.0, 7.0, 10.0, 13.0, 99.0][max(0, min(4, level))])
+        let center = SkyGeometry.unitVector(raDeg: Float(ra), decDeg: Float(dec))
+        let cosRadius = Float(cos(min(180, radius) * .pi / 180))
+        let matched = skyObjects
+            .filter { $0.magnitude <= limit && simd_dot(SkyGeometry.unitVector(raDeg: $0.raDeg, decDeg: $0.decDeg), center) >= cosRadius }
+            .sorted { $0.magnitude < $1.magnitude }
+        let offset = query["cursor"].flatMap(Int.init) ?? 0
+        let page = Array(matched.dropFirst(offset).prefix(500))
+        let next = offset + page.count
+        var fields: HTTPFields = [.contentType: "application/octet-stream"]
+        fields[HTTPField.Name("X-Sky-Next")!] = next < matched.count ? String(next) : ""
+        fields[HTTPField.Name("X-Sky-Total")!] = String(matched.count)
+        return (HTTPResponse(status: .ok, headerFields: fields), HTTPBody(SkyFrameDecoder.encode(page)))
+    }
+
+    private func skyEphemeris(query: [String: String]) -> JSONValue {
+        let start = query["from"].flatMap(WireTime.parse) ?? query["t"].flatMap(WireTime.parse) ?? clock.now()
+        let end = query["to"].flatMap(WireTime.parse) ?? start
+        let step = max(60, query["step"].flatMap(Double.init) ?? 600)
+        var samples: [JSONValue] = []
+        var time = start
+        while time <= end, samples.count < 1440 {
+            let hours = time.timeIntervalSince1970 / 3600
+            let bodies: [JSONValue] = (scenario["sky"]?["bodies"]?.arrayValue ?? []).map { body in
+                let moved = ((body["ra_deg"]?.doubleValue ?? 0) + (body["rate_deg_per_h"]?.doubleValue ?? 0) * (hours - 493_000))
+                    .truncatingRemainder(dividingBy: 360)
+                return ["name": body["name"] ?? "?", "ra_deg": .number(moved < 0 ? moved + 360 : moved), "dec_deg": body["dec_deg"] ?? 0]
+            }
+            samples.append(["t": .string(WireTime.string(time)), "bodies": .array(bodies)])
+            time = time.addingTimeInterval(step)
+        }
+        return ["as_of": .string(WireTime.string(clock.now())), "samples": .array(samples)]
+    }
+
+    private func skyCheck(query: [String: String]) -> JSONValue? {
+        guard let site = scenario["sky"]?["site"], let latitude = site["latitude_deg"]?.doubleValue,
+            let longitude = site["longitude_deg"]?.doubleValue, let ra = query["ra"].flatMap(Double.init),
+            let dec = query["dec"].flatMap(Double.init)
+        else { return nil }
+        let place = SkyGeometry.horizontal(
+            raDeg: ra, decDeg: dec, site: SkySite(latitude: latitude, longitude: longitude), at: clock.now())
+        let skyline = skylineHeight(site["horizon"]?.arrayValue ?? [], azimuth: place.azimuth)
+        var answer: [String: JSONValue] = [
+            "altitude_deg": .number(place.altitude), "azimuth_deg": .number(place.azimuth), "above_horizon": .bool(place.altitude > skyline),
+        ]
+        if place.altitude <= skyline {
+            answer["reason"] = .string(String(format: "Below the horizon: altitude %.1f° where the skyline is %.1f°.", place.altitude, skyline))
+        }
+        return .object(answer)
+    }
+
+    private func skylineHeight(_ horizon: [JSONValue], azimuth: Double) -> Double {
+        let points = horizon.compactMap { point -> (Double, Double)? in
+            guard let az = point["az_deg"]?.doubleValue, let alt = point["alt_deg"]?.doubleValue else { return nil }
+            return (az, alt)
+        }.sorted { $0.0 < $1.0 }
+        guard let first = points.first, let last = points.last else { return 0 }
+        let before = points.last { $0.0 <= azimuth } ?? (last.0 - 360, last.1)
+        let after = points.first { $0.0 > azimuth } ?? (first.0 + 360, first.1)
+        let span = after.0 - before.0
+        return span > 0 ? before.1 + (after.1 - before.1) * (azimuth - before.0) / span : before.1
+    }
+
+    private func skyIdentify(query: [String: String]) -> JSONValue? {
+        guard let index = query["index"].flatMap(Int.init), let found = skyObjects.first(where: { $0.index == Int32(index) }) else { return nil }
+        var answer: [String: JSONValue] = [
+            "index": .number(Double(index)), "kind": found.isDeepSky ? "deep_sky" : "star", "ra_deg": .number(Double(found.raDeg)),
+            "dec_deg": .number(Double(found.decDeg)), "magnitude": .number(Double(found.magnitude)),
+        ]
+        let stars = scenario["sky"]?["stars"]?.intValue ?? 0
+        if found.isDeepSky, let object = scenario["sky"]?["objects"]?.arrayValue?[index - stars] {
+            answer["name"] = object["name"]
+            answer["type"] = object["type"]
+        } else if !found.isDeepSky, index >= stars {
+            let offset = index - stars - (scenario["sky"]?["objects"]?.arrayValue?.count ?? 0)
+            if figureStars.indices.contains(offset) { answer["name"] = .string(figureStars[offset].name) }
+        }
+        return .object(answer)
+    }
+
+    private func skyOperation(_ name: String, args: [String: JSONValue]) -> JSONValue? {
+        let objects = scenario["sky"]?["objects"]?.arrayValue ?? []
+        func names(_ object: JSONValue) -> [String] {
+            [object["name"]?.stringValue ?? ""] + (object["designations"]?.arrayValue?.compactMap(\.stringValue) ?? [])
+        }
+        switch name {
+        case "sky.search":
+            let query = args["query"]?.stringValue?.lowercased() ?? ""
+            let found = objects.filter { object in names(object).contains { $0.lowercased().contains(query) } }
+            return ["query": .string(query), "objects": .array(found), "total": .number(Double(found.count))]
+        case "sky.object":
+            let wanted = args["name"]?.stringValue?.lowercased() ?? ""
+            guard case .object(var fields)? = objects.first(where: { object in names(object).contains { $0.lowercased() == wanted } }) else {
+                return nil
+            }
+            fields["site"] = scenario["sky"]?["site"]?["name"]
+            fields["rise_transit_set"] = ["rise": "19:12", "transit": "02:40", "set": "10:08"]
+            return .object(fields)
+        case "sky.framing":
+            return ["ra_deg": args["ra_deg"] ?? 0, "dec_deg": args["dec_deg"] ?? 0, "fov_deg": scenario["sky"]?["framing"]?["fov_deg"] ?? [1, 1]]
+        default:
+            return nil
+        }
+    }
+
+    private func renderedTile(query: [String: String]) -> Data? {
+        guard let image = previewImage else { return nil }
+        let level = query["z"].flatMap(Int.init) ?? 0
+        let x = query["x"].flatMap(Int.init) ?? 0
+        let y = query["y"].flatMap(Int.init) ?? 0
+        let scale = 1 / CGFloat(1 << max(0, level))
+        let width = image.extent.width * scale
+        let height = image.extent.height * scale
+        let left = CGFloat(x * 256)
+        let top = CGFloat(y * 256)
+        guard left < width, top < height else { return nil }
+        // Core Image's origin is at the bottom left, the wire's at the top left.
+        let crop = CGRect(x: left, y: max(0, height - top - 256), width: min(256, width - left), height: min(256, height - top))
+        let output = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale)).cropped(to: crop)
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        return CIContext().jpegRepresentation(of: output, colorSpace: colorSpace)
+    }
+
+    private var previewImage: CIImage? { preview.flatMap { CIImage(data: $0) } }
 
     // MARK: Stream
 

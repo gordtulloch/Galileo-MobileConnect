@@ -13,6 +13,10 @@
 # MobileConnect plugin on the real Connect Link server; without them that test is skipped, and says so.
 # Everything it starts it also stops.
 set -eu
+# A Mac that sleeps in the middle of a run looks like a hung app: a 15-second UI wait once took 15 minutes.
+if [ -z "${GALILEO_CAFFEINATED:-}" ] && command -v caffeinate >/dev/null; then
+    GALILEO_CAFFEINATED=1 exec caffeinate -dims "$0" "$@"
+fi
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 SIM="${IOS_SIM:-iPad Pro 13-inch (M5)}"

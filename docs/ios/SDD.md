@@ -19,7 +19,7 @@ How the iPadOS/iOS app puts a native SwiftUI interface on the core specified in 
 
 ### 1.2 Status
 
-Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; and of `I-SES` the run view and job queue. Not built: `I-SKY`, session authoring, Library. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
+Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; `I-SKY` without the P2 framing and target lists; and of `I-SES` the run view and job queue. Not built, all P2: session authoring, Library, calibration, notifications, polar alignment. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
 
 ---
 
@@ -47,13 +47,13 @@ Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC
 
 ### 2.4 Rendering the sky with Metal (ADR-IOS-004)
 
-**Decision (proposed, spike-gated):** the sky view is an `MTKView` hosted in SwiftUI, drawing stars as instanced point sprites from the streamed catalog, with deep-sky objects, solar-system bodies, horizon and overlays as separate passes. SwiftUI `Canvas` is rejected for the star field.
+**Decision (built; the frame-rate measurement on the oldest supported iPad is still to do):** the sky view is an `MTKView` hosted in SwiftUI, drawing stars as instanced point sprites from the streamed catalog, with deep-sky objects, solar-system bodies, horizon and overlays as separate passes. SwiftUI `Canvas` is rejected for the star field.
 
 **Rationale:** tens of thousands of points at 60 fps on pan and pinch is a GPU job; `Canvas` redraws on the CPU. The decision is gated on a prototype on the oldest supported iPad.
 
 ### 2.5 The image viewer is tile-based (ADR-IOS-005)
 
-**Decision:** the image viewer displays a low-resolution full frame immediately and loads higher-resolution tiles for the visible region as the user zooms, composited by a `UIScrollView`-backed representable (`UIViewRepresentable`) with a tile layer. Stretch is applied by the Master (Shared SDD `S-IMG`); changing it re-requests tiles, with the current image kept until the new ones arrive.
+**Decision:** the image viewer displays a low-resolution full frame immediately and loads higher-resolution tiles for the visible region when a zoom or pan settles, composited by a `UIScrollView`-backed representable (`UIViewRepresentable`) with a tile layer. Stretch is applied by the Master (Shared SDD `S-IMG`); changing it re-requests tiles, with the current image kept until the new ones arrive.
 
 **Rationale:** a full-resolution frame would be many megabytes over a weak link (PC7). Native scroll/zoom physics are expected by iOS users and difficult to reproduce in pure SwiftUI.
 
@@ -87,7 +87,7 @@ Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC
 
 ### 3.1 `I-SHELL` — App shell and navigation
 
-- **Structure.** On iPad a `NavigationSplitView`: sidebar of areas, content in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas instead: the system navigation bar's back button can't be held to Night. Areas built so far: Overview, Equipment, Imaging, Focus, Solve, Guiding, Flip, Sessions, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
+- **Structure.** On iPad a `NavigationSplitView`: sidebar of areas, content in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas instead: the system navigation bar's back button can't be held to Night. Areas built so far: Overview, Equipment, Sky, Imaging, Focus, Solve, Guiding, Flip, Sessions, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
 - **Overview** (`MAPP-OVR-010`–`070`): Pier list with node, state and grant; per-Pier activity timeline drawn from the Dashboard lanes (`S-STATE`); alert list with severity and time; a banner for a new alert while connected.
 - **No configuration.** There is no Settings screen for the observatory. The app's own **Settings** screen contains only app preferences (theme, data saver, units display) and the list of paired Masters with *Unpair* (`MAPP-CFG-010`); read-only Pier and optical-train information appears as detail views (`MAPP-CFG-020`).
 - **Satisfies:** `MAPP-OVR-*`, `MAPP-CFG-010`, `020`, `MAPP-LAY-010`, `020`.
@@ -132,7 +132,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 ### 3.5 `I-SKY` — Sky view
 
 - Hosts the Metal view of ADR-IOS-004 with a SwiftUI overlay for search, time controls (date/time, scrub through the night, *Now*), and the selected object's detail card with altitude/visibility from the Master. Gestures: drag to pan, pinch to zoom, tap to select, double-tap to centre.
-- **Layers:** stars and deep-sky objects (streamed, progressive), Sun/Moon/planets/minor bodies, horizon profile, mount pointing marker, optical-train field-of-view rectangle, and the target's marker.
+- **Layers:** stars and deep-sky objects (streamed, progressive), constellation figures and names (from the Master, with a switch), Sun/Moon/planets/minor bodies, horizon profile, mount pointing marker, optical-train field-of-view rectangle, and the target's marker.
 - **Go to:** the selection offers *Go to*, visible only to an Operator, which hands to `S-CTL`; the confirmation sheet names the target, current altitude and the Master's horizon/limit check, and sends nothing unless confirmed (`MAPP-SKY-040`).
 - **Framing assistant (P2):** the FOV rectangle for the chosen rotation, mosaic grid, and *Use in session/job* (`MAPP-SKY-050`). **What's Up Tonight** and altitude curves (P2) as lists and Swift Charts (`MAPP-SKY-060`).
 - **Link down:** a banner reads "Not live — showing the last sky received" and the pointing marker and FOV are hidden, never frozen in place (`MAPP-STR-060`).
@@ -213,6 +213,6 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 | IO1 | ~~Bonjour TXT fields~~ **Closed:** `name`, `node`, `proto`, `role` (`galileo/connect_link/discovery.py`), decoded in `BonjourDiscovery` |
 | IO2 | Metal vs an alternative for the sky view: decided by a prototype on the oldest supported iPad |
 | IO3 | Emergency control: **press-and-hold (one second) is built**; user-test on a tablet at night, with gloves |
-| IO4 | Which iPhone panels fold (PSD Q1) |
+| IO4 | Which iPhone panels fold (PSD Q1): for now nothing is dropped, each area is one column and the sky's panel scrolls under it. Revisit from use |
 | IO5 | ~~Bundle identifier~~ **Closed:** `com.gordtulloch.galileo.mobileconnect`. The App Store name remains (PSD Q5) |
 | IO6 | Whether the Keychain accessibility class should be stricter once background use is understood |

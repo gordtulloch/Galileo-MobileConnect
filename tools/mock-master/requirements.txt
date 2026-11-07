@@ -1,3 +1,4 @@
 aiohttp>=3.9
 cryptography>=42
 zeroconf>=0.130
+pillow>=10

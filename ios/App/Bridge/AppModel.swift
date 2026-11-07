@@ -170,6 +170,7 @@ final class AppModel {
     }
 
     private func disconnect() {
+        stopLiveLoop()
         updates?.cancel()
         let old = session
         session = nil
@@ -218,6 +219,7 @@ final class AppModel {
     // MARK: Lifecycle (I-LIFE)
 
     func sceneChanged(to phase: ScenePhase) {
+        if phase != .active { stopLiveLoop() }
         guard let session else { return }
         Task {
             if phase == .active {
@@ -281,9 +283,66 @@ final class AppModel {
         Task { await session.stopHold() }
     }
 
-    func preview(width: Int, stretch: Int) async -> Data? {
+    func preview(width: Int, stretch: Int) async -> MasterAPI.PreviewImage? {
         guard let pier = workingPier, let session else { return nil }
         return try? await session.preview(pier: pier, width: width, stretch: stretch)
+    }
+
+    func tile(level: Int, x: Int, y: Int, stretch: Int) async -> Data? {
+        guard let pier = workingPier, let session else { return nil }
+        return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch)
+    }
+
+    func makeSkyModel() -> SkyModel? {
+        guard let pier = workingPier, let session else { return nil }
+        return SkyModel(session: session, pier: pier)
+    }
+
+    /// `MAPP-SKY-040`: asks first, always. Nil when the answer needs nothing more from the screen.
+    func goTo(name: String, raDeg: Double, decDeg: Double) async -> String? {
+        guard let pier = workingPier, let session else { return nil }
+        return handle(await session.goToQuestion(pier: pier, name: name, raDeg: raDeg, decDeg: decDeg))
+    }
+
+    // MARK: Live loop (`MAPP-IMG-020`)
+
+    private(set) var liveLoopRunning = false
+    private var liveLoop: Task<Void, Never>?
+
+    /// One exposure after another, each shown as it arrives. Core has no live-loop operation, so this repeats a
+    /// single capture while the app is in front: it asks for nothing while nobody is looking.
+    func startLiveLoop(seconds: Double) -> String? {
+        guard !liveLoopRunning else { return nil }
+        liveLoopRunning = true
+        liveLoop = Task { [weak self] in
+            while let self, !Task.isCancelled, self.liveLoopRunning {
+                let problem = await self.perform("imaging.capture", args: ["seconds": .number(seconds), "count": 1])
+                guard problem == nil else {
+                    self.liveLoopMessage = problem
+                    break
+                }
+                try? await Task.sleep(for: .milliseconds(200))
+                while !Task.isCancelled, self.record(of: "imaging.capture")?.state.isOpen == true {
+                    try? await Task.sleep(for: .milliseconds(250))
+                }
+                switch self.record(of: "imaging.capture")?.state {
+                case .done: continue
+                default:
+                    self.liveLoopMessage = "The live loop stopped: the last exposure didn't finish."
+                    self.liveLoopRunning = false
+                }
+            }
+            self?.liveLoopRunning = false
+        }
+        return nil
+    }
+
+    private(set) var liveLoopMessage: String?
+
+    func stopLiveLoop() {
+        liveLoopRunning = false
+        liveLoop?.cancel()
+        liveLoop = nil
     }
 
     // MARK: Reading state

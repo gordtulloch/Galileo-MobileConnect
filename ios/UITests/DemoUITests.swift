@@ -59,7 +59,7 @@ final class DemoUITests: XCTestCase {
         waitForShell()
         XCTAssertTrue(element("demo.banner").exists, "a demo must say so")
         sleep(2)  // let the first deltas arrive
-        for area in ["Overview", "Equipment", "Imaging", "Focus", "Solve", "Guiding", "Flip", "Sessions", "Safety", "Settings"] {
+        for area in ["Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Guiding", "Flip", "Sessions", "Safety", "Settings"] {
             open(area)
             sleep(1)
             XCTAssertTrue(element("emergency").exists, "emergency must be on \(area)")
@@ -105,6 +105,78 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(element("confirm.accept").waitForExistence(timeout: 5))
         element("confirm.accept").tap()
         XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 8), "Done is only the Master's word")
+    }
+
+    /// `MAPP-SKY-010` to `040`: the sky draws; search finds; the go-to asks first, naming the target and its altitude;
+    /// declining sends nothing, and accepting runs the slew. Time moves and comes back.
+    func testSkySearchAndGoTo() {
+        launch()
+        waitForShell()
+        element("lease.take").tap()
+        XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
+        open("Sky")
+        XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
+        sleep(3)  // let the first pages arrive
+        screenshot("night-sky")
+        let figures = element("sky.constellations")
+        XCTAssertTrue(figures.waitForExistence(timeout: 5))
+        for _ in 0..<3 where figures.frame.maxY > app.windows.firstMatch.frame.height { app.swipeUp() }
+        figures.tap()
+        XCTAssertTrue(app.staticTexts["Show constellations"].waitForExistence(timeout: 5))
+        figures.tap()
+        XCTAssertTrue(app.staticTexts["Hide constellations"].waitForExistence(timeout: 5))
+
+        let search = element("sky.search")
+        XCTAssertTrue(search.waitForExistence(timeout: 5))
+        search.tap()
+        search.typeText("orion\n")
+        let result = element("sky.result.0")
+        XCTAssertTrue(result.waitForExistence(timeout: 5), "search must find it")
+        result.tap()
+        XCTAssertTrue(element("sky.altitude").waitForExistence(timeout: 5), "the Master's altitude must show")
+        sleep(2)
+        screenshot("night-sky-selected")
+
+        let goTo = element("sky.goto")
+        XCTAssertTrue(goTo.waitForExistence(timeout: 5))
+        goTo.tap()
+        XCTAssertTrue(app.staticTexts["Slew to M 42"].waitForExistence(timeout: 5), "the question must name the target")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH 'Altitude now:'")).firstMatch.exists)
+        screenshot("night-sky-goto")
+        element("confirm.cancel").tap()
+        XCTAssertFalse(app.staticTexts["Done."].exists, "declining sends nothing")
+        goTo.tap()
+        XCTAssertTrue(element("confirm.accept").waitForExistence(timeout: 5))
+        element("confirm.accept").tap()
+        XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 15))
+    }
+
+    /// `MAPP-STR-060`: a dropped link says so inside the view.
+    func testSkySaysWhenItIsNotLive() {
+        launch(scenario: "dropped-stream")
+        waitForShell()
+        open("Sky")
+        XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
+        sleep(2)
+        screenshot("night-sky-link")
+    }
+
+    /// `MAPP-IMG-020`: the loop starts, keeps going, and stops when asked.
+    func testLiveLoop() {
+        launch()
+        waitForShell()
+        element("lease.take").tap()
+        XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
+        open("Imaging")
+        let loop = element("liveloop")
+        for _ in 0..<6 where !loop.exists || loop.frame.maxY > app.windows.firstMatch.frame.height - 40 { app.swipeUp() }
+        XCTAssertTrue(loop.waitForExistence(timeout: 5))
+        loop.tap()
+        XCTAssertTrue(app.staticTexts["Stop live loop"].waitForExistence(timeout: 5))
+        sleep(2)
+        screenshot("night-liveloop")
+        loop.tap()
+        XCTAssertTrue(app.staticTexts["Start live loop"].waitForExistence(timeout: 5))
     }
 
     /// `MAPP-SOL-010`: a solve runs and its result appears.

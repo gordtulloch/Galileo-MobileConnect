@@ -1,0 +1,12 @@
+Galileo MobileConnect apps
+Copyright (c) 2025-2026 Gord Tulloch. All rights reserved.
+
+These apps are proprietary software, provided free of charge. You may install and use them through the store that
+supplied them. You may not copy, modify, redistribute, reverse-engineer or sell them, except as the law allows
+regardless of this licence.
+
+THE APPS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. THEY OPERATE REAL EQUIPMENT: YOU ARE RESPONSIBLE FOR THAT
+EQUIPMENT AND ITS SAFETY. THE AUTHOR IS NOT LIABLE FOR ANY DAMAGE ARISING FROM THEIR USE.
+
+The MobileConnect plugin and the wire API these apps use are separate, and are licensed GPL-3.0-or-later in their own
+repositories. The apps use the Swift OpenAPI packages and swift-http-types, under the Apache License 2.0.

@@ -23,18 +23,26 @@
 /* Begin PBXFileReference section */
 		27062F8CE1DEA4B7F59E81A8 /* GalileoAPI */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GalileoAPI; path = Packages/GalileoAPI; sourceTree = SOURCE_ROOT; };
 		5725A1E48329FB6304C5BF33 /* GalileoMobileConnectUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = GalileoMobileConnectUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		941CD69CC3465921851131BB /* GalileoMobileConnect.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GalileoMobileConnect.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		941CD69CC3465921851131BB /* GalileoMobileConnect.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = GalileoMobileConnect.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ADB5C222919B2529E4656A68 /* GalileoCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = GalileoCore; path = Packages/GalileoCore; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0CB2A5D2C31E41EB33CEEB90 /* UITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
 			path = UITests;
 			sourceTree = "<group>";
 		};
 		E0FE44403B9AC65AD2F21818 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -138,9 +146,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					E482AABCA80B506FB7708805 = {
+						DevelopmentTeam = 4QZ7YY8FJA;
 						ProvisioningStyle = Automatic;
 					};
 					E5721130C92CE802C9BE241F = {
+						DevelopmentTeam = 4QZ7YY8FJA;
 						TestTargetID = E482AABCA80B506FB7708805;
 					};
 				};
@@ -265,6 +275,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = 4QZ7YY8FJA;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -300,7 +311,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 4QZ7YY8FJA;
 				INFOPLIST_FILE = Config/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -365,6 +375,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = 4QZ7YY8FJA;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -393,7 +404,6 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = 4QZ7YY8FJA;
 				INFOPLIST_FILE = Config/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
