@@ -37,6 +37,8 @@ public struct OperationLedger: Sendable, Equatable {
     public private(set) var records: [OperationRecord] = []
     /// How many requests went out with each key: the proof that nothing was re-sent.
     public private(set) var sentCounts: [String: Int] = [:]
+    /// A finish that arrived before the HTTP answer that names its correlation id.
+    private var earlyFinishes: [String: OperationEvent] = [:]
     static let limit = 100
 
     public init() {}
@@ -63,10 +65,16 @@ public struct OperationLedger: Sendable, Equatable {
 
     /// The Master's HTTP answer. It is authoritative even if it arrives after the stream dropped.
     public mutating func answered(_ id: String, _ result: OpResult, longRunning: Bool) {
+        var early: OperationEvent?
+        if case .ok(_, let correlation?) = result { early = earlyFinishes.removeValue(forKey: correlation) }
         update(id) { record in
             switch result {
             case .ok(let value, let correlation):
                 record.correlationID = correlation
+                if let early {
+                    record.state = Self.finalState(of: early)
+                    return
+                }
                 // Only keep a record open when the stream can close it.
                 if longRunning, correlation != nil {
                     if case .done = record.state { return }  // op.finished overtook the HTTP answer
@@ -98,7 +106,13 @@ public struct OperationLedger: Sendable, Equatable {
                 ($0.correlationID != nil && $0.correlationID == event.correlationID)
                     || (event.requestID != nil && $0.id == event.requestID)
             })
-        else { return }
+        else {
+            if event.phase == "op.finished" {
+                if earlyFinishes.count >= Self.limit { earlyFinishes.removeAll() }
+                earlyFinishes[event.correlationID] = event
+            }
+            return
+        }
         records[index].correlationID = event.correlationID
         switch event.phase {
         case "op.started":
@@ -106,17 +120,20 @@ public struct OperationLedger: Sendable, Equatable {
         case "op.progress":
             records[index].state = .running(progress: event.progress)
         case "op.finished":
-            let reason = event.reason ?? "The Master gave no reason."
-            switch event.outcome {
-            case "ok": records[index].state = .done(nil)
-            case "refused": records[index].state = .refused(reason)
-            case "invalid": records[index].state = .invalid(path: nil, reason: reason)
-            case "unavailable": records[index].state = .unavailable(reason)
-            case "busy": records[index].state = .busy(reason)
-            case "unreachable": records[index].state = .unreachable(reason)
-            default: records[index].state = .done(nil)
-            }
+            records[index].state = Self.finalState(of: event)
         default: break
+        }
+    }
+
+    private static func finalState(of event: OperationEvent) -> OperationRecord.State {
+        let reason = event.reason ?? "The Master gave no reason."
+        switch event.outcome {
+        case "refused": return .refused(reason)
+        case "invalid": return .invalid(path: nil, reason: reason)
+        case "unavailable": return .unavailable(reason)
+        case "busy": return .busy(reason)
+        case "unreachable": return .unreachable(reason)
+        default: return .done(nil)
         }
     }
 }

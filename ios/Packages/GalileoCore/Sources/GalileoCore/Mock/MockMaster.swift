@@ -172,26 +172,29 @@ public actor MockMaster: ClientTransport, StreamTransport {
         default: break
         }
 
-        if segments.count >= 4, segments[0] == "mobileconnect", segments[2] == "pier" {
-            let pier = segments[3]
-            if segments.count == 5, segments[4] == "lease" {
-                let (status, value) = method == "POST"
-                    ? leaseAcquire(pier: pier, token: request.headerFields[.confirmToken])
-                    : leaseRelease(pier: pier)
-                return try reply(status, value)
-            }
-            if segments.count == 6, segments[4] == "ops" {
-                let (status, value) = invoke(
-                    pier: pier, name: segments[5], body: json, key: request.headerFields[.idempotencyKey],
-                    confirmToken: request.headerFields[.confirmToken])
-                return try reply(Int(status.code), value)
-            }
-            if segments.count == 5, segments[4] == "preview" {
-                guard let image = rendered(query: query) else { return try reply(404, ["error": "no frame yet"]) }
-                return (HTTPResponse(status: .ok, headerFields: [.contentType: "image/jpeg"]), HTTPBody(image))
-            }
+        let pier = query["pier"] ?? ""
+        switch (method, path) {
+        case ("POST", "/mobileconnect/v1/snapshot"):
+            let open = stream != nil
+            if open { emitSnapshot() }
+            return try reply(200, ["ok": .bool(open)])
+        case ("POST", "/mobileconnect/v1/lease"):
+            let (status, value) = leaseAcquire(pier: pier, token: request.headerFields[.confirmToken])
+            return try reply(status, value)
+        case ("DELETE", "/mobileconnect/v1/lease"):
+            let (status, value) = leaseRelease(pier: pier)
+            return try reply(status, value)
+        case ("POST", "/mobileconnect/v1/ops"):
+            let (status, value) = invoke(
+                pier: pier, name: query["name"] ?? "", body: json, key: request.headerFields[.idempotencyKey],
+                confirmToken: request.headerFields[.confirmToken])
+            return try reply(Int(status.code), value)
+        case ("GET", "/mobileconnect/v1/preview"):
+            guard let image = rendered(query: query) else { return try reply(404, ["error": "no frame yet"]) }
+            return (HTTPResponse(status: .ok, headerFields: [.contentType: "image/jpeg"]), HTTPBody(image))
+        default:
+            return try reply(404, ["error": "no such route"])
         }
-        return try reply(404, ["error": "no such route"])
     }
 
     private static func parseQuery(_ text: String) -> [String: String] {
@@ -255,14 +258,14 @@ public actor MockMaster: ClientTransport, StreamTransport {
             }
         }
         leases[pier] = Self.peerID
-        emit(["type": "lease", "pier": .string(pier), "holder": .string(Self.peerID)])
+        emit(["type": "lease", "pier": .string(pier), "holder": .string(Self.peerID), "holder_name": "This device"])
         return (200, ["pier": .string(pier), "held_by_me": true, "holder": .string(Self.peerID)])
     }
 
     private func leaseRelease(pier: String) -> (Int, JSONValue) {
         if leases[pier] == Self.peerID {
             leases[pier] = nil
-            emit(["type": "lease", "pier": .string(pier), "holder": nil])
+            emit(["type": "lease", "pier": .string(pier), "holder": nil, "holder_name": nil])
         }
         return (200, ["pier": .string(pier), "held_by_me": false])
     }
@@ -428,7 +431,8 @@ public actor MockMaster: ClientTransport, StreamTransport {
             } else if let add = value["$add"]?.arrayValue, add.count == 2, let stateKey = add[0].stringValue,
                 let argName = add[1].stringValue
             {
-                value = .number((values[pier]?[stateKey]?.doubleValue ?? 0) + (args[argName]?.doubleValue ?? 0))
+                let step = argName == "_one" ? 1 : args[argName]?.doubleValue ?? 0
+                value = .number((values[pier]?[stateKey]?.doubleValue ?? 0) + step)
             }
             set(key, to: value, pier: pier)
         }
@@ -446,24 +450,10 @@ public actor MockMaster: ClientTransport, StreamTransport {
     /// visibly works. A real Master does this in `galileo.control_surface.frames`.
     private func rendered(query: [String: String]) -> Data? {
         guard let preview else { return nil }
-        let black = query["black"].flatMap(Double.init) ?? 0
-        let mid = query["mid"].flatMap(Double.init) ?? 0.5
-        let white = query["white"].flatMap(Double.init) ?? 1
-        if black == 0, mid == 0.5, white == 1 { return preview }
+        let stretch = query["stretch"].flatMap(Double.init) ?? 50
+        if stretch == 50 { return preview }
         guard let image = CIImage(data: preview) else { return preview }
-        let scale = 1 / max(0.01, white - black)
-        let gamma = log(max(0.01, min(0.99, mid))) / log(0.5)
-        let output = image
-            .applyingFilter(
-                "CIColorMatrix",
-                parameters: [
-                    "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
-                    "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
-                    "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
-                    "inputBiasVector": CIVector(x: -black * scale, y: -black * scale, z: -black * scale, w: 0),
-                ]
-            )
-            .applyingFilter("CIGammaAdjust", parameters: ["inputPower": gamma])
+        let output = image.applyingFilter("CIGammaAdjust", parameters: ["inputPower": pow(2, (50 - stretch) / 25)])
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         return CIContext().jpegRepresentation(of: output, colorSpace: colorSpace) ?? preview
     }
@@ -485,11 +475,9 @@ public actor MockMaster: ClientTransport, StreamTransport {
                 }
             } else {
                 yield(["type": "resync", "epoch": .string(epoch), "seq": .number(Double(seq))])
-                emitSnapshot()
             }
         } else {
             yield(["type": "hello", "epoch": .string(epoch), "seq": .number(Double(seq))])
-            emitSnapshot()
         }
         startScriptOnce()
         return frames
@@ -499,7 +487,10 @@ public actor MockMaster: ClientTransport, StreamTransport {
         var piers: [String: JSONValue] = [:]
         for (pier, content) in values {
             var merged = content
-            if let holder = leases[pier] { merged["lease.holder"] = .string(holder) }
+            if let holder = leases[pier] {
+                merged["lease.holder"] = .string(holder)
+                merged["lease.holder_name"] = holder == Self.peerID ? "This device" : .string(holder)
+            }
             piers[pier] = .object(merged)
         }
         emit(["type": "snapshot", "as_of": .string(WireTime.string(clock.now())), "piers": .object(piers)])

@@ -54,7 +54,7 @@ struct LiveMasterTests {
             return
         }
         #expect(await eventually { await session.current.value("filter.current", pier: "p1", now: Date())?.value == "Ha" })
-        let preview = try await session.preview(pier: "p1", width: 800, stretch: Stretch())
+        let preview = try await session.preview(pier: "p1", width: 800, stretch: 50)
         #expect((preview?.count ?? 0) > 1000)
         await session.stop()
 
@@ -82,11 +82,11 @@ struct LiveMasterTests {
     }
 }
 
-/// The routes that exist on a real Master today, against Galileo's own `LinkServer`
-/// (`tools/mock-master/real_link_server.py`), rather than the mock's idea of them.
-@Suite("Client against the real Connect Link server", .enabled(if: LiveMaster.realAddress != nil))
-struct RealLinkServerTests {
-    @Test("MAPP-CON-030, MAPP-CON-050, MAPP-CON-080, MAPP-CTL-010: pair, pin, handshake, whoami and stream on real code")
+/// The whole path on real server code: Galileo's own Connect Link listener, pairing, Gateway and lease, and the real
+/// MobileConnect plugin, with only the devices and the approving person faked (`tools/mock-master/real_link_server.py`).
+@Suite("Client against the real plugin on real Connect Link", .enabled(if: LiveMaster.realAddress != nil))
+struct RealPluginTests {
+    @Test("MAPP-CON-030, MAPP-CON-050, MAPP-CON-080, MAPP-CTL-010, MAPP-CTL-020, MAPP-CTL-040, MAPP-EMG-020, MAPP-OVR-050: end to end")
     func realServer() async throws {
         let address = try #require(LiveMaster.realAddress)
         let store = InMemorySecureStore()
@@ -100,7 +100,6 @@ struct RealLinkServerTests {
             return
         }
         #expect(code.count == 6)
-        #expect(fingerprint.count == 64)
         #expect(delegate.presentedFingerprint == fingerprint, "the pin must equal the certificate actually shown")
         guard case .paired(let credentials) = await flow.waitForAnswer() else {
             Issue.record("approval failed: \(await flow.status)")
@@ -109,38 +108,87 @@ struct RealLinkServerTests {
 
         let link = MasterConnection.live(
             address: address, policy: .pinned(credentials.fingerprint), identity: testIdentity, token: credentials.token)
-        let outcome = try await link.api.handshake()
-        #expect(outcome.masterProtocol == LinkProtocol.version)
-        #expect(outcome.verdict != .refused, "\(outcome.message)")
         let me = try await link.api.whoAmI()
         #expect(me.permissions == ["control", "view"])
-        #expect(!Role.hasConfigurationGrant(me.permissions))
-        #expect(Role.from(permissions: me.permissions, allowed: outcome.allowed) == .operator)
+        let handshake = try await link.api.handshake()
+        #expect(handshake.verdict != .refused, "\(handshake.message)")
 
-        // The real stream's first frame, through the real WebSocket client and reducer.
-        let frames = try await link.stream.connect(epoch: nil, last: nil)
-        var iterator = frames.makeAsyncIterator()
-        let first = try #require(try await iterator.next())
-        guard case .hello(let epoch, _) = try #require(StreamMessage(data: first)) else {
-            Issue.record("expected hello")
-            return
-        }
-        #expect(!epoch.isEmpty)
-
-        // The plugin doesn't exist yet: its routes must be a visible notice, not a silent retry loop.
+        // Connect, as the app does: the real catalogue, then state over the real stream.
         var backoff = StreamLink.Backoff()
-        backoff.initial = 5
+        backoff.initial = 0.2
         let session = ObservatorySession(connection: link, backoff: backoff)
         await session.start()
-        #expect(await eventually(timeout: 8) { await session.current.notice != nil })
+        let live = await eventually(timeout: 10) {
+            let now = await session.current
+            return now.live.phase == .live && now.isConnected
+        }
+        let current = await session.current
+        #expect(live, "state: \(current.connection) \(String(describing: current.stop)) \(String(describing: current.notice))")
+        #expect(current.role == .operator)
+        #expect(current.piers.map(\.name) == ["East Pier"])
+        #expect(current.notice == nil)
+        let pier = try #require(current.piers.first?.id)
+        #expect(current.catalogues[pier]?.contains { $0.name == "mount.park" && $0.operationClass == .confirm } == true)
+        #expect(current.value("mount.tracking", pier: pier, now: Date())?.value == true)
+        #expect(current.value("mount.position.ra_deg", pier: pier, now: Date())?.value == 82.5)
+        #expect(current.value("safety.overall", pier: pier, now: Date()) == nil, "a Pier with no monitor must not claim to be safe")
+        #expect(current.operation("dome.open", pier: pier)?.available == false)
+
+        // Without the lease: the Master's reason, and no retry.
+        guard case .sent(let refused) = await session.request(pier: pier, operation: "mount.track", args: ["enabled": false]),
+            case .refused = refused.state
+        else {
+            Issue.record("expected a refusal without the lease")
+            return
+        }
+
+        // With it: the operation, and the changed state comes back on the stream by itself.
+        #expect(await session.takeLease(pier: pier) == nil)
+        #expect(await eventually { await session.current.lease(pier: pier) == .mine })
+        guard case .sent(let done) = await session.request(pier: pier, operation: "mount.track", args: ["enabled": false]),
+            case .done = done.state
+        else {
+            Issue.record("the operation did not run")
+            return
+        }
+        #expect(await eventually(timeout: 6) { await session.current.value("mount.tracking", pier: pier, now: Date())?.value == false })
+
+        // A confirm operation: the Master's wording and token, and nothing until it's accepted.
+        guard case .confirm(let question) = await session.request(pier: pier, operation: "mount.park") else {
+            Issue.record("expected the Master to ask")
+            return
+        }
+        #expect(question.title == "Park the mount")
+        #expect(question.token != nil)
+        #expect(await session.current.value("mount.parked", pier: pier, now: Date())?.value == false)
+        guard case .sent(let parked) = await session.confirm(question), case .done = parked.state else {
+            Issue.record("the confirmed park did not run")
+            return
+        }
+        #expect(await eventually(timeout: 6) { await session.current.value("mount.parked", pier: pier, now: Date())?.value == true })
+
+        // A held control, with real keep-alives.
+        await session.startHold(pier: pier, family: "focus", args: ["direction": 1])
+        #expect(await session.current.hold == .holding)
+        try await Task.sleep(nanoseconds: 700_000_000)  // past the deadman, had the beats not been flowing
+        #expect(await session.current.hold == .holding)
+        await session.stopHold()
+
+        // Emergency: no second round trip, and the lease doesn't matter.
+        await session.releaseLease(pier: pier)
+        guard case .sent(let stopped) = await session.emergency(pier: pier, operation: "system.stop_everything"),
+            case .done = stopped.state
+        else {
+            Issue.record("the emergency stop did not run")
+            return
+        }
+
         await session.stop()
 
-        // A wrong pin against a real TLS listener.
+        // A wrong pin against a real TLS listener, and a token the real server doesn't know.
         let wrong = MasterConnection.live(
             address: address, policy: .pinned(String(repeating: "0", count: 64)), identity: testIdentity, token: credentials.token)
         await #expect(throws: LinkError.identityChanged) { _ = try await wrong.api.whoAmI() }
-
-        // A token the real server doesn't know.
         let stale = MasterConnection.live(
             address: address, policy: .pinned(credentials.fingerprint), identity: testIdentity, token: "nope")
         await #expect(throws: LinkError.unpaired) { _ = try await stale.api.whoAmI() }

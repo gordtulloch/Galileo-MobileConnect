@@ -5,11 +5,11 @@
   "requirements": ["MAPP-CTL-040", "MAPP-CTL-050"],
   "steps": [
     { "do": "act", "action": "invoke", "pier": "p1", "operation": "mount.park" },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/mount.park", "headers": { "Idempotency-Key": "k1" }, "body": { "args": {} } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=mount.park", "headers": { "Idempotency-Key": "k1" }, "body": { "args": {} } },
     { "do": "receive", "status": 409, "body": { "error": "confirmation_required", "reason": "The mount will stop tracking.", "confirm_token": "t1", "expires_in": 60 } },
     { "do": "expect", "outcome": "ConfirmationRequired", "state": { "confirmation.consequence": "The mount will stop tracking.", "confirmation.token": "t1" } },
     { "do": "act", "action": "confirm" },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/mount.park", "headers": { "Idempotency-Key": "k2", "X-Confirm-Token": "t1" } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=mount.park", "headers": { "Idempotency-Key": "k2", "X-Confirm-Token": "t1" } },
     { "do": "receive", "status": 200, "body": { "ok": true } },
     { "do": "expect", "outcome": "Done", "state": { "operation.k2": "Done", "requests_sent": 2 } }
   ]

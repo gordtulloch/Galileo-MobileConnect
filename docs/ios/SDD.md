@@ -19,7 +19,7 @@ How the iPadOS/iOS app puts a native SwiftUI interface on the core specified in 
 
 ### 1.2 Status
 
-Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications, and of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Guiding and Safety screens. Not built: `I-SKY`, `I-SES`, Solve, Flip, Library. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
+Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; and of `I-SES` the run view and job queue. Not built: `I-SKY`, session authoring, Library. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
 
 ---
 
@@ -87,7 +87,7 @@ Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC
 
 ### 3.1 `I-SHELL` — App shell and navigation
 
-- **Structure.** On iPad a `NavigationSplitView`: sidebar of areas, content in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas instead: the system navigation bar's back button can't be held to Night. Areas built so far: Overview, Equipment, Imaging, Focus, Guiding, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
+- **Structure.** On iPad a `NavigationSplitView`: sidebar of areas, content in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas instead: the system navigation bar's back button can't be held to Night. Areas built so far: Overview, Equipment, Imaging, Focus, Solve, Guiding, Flip, Sessions, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
 - **Overview** (`MAPP-OVR-010`–`070`): Pier list with node, state and grant; per-Pier activity timeline drawn from the Dashboard lanes (`S-STATE`); alert list with severity and time; a banner for a new alert while connected.
 - **No configuration.** There is no Settings screen for the observatory. The app's own **Settings** screen contains only app preferences (theme, data saver, units display) and the list of paired Masters with *Unpair* (`MAPP-CFG-010`); read-only Pier and optical-train information appears as detail views (`MAPP-CFG-020`).
 - **Satisfies:** `MAPP-OVR-*`, `MAPP-CFG-010`, `020`, `MAPP-LAY-010`, `020`.
@@ -140,7 +140,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 ### 3.6 `I-IMG` — Image viewer and Library
 
-- Viewer (ADR-IOS-005) with pinch/pan, a stretch control (presets and sliders for black/mid/white points), the histogram from the Master, the star count/HFR/FWHM readout, and for Operators *Reject frame* (confirm) (`MAPP-IMG-030`–`050`, `070`).
+- Viewer (ADR-IOS-005) with pinch/pan, a stretch control (the one value `galileo.preview` has), the histogram from the Master, the star count/HFR/FWHM readout, and for Operators *Reject frame* (confirm) (`MAPP-IMG-030`–`050`, `070`).
 - Live-stack progress and result (`MAPP-IMG-060`). *Download FITS*: shows size, transfers with progress, can be cancelled and resumed, and hands the file to the Files/share sheet (`MAPP-IMG-080`). Data-saver setting (`MAPP-IMG-090`).
 - Library: grid of recent session and frame thumbnails with quality metrics, frame preview, history charts (`MAPP-LIB-010`, `020`).
 - **Satisfies:** `MAPP-IMG-030`–`090`, `MAPP-LIB-*`.
@@ -182,7 +182,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 ### 3.12 `I-REL` — Packaging, privacy and release
 
-- **Identifiers.** Bundle id and app name are decided before first submission (PSD Q5); working name *Galileo MobileConnect*.
+- **Identifiers.** Bundle id `com.gordtulloch.galileo.mobileconnect` (decided 2026-11-06, PSD Q5). App name is decided before first submission; working name *Galileo MobileConnect*.
 - **Info.plist.** `NSLocalNetworkUsageDescription`, `NSBonjourServices`, ATS with `NSAllowsLocalNetworking` only, no background modes, no tracking domains.
 - **Privacy manifest** (`PrivacyInfo.xcprivacy`): declares no tracking and no data collection; lists the required-reason APIs actually used. The App Store privacy label states "Data Not Collected" and notes that the app talks only to the user's own Master (`MAPP-PLT-060`).
 - **Review.** The App Review notes describe the app plainly, point at demonstration mode (no hardware needed), and explain the local-network permission (PSD R7).
@@ -214,5 +214,5 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 | IO2 | Metal vs an alternative for the sky view: decided by a prototype on the oldest supported iPad |
 | IO3 | Emergency control: **press-and-hold (one second) is built**; user-test on a tablet at night, with gloves |
 | IO4 | Which iPhone panels fold (PSD Q1) |
-| IO5 | Bundle identifier and name (PSD Q5) |
+| IO5 | ~~Bundle identifier~~ **Closed:** `com.gordtulloch.galileo.mobileconnect`. The App Store name remains (PSD Q5) |
 | IO6 | Whether the Keychain accessibility class should be stricter once background use is understood |

@@ -136,7 +136,7 @@ Components named `S-*` below. A requirement in the [SRS](SRS.md) is mapped to it
 
 - **Model.** `ObservatoryState` → `PierState` per Pier: connection/reachability and grant (`control | view | none`), device status by category, session progress by block, guiding error, focus state, flip state and time to flip, safety inputs and overall state, weather, activity timeline lanes (as the Dashboard of `OBS-150`), lease holder, recent alerts. Each leaf is `Stamped<T>(value, asOf)`.
 - **Reduction.** A pure function `reduce(state, message) → state` over stream messages. It is deterministic and has no clock or I/O, so the shared test-vector suite (`S-TEST`, Section 3.12) can replay recorded streams on every platform and require identical state.
-- **Snapshot/resync.** On `hello` without prior state, or on `resync`, the store waits for the snapshot the Master sends by itself (plugin ADR-MCON-004; there is no request for one) and holds the UI in *Loading* until it arrives, targeting a first usable state in 5 s (`MAPP-OVR-070`). Deltas received before the snapshot are buffered, then applied in order, except any older than the snapshot, which would otherwise overwrite it with an old value.
+- **Snapshot/resync.** On `hello` without prior state, or on `resync`, the client asks for a snapshot (`POST /snapshot`, Section 4.2 item 13), which arrives on the stream, and holds the UI in *Loading* until it arrives, targeting a first usable state in 5 s (`MAPP-OVR-070`). Deltas received before the snapshot are buffered, then applied in order, except any older than the snapshot, which would otherwise overwrite it with an old value.
 - **Staleness.** `age(key) = now − asOf`. The Master publishes a value only when it changes (`ObservableState.publish`), so silence means "unchanged", and only keys that move continuously have a *freshness limit* (seconds for position, minutes for weather). Over the limit, or whenever `S-LINK` is not `Connected`, `StateView` marks the value stale and the UI must dim it and show its age; unreachable/detached/not-granted Piers carry an explicit reason from the Master and show no values (`MAPP-OVR-040`).
 - **Operation events.** `op.started | progress | finished` tie to the originating request via correlation id; `S-CTL` consumes them (Section 3.4).
 - **Satisfies:** `MAPP-OVR-010`–`070`, `MAPP-FLP-010`, `MAPP-SES-030`, `MAPP-SAF-010`, `030`, `MAPP-GUI-020`, `MAPP-DEV-070`.
@@ -214,10 +214,10 @@ Data files in `design/` compiled into platform resources by `scripts/gen_tokens.
 
 ### 4.1 What is pinned
 
-`api/openapi.yaml` is the contract both clients are generated from, and `api/events.schema.json` describes the stream messages. Both are **authored in this repository** for now, because the server side has not published them: the MobileConnect plugin in `Galileo-Plugins` is currently a README only, so the `wire/openapi.yaml` and `wire/events.schema.json` the plugin SDD promises (§3.16) do not exist. Operations are tagged by status:
+`api/openapi.yaml` is the contract both clients are generated from, and `api/events.schema.json` describes the stream messages. Both are **authored in this repository**, and the plugin in `Galileo-Plugins/mobileconnect` is written to them, rather than publishing the `wire/` files the plugin SDD promises (§3.16). Operations are tagged by status:
 
-- **`x-galileo-status: implemented`** — checked against the Galileo source on 2026-11-06 (Connect Link pairing, handshake, whoami, stream upgrade, transfer).
-- **`x-galileo-status: planned`** — taken from the plugin SDD §5.2; the shape is the plugin's intent and may change.
+- **`x-galileo-status: implemented`** — tested against the real server code: Connect Link pairing, handshake, whoami, stream and transfer, and the draft plugin's routes (`real_link_server.py`, `LiveMasterTests.swift`).
+- **`x-galileo-status: planned`** — sky streaming only: taken from the plugin SDD §5.2, and may change.
 
 Corrections from generating the Swift client and re-reading the source (2026-11-06), all made in the description to match the running code:
 
@@ -228,25 +228,29 @@ Corrections from generating the Swift client and re-reading the source (2026-11-
 
 **The catalogue in `api/scenarios/catalogue.json` is the real one**, dumped from a Galileo checkout by `tools/mock-master/dump_catalogue.py`, so the app and the mock can't drift from the operations core really registers. **The state keys are a proposal:** `api/scenarios/normal-night.json` is what the screens read (`mount.tracking`, `imaging.stats.hfr`, `activity.mount`, and so on), written in the dotted form `galileo.control_surface.state` already publishes, and the plugin needs to agree them.
 
-When the plugin publishes its own description, `api/openapi.yaml` is replaced by a pinned copy of it and the differences are resolved in Section 4.2; until then this file is the executable statement of what the apps expect, and `S-MOCK` implements it.
+This file is the executable statement of what the apps expect; `S-MOCK` and the plugin both implement it, and `real_link_server.py` tests the second.
 
 ### 4.2 Where the server design and the running code differ
 
-These were found by reading the Galileo source against the plugin SDD and must be settled with the server side before the wire is pinned. None blocks starting `S-LINK`.
+These were found by reading the Galileo source against the plugin SDD. Items 1-3, 6, 7 and 12-14 are settled by the draft plugin (`Galileo-Plugins/mobileconnect`) as the last column says; the rest are open with the server side.
 
 | # | Plugin SDD says | Galileo core does today | Effect on the app | Proposal |
 |---|---|---|---|---|
-| 1 | Plugin routes under `/mobileconnect/v1/...`, including `WS /stream` | Core stream is at `/connect/v1/stream` (one WebSocket per peer, shared by all plugins of that peer), messages `{seq, data}` with `hello`/`resync` | Two possible stream URLs | Use the core stream; the plugin publishes its `snapshot`/`delta`/`op.*` messages as the `data` payload |
-| 2 | Client resumes with `?last_seq=` | Core uses `?epoch=…&last=…`; the epoch detects a re-created stream | Resume parameters differ | Use the core's; update the plugin SDD |
-| 3 | `hold.beat` is a client→node stream message | Core's stream **ignores** client messages (`_read` discards them); the shipped beat is the operation `focus.hold_beat` over HTTP | The beat path and cadence differ | Beat as an HTTP operation unless core adds an upstream channel; measure latency on Wi-Fi (plugin SDD P4) |
+| 1 | Plugin routes under `/mobileconnect/v1/...`, including `WS /stream` | Core stream is at `/connect/v1/stream` (one WebSocket per peer, shared by all plugins of that peer), messages `{seq, data}` with `hello`/`resync` | Two possible stream URLs | **Settled:** the core stream; the plugin publishes its `snapshot`/`delta`/`op.*` messages as the `data` payload |
+| 2 | Client resumes with `?last_seq=` | Core uses `?epoch=…&last=…`; the epoch detects a re-created stream | Resume parameters differ | **Settled:** the core's |
+| 3 | `hold.beat` is a client→node stream message | Core's stream **ignores** client messages (`_read` discards them); the shipped beat is the operation `focus.hold_beat` over HTTP | The beat path and cadence differ | **Settled:** beat as an HTTP operation, which is built and tested; measure latency on Wi-Fi (plugin SDD P4) |
 | 4 | Capability payload with `areas`, `sky_stream`, `outreach` | Core handshake supports a plugin `extension` payload; the plugin does not exist yet | None until built | Pin the extension schema with the plugin |
 | 5 | Roles Viewer/Operator kept in peer metadata | Core peers hold *permission sets* (`control`, `view`, `config.*`, `data.*`) | The app derives role from `allowed`; the Master must grant `control` for Operator and `view` for Viewer, and never `config.*` | Confirm the mapping with the server; make the handshake or `whoami` state the role explicitly |
-| 6 | Pairing request identity: name, platform | Core `POST /connect/v1/pair` takes `plugin`, `name`, `kind`, `platform` | Fields to fill | `plugin:"mobileconnect"`, `kind:"app"`, `platform:"ios"` etc. |
+| 6 | Pairing request identity: name, platform | Core `POST /connect/v1/pair` takes `plugin`, `name`, `kind`, `platform` | Fields to fill | **Settled:** `plugin:"mobileconnect"`, `kind:"app"`, `platform:"ios"` or `"ipados"` |
+| 12 | Routes `/pier/{pier}/ops/{name}`, `/pier/{pier}/lease`, `/pier/{pier}/preview`, `/frame/{id}/tiles/...` | Connect Link's `RouteRegistry` matches exact paths: no templates | Those routes can't be registered | **Settled:** flat routes with query parameters (`POST /ops?pier=&name=`), as WebConnect does |
+| 13 | On connection the client receives a snapshot (ADR-MCON-004) | `StreamHub` has no connection hook, so a plugin can't know | The snapshot can't be pushed | **Settled:** the client calls `POST /snapshot` after `hello` with no state and after `resync`; the snapshot arrives on the stream, in sequence |
+| 14 | A stretch of black, mid and white points | `galileo.preview.PreviewParams` has one value, 0-100 | A control the server can't honour | **Settled:** one stretch control |
+| 15 | State pushed on change from aggregated bus subscriptions | `ObservableState` publishes only `mount.position`, `mount.tracking`, `guiding.state`, `guiding.rms`, `weather.readings`; the rest is in read-class `*.status` operations | Most of what the screens show has no push source | **Interim:** the plugin samples the status operations every 2 s while an app is connected and sends what changed. Better done by core publishing more |
 | 8 | Role comes from the handshake's `allowed` set, and the app refuses a grant containing `config.*` | `allowed` is built from all of `PAIRED_PERMISSIONS`, so it always contains `config.*`, whatever the peer was granted | Reading `allowed` would refuse every real Master | **Implemented:** role and the refusal use `whoami.permissions` (intersected with `allowed` for the role). Confirm with the server |
 | 9 | Emergency operations named `emergency.*` (Section 3.4 said so too) | `system.stop_everything`, `mount.emergency_park`, `dome.emergency_close`, class `emergency` | Names differ | **Implemented** with core's names; Section 3.4 corrected |
 | 10 | The app reports `schema: 0` in the handshake | A schema level different from the Master's gives verdict `restricted` with a message about databases, and removes `data.*` from `allowed` | Every real Master answers `restricted`, with a message meaningless to an app user, and the handshake would remove `data.pull`, which FITS download needs | **Implemented:** `restricted` with `control` or `view` proceeds and its message isn't shown. The plugin's handshake extension should exempt app peers |
-| 11 | The SRS's MVP covers these | Core registers no operation for: connecting and disconnecting devices, held mount movement, find home, tracking rate, pulse, region of interest, autofocus, live loop. No route for the guide-star cut-out | Those controls can't work on a real Master | `api/scenarios/catalogue.planned.json` proposes names for the first few, and the screens show "doesn't offer this yet" without them. The server side decides |
-| 7 | Sky stream, previews, tiles, frames as MobileConnect routes | Core has `skystream.py` and `preview.py` services; the routes that expose them are not registered (no plugin) | `S-SKY`, `S-IMG` cannot be exercised against a real Master | Develop against `S-MOCK`; verify when the plugin lands |
+| 11 | The SRS's MVP covers these | Core registers no operation for: connecting and disconnecting devices, held mount movement, find home, tracking rate, pulse, region of interest, autofocus, live loop, skipping a session step, deferring a flip, the current filter. The wire has no nested session blocks. `guiding.star` returns raw pixels with no route for a picture of them | Those controls can't work on a real Master | `api/scenarios/catalogue.planned.json` proposes names for the first few, and the screens show "doesn't offer this yet" without them. The server side decides |
+| 7 | Sky stream, previews, tiles, frames as MobileConnect routes | Core has `skystream.py` and `preview.py` services; the routes that expose them are not registered (no plugin) | `S-SKY` can't be exercised against a real Master | **Settled for previews and tiles** (the plugin's routes over `galileo.preview`). Sky routes aren't drafted; develop against `S-MOCK` |
 
 ---
 
@@ -261,7 +265,7 @@ These were found by reading the Galileo source against the plugin SDD and must b
 | D5 | Block-type catalogue for session authoring is not yet on the wire | Server to expose block types and parameter schemas (`SES-340`) |
 | D6 | Replacing the authored description with the plugin's own (Section 4.1) | When the plugin publishes it |
 | D10 | A value's age compares the Master's clock with the device's, so skew larger than a freshness limit shows a moving value as stale (it can't show a stale one as live for long). Negative ages are clamped to 0 | Measure on real devices; correct for skew from the snapshot's `as_of` if it matters |
-| D9 | HTTP status codes for typed operation outcomes (`refused`, `invalid`, `busy`, …) are not specified by the plugin SDD; the description carries the outcome in the body and uses a `default` error response | With the server side |
+| D9 | ~~HTTP status codes for typed outcomes~~ | **Closed:** 400 `invalid`, 429 `busy`, 409 the others, never 5xx; the outcome is in the body |
 | D7 | Findings 1–7 in Section 4.2 | With the server side |
 | D8 | Phone layout reductions (PSD Q1) | After tablet wireframes |
 

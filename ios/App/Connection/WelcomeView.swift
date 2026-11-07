@@ -13,6 +13,7 @@ struct WelcomeView: View {
     @State private var manual = ""
     @State private var manualProblem: String?
     @State private var resolving: String?
+    @State private var searchIsSlow = false
 
     var body: some View {
         ScrollView {
@@ -38,6 +39,12 @@ struct WelcomeView: View {
         }
         .background(theme.background)
         .task(id: browsing) { if browsing { await browse() } }
+        .task(id: browsing) {
+            // A spinner alone looks broken: Bonjour can take a while on some networks.
+            guard browsing else { return }
+            try? await Task.sleep(for: .seconds(10))
+            if !Task.isCancelled { searchIsSlow = true }
+        }
         .onAppear {
             model.refreshPaired()
             if explained { browsing = true }
@@ -76,6 +83,9 @@ struct WelcomeView: View {
                     Text("Looking for Galileo…")
                 }
                 .frame(minHeight: Layout.minimumTarget)
+                if searchIsSlow {
+                    Note("Nothing yet. Check that Galileo is running and that this device is on the same network. It can take up to a minute, or you can enter the address below.")
+                }
                 if let searchProblem { Note(searchProblem) }
             } else {
                 ForEach(found) { master in

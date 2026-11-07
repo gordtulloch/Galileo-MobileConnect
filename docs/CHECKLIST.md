@@ -57,23 +57,27 @@ Each item is specified in [docs/SDD.md](SDD.md) §3; write the unit tests agains
 - [x] `I-THEME`: tokens, **Night (red-only) theme at the scene root**, 56 pt minimum targets, Dynamic Type (`design/tokens.json`, compiled by `scripts/gen_tokens.py`; strings are still literals, `MAPP-LAY-060` is P2).
 - [x] Overview, then Equipment → Imaging → Focus → Guiding → Safety (MVP set).
 - [x] Run in the **simulator against the mock Master**: iPad and iPhone, by UI test, in demo mode and over real TLS with real pairing and the Keychain.
-- [ ] Run on a **real iPad** (local-network permission and Wi-Fi behaviour cannot be tested in the simulator). Needs the bundle identifier decided first (IO5), because the first device build registers it with the Apple account.
+- [x] First run on a **real iPad** (iPad Pro 11-inch M4, iPadOS 26.6.1, 2026-11-06): the demo, the local-network prompt, Bonjour discovery, and pairing over real TLS with the standalone mock Master.
+- [ ] On the iPad: held controls and the deadman over Wi-Fi (D2), reconnecting, a relaunch from the Keychain, and Night in the dark with gloves.
+- [ ] Discovery took about 30 s on the first try on a mesh Wi-Fi network: find out whether that was the server's restart or the network, and whether a real Master does the same.
 
 ## 5a. What the iOS MVP still needs
 
 **Screens not built** (their `S-*` component too, where one is named):
 
 - [ ] `I-SKY`, `S-SKY`: sky view and streamed sky data, with the Metal prototype on the oldest iPad (`MAPP-SKY-010`-`040`, `MAPP-STR-*`).
-- [ ] Solve (`MAPP-SOL-010`, `020`) and Flip (`MAPP-FLP-010`, `020`). The operations exist in the catalogue; these are small screens.
-- [ ] `I-SES`: Sessions run view (`MAPP-SES-010`-`030`) and Schedule list (`MAPP-SCH-010`).
+
+**Built 2026-11-06:** Solve (`MAPP-SOL-010`, `020`), Flip (`MAPP-FLP-010`, `020`), Sessions run view and job queue (`MAPP-SES-010`-`030`, `MAPP-SCH-010`).
 
 **Built, but short of the requirement until the server offers more** (Shared SDD 4.2, item 11):
 
 - [ ] Connecting devices (`MAPP-DEV-010`), mount jog (`MAPP-DEV-030`), autofocus (`MAPP-FOC-020`): the screens are built and work on the mock's proposed operations, and say "doesn't offer this yet" on a real Master.
 - [ ] Find home, tracking rate and pulse (`MAPP-DEV-020`); per-exposure region of interest (`MAPP-DEV-040`): no operation exists yet, and no control either.
-- [ ] Live loop (`MAPP-IMG-020`), tiles for deep zoom (`MAPP-IMG-030`), guide-star cut-out (`MAPP-GUI-020`): the Imaging and Guiding screens show the rest; these need routes or operations first.
+- [ ] Live loop (`MAPP-IMG-020`), guide-star cut-out (`MAPP-GUI-020`): the Imaging and Guiding screens show the rest; these need operations first.
+- [ ] Tiles for deep zoom (`MAPP-IMG-030`): the route exists now, and the viewer doesn't use it yet.
+- [ ] Solve the current or last frame (`MAPP-SOL-010`): `solve.capture` takes a new one. Skip a session step (`MAPP-SES-020`), defer a flip (`MAPP-FLP-020`), nested blocks and time remaining (`MAPP-SES-030`), current filter (`MAPP-DEV-050`): no operation or state yet.
 
-**Everything** on a real Master beyond pairing, handshake and the stream needs the MobileConnect plugin: see the end of this file.
+**The plugin** is drafted (`Galileo-Plugins/mobileconnect`) and not yet installed in a running Galileo: see the end of this file.
 
 ## 6. Build the mock Master
 
@@ -108,5 +112,6 @@ Each item is specified in [docs/SDD.md](SDD.md) §3; write the unit tests agains
 
 The apps cannot be completed end to end until these exist. Until then use the mock Master.
 
-- [ ] MobileConnect plugin (`Galileo-Plugins/mobileconnect` is currently a README only): `/mobileconnect/v1` routes, capability extension, event payloads, published `wire/openapi.yaml` + `events.schema.json`.
-- [ ] Routes exposing the existing `skystream.py` and `preview.py` services; block-type catalogue for session authoring; manual-focus and hold operations already exist in `galileo/control_surface/`.
+- [x] MobileConnect plugin draft (`Galileo-Plugins/mobileconnect`): routes, event stream, state translation, Options page. Tested with the real Swift client against real Connect Link and Gateway code with fake devices.
+- [ ] Try the plugin in a running Galileo with real devices: rename `plugin.toml.draft` locally and *Install from file*. Renaming it in the repository publishes it to the Marketplace on the next push.
+- [ ] Spoke Piers through `galileo.connect_link.relay`, sky routes over `skystream.py`, block-type catalogue for session authoring, the operations in `docs/SDD.md` §4.2 item 11.

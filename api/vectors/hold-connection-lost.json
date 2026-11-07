@@ -7,11 +7,13 @@
   "steps": [
     { "do": "act", "action": "stream_start" },
     { "do": "stream", "frame": { "type": "hello", "epoch": "e1", "seq": 0 } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/snapshot", "note": "the client asks once it has seen hello with no state" },
+    { "do": "receive", "status": 200, "body": { "ok": true } },
     { "do": "act", "action": "hold_press", "pier": "p1", "family": "focus", "args": { "direction": 1 } },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_start" },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=focus.hold_start" },
     { "do": "receive", "status": 200, "body": { "ok": true, "result": { "hold_id": "h1" } } },
     { "do": "expect", "state": { "hold": "Holding" } },
     { "do": "drop" },
-    { "do": "expect", "state": { "hold": "Stopped: connection lost", "requests_sent": 1 } }
+    { "do": "expect", "state": { "hold": "Stopped: connection lost", "requests_sent": 2 } }
   ]
 }

@@ -28,6 +28,8 @@ public struct PierState: Sendable, Equatable {
     public var series: [String: [SeriesPoint]] = [:]
     public var lanes: [String: [LaneSegment]] = [:]
     public var leaseHolder: String?
+    /// Who holds the lease, for a person to read. Nil from a Master that gives only `leaseHolder`.
+    public var leaseHolderName: String?
     public var access: String?
     public var reachable: Bool?
     public var reason: String?
@@ -101,7 +103,8 @@ public struct LiveState: Sendable, Equatable {
                 pier.series = self.piers[id]?.series ?? [:]
                 pier.lanes = self.piers[id]?.lanes ?? [:]
                 Self.flatten(content, prefix: "", into: &pier.values, asOf: asOf)
-                if let holder = pier.values["lease.holder"] { pier.leaseHolder = holder.value.stringValue }
+                pier.leaseHolder = pier.values["lease.holder"]?.value.stringValue
+                pier.leaseHolderName = pier.values["lease.holder_name"]?.value.stringValue
                 for key in pier.values.keys.filter({ $0.hasPrefix(Self.lanePrefix) }) {
                     Self.addLaneSegment(to: &pier, key: key, value: pier.values[key]!.value, at: asOf)
                 }
@@ -124,8 +127,9 @@ public struct LiveState: Sendable, Equatable {
             alerts.removeAll { $0.id == alert.id }
             alerts.insert(alert, at: 0)
             if alerts.count > Self.alertLimit { alerts.removeLast(alerts.count - Self.alertLimit) }
-        case .lease(let pier, let holder):
+        case .lease(let pier, let holder, let name):
             piers[pier, default: PierState()].leaseHolder = holder
+            piers[pier, default: PierState()].leaseHolderName = name
         case .access(let pier, let access, let reachable, let reason):
             piers[pier, default: PierState()].access = access
             piers[pier, default: PierState()].reachable = reachable

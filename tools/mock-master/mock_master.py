@@ -128,10 +128,11 @@ class MockMaster:
         r.add_get("/mobileconnect/v1/piers", lambda q: web.json_response({"piers": self.s.get("piers", [])}))
         r.add_get("/mobileconnect/v1/catalogue", self.catalogue)
         r.add_get("/mobileconnect/v1/alerts", lambda q: web.json_response({"alerts": list(reversed(self.alerts))}))
-        r.add_post("/mobileconnect/v1/pier/{pier}/ops/{name}", self.invoke)
-        r.add_post("/mobileconnect/v1/pier/{pier}/lease", self.lease_take)
-        r.add_delete("/mobileconnect/v1/pier/{pier}/lease", self.lease_release)
-        r.add_get("/mobileconnect/v1/pier/{pier}/preview", self.preview)
+        r.add_post("/mobileconnect/v1/snapshot", self.request_snapshot)
+        r.add_post("/mobileconnect/v1/ops", self.invoke)
+        r.add_post("/mobileconnect/v1/lease", self.lease_take)
+        r.add_delete("/mobileconnect/v1/lease", self.lease_release)
+        r.add_get("/mobileconnect/v1/preview", self.preview)
         return app
 
     @web.middleware
@@ -200,7 +201,7 @@ class MockMaster:
         return token
 
     async def lease_take(self, request):
-        pier = request.match_info["pier"]
+        pier = request.query.get("pier", "")
         if not self.has_control(pier):
             return web.json_response({"error": "refused", "reason": "This device can only view this Pier."}, status=403)
         holder = self.leases.get(pier)
@@ -212,19 +213,19 @@ class MockMaster:
                     "detail": {"kind": "lease_held", "holder": holder, "can_take": True},
                     "confirm_token": self.new_token("lease", None), "expires_in": 60}, status=409)
         self.leases[pier] = PEER
-        await self.emit({"type": "lease", "pier": pier, "holder": PEER})
+        await self.emit({"type": "lease", "pier": pier, "holder": PEER, "holder_name": "This device"})
         return web.json_response({"pier": pier, "held_by_me": True, "holder": PEER})
 
     async def lease_release(self, request):
-        pier = request.match_info["pier"]
+        pier = request.query.get("pier", "")
         if self.leases.get(pier) == PEER:
             del self.leases[pier]
-            await self.emit({"type": "lease", "pier": pier, "holder": None})
+            await self.emit({"type": "lease", "pier": pier, "holder": None, "holder_name": None})
         return web.json_response({"pier": pier, "held_by_me": False})
 
     # -- operations ----------------------------------------------------------------------------
     async def invoke(self, request):
-        pier, name = request.match_info["pier"], request.match_info["name"]
+        pier, name = request.query.get("pier", ""), request.query.get("name", "")
         key = request.headers.get("Idempotency-Key")
         if key and f"{pier}/{key}" in self.idempotent:
             status, body = self.idempotent[f"{pier}/{key}"]
@@ -310,7 +311,7 @@ class MockMaster:
                 value = args.get(value["$arg"])
             elif isinstance(value, dict) and "$add" in value:
                 state_key, arg = value["$add"]
-                value = self.values.get(pier, {}).get(state_key, 0) + args.get(arg, 0)
+                value = self.values.get(pier, {}).get(state_key, 0) + (1 if arg == "_one" else args.get(arg, 0))
             await self.set(key, value, pier)
 
     async def set(self, key, value, pier):
@@ -330,8 +331,16 @@ class MockMaster:
         await self.send({"seq": self.seq, "data": data})
 
     async def snapshot(self) -> None:
-        piers = {p: {**v, **({"lease.holder": self.leases[p]} if p in self.leases else {})} for p, v in self.values.items()}
+        piers = {p: {**v, **({"lease.holder": self.leases[p],
+                              "lease.holder_name": "This device" if self.leases[p] == PEER else self.leases[p]}
+                             if p in self.leases else {})} for p, v in self.values.items()}
         await self.emit({"type": "snapshot", "as_of": now_text(), "piers": piers})
+
+    async def request_snapshot(self, request):
+        open_stream = self.ws is not None and not self.ws.closed
+        if open_stream:
+            await self.snapshot()
+        return web.json_response({"ok": open_stream})
 
     async def stream(self, request):
         ws = web.WebSocketResponse(heartbeat=20.0)
@@ -342,10 +351,8 @@ class MockMaster:
         epoch, last = request.query.get("epoch", ""), request.query.get("last", "")
         if not last:
             await self.send({"type": "hello", "epoch": self.epoch, "seq": self.seq})
-            await self.snapshot()
         elif epoch != self.epoch or (self.ring and int(last) < self.ring[0][0] - 1):
             await self.send({"type": "resync", "epoch": self.epoch, "seq": self.seq})
-            await self.snapshot()
         else:
             await self.send({"type": "hello", "epoch": self.epoch, "seq": self.seq})
             for seq, data in list(self.ring):
@@ -415,9 +422,11 @@ def ssl_context(cert: bytes, key: bytes) -> ssl.SSLContext:
 
 
 async def advertise(port: int):
-    from zeroconf import IPVersion
+    from zeroconf import InterfaceChoice, IPVersion
     from zeroconf.asyncio import AsyncServiceInfo, AsyncZeroconf
-    zc = AsyncZeroconf(ip_version=IPVersion.V4Only)
+    # The default interface only: binding all of them fails on a Mac with "address in use" when another program
+    # has an mDNS socket open, such as a Chromium browser.
+    zc = AsyncZeroconf(ip_version=IPVersion.V4Only, interfaces=InterfaceChoice.Default)
     host = socket.gethostname().split(".")[0]
     info = AsyncServiceInfo("_galileo-link._tcp.local.", f"mock-master.{'_galileo-link._tcp.local.'}", port=port,
                             properties={"name": "Mock Master", "node": "mock-master", "proto": "1", "role": "master"},

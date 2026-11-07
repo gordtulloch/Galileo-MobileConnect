@@ -20,6 +20,6 @@ A scenario with `extends` replaces the named top-level fields of its parent. Its
 | `lease_holders` | Pier to holder at the start |
 | `unavailable` | Pier to operation to the reason it is unavailable |
 | `results`, `consequences`, `durations` | Per operation: result value, confirmation wording, running time of a long-running one |
-| `effects` | Per operation: state changes `after_s` seconds later. A value may be `{"$arg": "name"}`, or `{"$add": ["state.key", "arg"]}` |
+| `effects` | Per operation: state changes `after_s` seconds later. A value may be `{"$arg": "name"}`, or `{"$add": ["state.key", "arg"]}`, where the arg `_one` means 1 |
 | `timeline`, `loop_s` | Timed events from the first stream connection: `set` (with `pier`), `alert`, or `do`: `drop`, `resync`, `revoke`, `rotate_certificate`. Repeats every `loop_s` if not 0 |
 | `waves` | Keys updated every `every_s`: `fields` of `{base, amp, period_s}` for an object, `base`/`amp`/`period_s` for a number, or `ramp_s` for a 0-1 ramp |

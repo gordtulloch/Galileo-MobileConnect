@@ -5,11 +5,11 @@
   "requirements": ["MAPP-CTL-060", "MAPP-DEV-030"],
   "steps": [
     { "do": "act", "action": "hold_press", "pier": "p1", "family": "focus", "args": { "direction": -1 } },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_start" },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=focus.hold_start" },
     { "do": "receive", "status": 200, "body": { "ok": true, "result": { "hold_id": "h1" } } },
     { "do": "expect", "state": { "hold": "Holding" } },
     { "do": "act", "action": "background" },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/focus.hold_stop", "body": { "args": { "hold_id": "h1" } } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=focus.hold_stop", "body": { "args": { "hold_id": "h1" } } },
     { "do": "receive", "status": 200, "body": { "ok": true, "result": true } },
     { "do": "expect", "state": { "hold": "Stopped: background" } }
   ]

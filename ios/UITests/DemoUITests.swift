@@ -27,9 +27,22 @@ final class DemoUITests: XCTestCase {
         let row = element("area.\(area)")
         XCTAssertTrue(row.waitForExistence(timeout: 5), area)
         // On a phone the areas are a strip that scrolls; a person would scroll it too.
+        // A short drag rather than a swipe: a swipe's momentum flies past a button in the middle of the strip.
         let width = app.windows.firstMatch.frame.width
-        for _ in 0..<4 where row.frame.maxX > width { app.scrollViews.firstMatch.swipeLeft() }
-        for _ in 0..<4 where row.frame.minX < 0 { app.scrollViews.firstMatch.swipeRight() }
+        let strip = app.scrollViews.firstMatch
+        for _ in 0..<10 {
+            let distance: CGFloat
+            if row.frame.maxX > width {
+                distance = -min(150, row.frame.maxX - width + 20)
+            } else if row.frame.minX < 0 {
+                distance = min(150, 20 - row.frame.minX)
+            } else {
+                break
+            }
+            let start = strip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: distance, dy: 0)))
+            usleep(300_000)
+        }
         row.tap()
     }
 
@@ -46,7 +59,7 @@ final class DemoUITests: XCTestCase {
         waitForShell()
         XCTAssertTrue(element("demo.banner").exists, "a demo must say so")
         sleep(2)  // let the first deltas arrive
-        for area in ["Overview", "Equipment", "Imaging", "Focus", "Guiding", "Safety", "Settings"] {
+        for area in ["Overview", "Equipment", "Imaging", "Focus", "Solve", "Guiding", "Flip", "Sessions", "Safety", "Settings"] {
             open(area)
             sleep(1)
             XCTAssertTrue(element("emergency").exists, "emergency must be on \(area)")
@@ -92,6 +105,58 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(element("confirm.accept").waitForExistence(timeout: 5))
         element("confirm.accept").tap()
         XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 8), "Done is only the Master's word")
+    }
+
+    /// `MAPP-SOL-010`: a solve runs and its result appears.
+    func testSolve() {
+        launch()
+        waitForShell()
+        element("lease.take").tap()
+        XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
+        open("Solve")
+        XCTAssertTrue(element("solve.solution").waitForExistence(timeout: 5), "the demo starts with a solution")
+        element("solve.capture").tap()
+        XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 10), "Done is only the Master's word")
+        XCTAssertTrue(element("solve.solution").exists)
+    }
+
+    /// `MAPP-FLP-010`, `MAPP-FLP-020`: the flip's state, and a flip only after the Master's confirmation.
+    func testFlipAsksFirst() {
+        launch()
+        waitForShell()
+        element("lease.take").tap()
+        XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
+        open("Flip")
+        XCTAssertTrue(app.staticTexts["Scheduled"].waitForExistence(timeout: 5))
+        let flip = element("flip.now")
+        XCTAssertTrue(flip.waitForExistence(timeout: 5))
+        flip.tap()
+        XCTAssertTrue(element("confirm.accept").waitForExistence(timeout: 5))
+        screenshot("night-flip-confirmation")
+        element("confirm.accept").tap()
+        XCTAssertTrue(app.staticTexts["Flipping"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 15), "the flip's end is the Master's word")
+    }
+
+    /// `MAPP-SES-010`, `MAPP-SES-020`, `MAPP-SES-030`, `MAPP-SCH-010`: pause and resume, a stop that asks, and the queue.
+    func testSessions() {
+        launch()
+        waitForShell()
+        element("lease.take").tap()
+        XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
+        open("Sessions")
+        XCTAssertTrue(element("schedule.next").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["3 of 12"].exists)
+        screenshot("night-sessions")
+        element("session.pause").tap()
+        XCTAssertTrue(app.staticTexts["Paused"].waitForExistence(timeout: 5))
+        element("session.resume").tap()
+        XCTAssertTrue(app.staticTexts["Running"].waitForExistence(timeout: 5))
+        element("session.stop").tap()
+        XCTAssertTrue(element("confirm.cancel").waitForExistence(timeout: 5), "stop must ask first")
+        element("confirm.accept").tap()
+        XCTAssertTrue(app.staticTexts["Stopped"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Stopped from the app"].exists)
     }
 
     /// `MAPP-EMG-010`, `MAPP-EMG-020`: two interactions, no lease, every part listed. A tap isn't enough.

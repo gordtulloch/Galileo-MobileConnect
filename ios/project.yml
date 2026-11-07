@@ -10,6 +10,7 @@ settings:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: 4QZ7YY8FJA   # kept here so that regenerating the project doesn't lose it
 packages:
   GalileoAPI:
     path: Packages/GalileoAPI
@@ -26,7 +27,7 @@ targets:
       - package: GalileoCore
     settings:
       base:
-        # Working identifier: PSD Q5 / iOS SDD IO5 decide the final one before first submission.
+        # Decided 2026-11-06 (PSD Q5).
         PRODUCT_BUNDLE_IDENTIFIER: com.gordtulloch.galileo.mobileconnect
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_STYLE: Automatic

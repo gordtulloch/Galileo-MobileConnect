@@ -41,7 +41,7 @@ public struct SessionSnapshot: Sendable, Equatable {
 
     public func lease(pier: String) -> Lease {
         guard let holder = live.piers[pier]?.leaseHolder, !holder.isEmpty else { return .free }
-        return holder == peerID ? .mine : .other(holder)
+        return holder == peerID ? .mine : .other(live.piers[pier]?.leaseHolderName ?? holder)
     }
 
     /// Access as last stated by the stream, falling back on the Pier list.
@@ -154,10 +154,6 @@ public actor ObservatorySession {
     private func prepare() async throws {
         do {
             try await loadFromMaster()
-            if snapshot.notice != nil {
-                snapshot.notice = nil
-                publish()
-            }
         } catch LinkError.unexpected(let message) {
             // For example a Master without the MobileConnect plugin. Retried, but not in silence.
             snapshot.notice = message
@@ -175,7 +171,7 @@ public actor ObservatorySession {
         let identity = try await connection.api.whoAmI()
         if Role.hasConfigurationGrant(identity.permissions) { throw StartStop.stop(.configurationGrant) }
         let role = Role.from(permissions: identity.permissions, allowed: outcome.allowed)
-        let piers = try await connection.api.piers()
+        let (piers, piersReason) = try await connection.api.piers()
         var catalogues = snapshot.catalogues
         for pier in piers where catalogues[pier.id] == nil {
             catalogues[pier.id] = try await connection.api.catalogue(pier: pier.id)
@@ -191,6 +187,7 @@ public actor ObservatorySession {
         snapshot.catalogues = catalogues
         snapshot.capabilities = capabilities
         if snapshot.live.alerts.isEmpty { snapshot.live.alerts = alerts }
+        snapshot.notice = piersReason
         publish()
     }
 
@@ -210,6 +207,7 @@ public actor ObservatorySession {
         case .message(let message):
             let wasMine = snapshot.live.piers.filter { snapshot.lease(pier: $0.key) == .mine }.keys
             snapshot.live = LiveState.reduce(snapshot.live, message)
+            askForSnapshotIfNeeded(after: message)
             if case .frame(_, .operation(let operation)) = message { snapshot.ledger.apply(operation) }
             if wasMine.contains(where: { snapshot.lease(pier: $0) != .mine }) {
                 await hold?.stop(.leaseLost)
@@ -221,6 +219,25 @@ public actor ObservatorySession {
             finish(error == .identityChanged ? .identityChanged : .unpaired(error.message))
         }
         publish()
+    }
+
+    /// `hello` with no state yet, or `resync`: the snapshot comes on the stream, but only when asked for.
+    private func askForSnapshotIfNeeded(after message: StreamMessage) {
+        switch message {
+        case .hello where snapshot.live.phase == .live: return
+        case .hello, .resync: break
+        case .frame: return
+        }
+        let api = connection.api
+        Task { [weak self] in
+            do {
+                try await api.requestSnapshot()
+            } catch LinkError.unpaired {
+                await self?.handle(.stopped(.unpaired))
+            } catch {
+                // The stream going with it is what happens next, and reconnecting asks again.
+            }
+        }
     }
 
     private func finish(_ stop: SessionStop) {
@@ -347,7 +364,7 @@ public actor ObservatorySession {
 
     // MARK: Images
 
-    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Stretch) async throws -> Data? {
+    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int) async throws -> Data? {
         try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch)
     }
 

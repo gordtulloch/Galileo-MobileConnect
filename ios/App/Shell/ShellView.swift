@@ -6,7 +6,10 @@ enum Area: String, CaseIterable, Identifiable {
     case equipment = "Equipment"
     case imaging = "Imaging"
     case focus = "Focus"
+    case solve = "Solve"
     case guiding = "Guiding"
+    case flip = "Flip"
+    case sessions = "Sessions"
     case safety = "Safety"
     case settings = "Settings"
 
@@ -18,7 +21,10 @@ enum Area: String, CaseIterable, Identifiable {
         case .equipment: "scope"
         case .imaging: "camera.aperture"
         case .focus: "circle.dotted.circle"
+        case .solve: "viewfinder"
         case .guiding: "dot.scope"
+        case .flip: "arrow.left.arrow.right"
+        case .sessions: "list.bullet.rectangle"
         case .safety: "exclamationmark.shield"
         case .settings: "gearshape"
         }
@@ -82,7 +88,10 @@ struct ShellView: View {
         case .equipment: EquipmentScreen()
         case .imaging: ImagingScreen()
         case .focus: FocusScreen()
+        case .solve: SolveScreen()
         case .guiding: GuidingScreen()
+        case .flip: FlipScreen()
+        case .sessions: SessionsScreen()
         case .safety: SafetyScreen()
         case .settings: SettingsScreen()
         }

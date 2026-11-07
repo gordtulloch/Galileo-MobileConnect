@@ -283,7 +283,7 @@ paths:
       tags: [catalogue]
       operationId: getCapabilities
       summary: Which areas, sky-stream limits and API version this Master offers.
-      x-galileo-status: planned
+      x-galileo-status: implemented
       responses:
         "200":
           description: Capabilities.
@@ -302,7 +302,7 @@ paths:
       description: |
         The app builds its controls from this: argument ranges, units and choices come from here, and
         an operation absent from the list is unavailable. Entries of class `config` are never present.
-      x-galileo-status: planned
+      x-galileo-status: implemented
       parameters:
         - name: pier
           in: query
@@ -324,7 +324,7 @@ paths:
       tags: [catalogue]
       operationId: listPiers
       summary: Observatories and Piers, including spoke Piers reached through this Master.
-      x-galileo-status: planned
+      x-galileo-status: implemented
       responses:
         "200":
           description: The Piers this client may see.
@@ -335,7 +335,26 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorised"
 
-  /mobileconnect/v1/pier/{pier}/ops/{name}:
+  /mobileconnect/v1/snapshot:
+    post:
+      tags: [catalogue]
+      operationId: requestSnapshot
+      summary: Put a full snapshot on this client's event stream.
+      description: |
+        Connect Link's stream has no connection hook, so the client asks after `hello` with no state, and
+        after `resync`. The snapshot arrives on the stream, in sequence with the deltas.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: Queued. `ok` is false if this client has no stream to send it on.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ok"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+
+  /mobileconnect/v1/ops:
     post:
       tags: [operations]
       operationId: invokeOperation
@@ -345,14 +364,17 @@ paths:
         uncertain outcome. An operation of class `confirm` is answered `confirmation_required` with a
         token; repeat the request with `X-Confirm-Token` to execute it.
 
-        **Open point (SDD D9):** the plugin SDD does not fix HTTP status codes for the typed outcomes
-        (`refused`, `invalid`, `unavailable`, `busy`, `unreachable`, `confirmation_required`). They are
-        modelled here by the response body, on the `default` response.
-      x-galileo-status: planned
+        A typed outcome is in the body, on the `default` response: 400 for `invalid`, 429 for `busy`, 409
+        for the others (`refused`, `unavailable`, `unreachable`, `confirmation_required`). Never a 5xx.
+      x-galileo-status: implemented
       parameters:
-        - $ref: "#/components/parameters/Pier"
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
         - name: name
-          in: path
+          in: query
           required: true
           schema:
             type: string
@@ -389,15 +411,18 @@ paths:
               schema:
                 $ref: "#/components/schemas/OperationError"
 
-  /mobileconnect/v1/pier/{pier}/lease:
-    parameters:
-      - $ref: "#/components/parameters/Pier"
+  /mobileconnect/v1/lease:
     post:
       tags: [operations]
       operationId: acquireLease
       summary: Take the control lease for a Pier (or take it over with a confirm token).
-      x-galileo-status: planned
+      x-galileo-status: implemented
       parameters:
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
         - name: X-Confirm-Token
           in: header
           required: false
@@ -422,7 +447,13 @@ paths:
       tags: [operations]
       operationId: releaseLease
       summary: Release the control lease.
-      x-galileo-status: planned
+      x-galileo-status: implemented
+      parameters:
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Released.
@@ -438,7 +469,7 @@ paths:
       tags: [images]
       operationId: listAlerts
       summary: Recent alerts.
-      x-galileo-status: planned
+      x-galileo-status: implemented
       responses:
         "200":
           description: Recent alerts, newest first.
@@ -455,18 +486,22 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorised"
 
-  /mobileconnect/v1/pier/{pier}/preview:
+  /mobileconnect/v1/preview:
     get:
       tags: [images]
       operationId: getPreview
-      summary: A node-rendered preview of the current frame.
-      x-galileo-status: planned
+      summary: A node-rendered preview of the Pier's current frame.
+      x-galileo-status: implemented
       parameters:
-        - $ref: "#/components/parameters/Pier"
+        - name: pier
+          in: query
+          required: true
+          schema:
+            type: string
         - name: w
           in: query
           required: false
-          description: Requested width in pixels; clamped by the Master.
+          description: Longest side in pixels; clamped by the Master.
           schema:
             type: integer
             minimum: 1
@@ -478,21 +513,14 @@ paths:
             type: integer
             minimum: 1
             maximum: 100
-        - name: black
+        - name: stretch
           in: query
           required: false
+          description: 0-100, how much of each tail is clipped (`galileo.preview.PreviewParams`).
           schema:
-            type: number
-        - name: mid
-          in: query
-          required: false
-          schema:
-            type: number
-        - name: white
-          in: query
-          required: false
-          schema:
-            type: number
+            type: integer
+            minimum: 0
+            maximum: 100
       responses:
         "200":
           description: The image.
@@ -510,37 +538,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/SimpleError"
 
-  /mobileconnect/v1/frame/{id}/tiles/{z}/{x}/{y}:
+  /mobileconnect/v1/tile:
     get:
       tags: [images]
       operationId: getTile
-      summary: One tile of a frame's zoom pyramid.
-      description: Frames are addressed by id, so a client can hold tiles of two frames at once (blink, side by side).
-      x-galileo-status: planned
+      summary: One tile of the zoom pyramid of the Pier's current frame.
+      x-galileo-status: implemented
       parameters:
-        - name: id
-          in: path
+        - name: pier
+          in: query
           required: true
           schema:
             type: string
         - name: z
-          in: path
+          in: query
           required: true
           schema:
             type: integer
             minimum: 0
         - name: x
-          in: path
+          in: query
           required: true
           schema:
             type: integer
             minimum: 0
         - name: "y"
-          in: path
+          in: query
           required: true
           schema:
             type: integer
             minimum: 0
+        - name: stretch
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
       responses:
         "200":
           description: The tile.
@@ -679,12 +713,6 @@ components:
       description: The token issued once on approval of a pairing.
 
   parameters:
-    Pier:
-      name: pier
-      in: path
-      required: true
-      schema:
-        type: string
     ObjectSha:
       name: sha
       in: path
@@ -995,6 +1023,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PierRef"
+        reason:
+          type: string
+          description: Why there are none, for example that the Master's control surface isn't running. Show it.
 
     OperationRequest:
       type: object

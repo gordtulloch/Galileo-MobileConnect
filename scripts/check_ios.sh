@@ -6,16 +6,19 @@
 #
 #   scripts/check_ios.sh                     the whole thing
 #   IOS_SIM="iPhone 17 Pro" scripts/check_ios.sh     on another simulator (default iPad Pro 13-inch (M5))
-#   GALILEO_CHECKOUT=../Galileo scripts/check_ios.sh  also test against the real Connect Link server (default: skipped if absent)
 #
 # Needs a Python with the packages in tools/mock-master/requirements.txt plus jsonschema and Pillow; set
-# GALILEO_PYTHON to it (default .venv/bin/python). Everything it starts it also stops.
+# GALILEO_PYTHON to it (default .venv/bin/python). With Galileo's dependencies too, and checkouts of Galileo and
+# Galileo-Plugins alongside (GALILEO_CHECKOUT, GALILEO_PLUGINS), the client is also tested against the real
+# MobileConnect plugin on the real Connect Link server; without them that test is skipped, and says so.
+# Everything it starts it also stops.
 set -eu
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
 SIM="${IOS_SIM:-iPad Pro 13-inch (M5)}"
 PY="${GALILEO_PYTHON:-.venv/bin/python}"
 CHECKOUT="${GALILEO_CHECKOUT:-../Galileo}"
+PLUGINS="${GALILEO_PLUGINS:-../Galileo-Plugins}"
 OUT=build/ios-check
 rm -rf "$OUT"
 mkdir -p "$OUT"
@@ -61,15 +64,15 @@ GALILEO_MOCK_FINGERPRINT="$MOCK_FP"
 # xcodebuild hands TEST_RUNNER_* to the UI test runner, without the prefix.
 TEST_RUNNER_GALILEO_UITEST_ADDRESS="$GALILEO_MOCK_ADDRESS"
 export GALILEO_MOCK_ADDRESS GALILEO_MOCK_FINGERPRINT TEST_RUNNER_GALILEO_UITEST_ADDRESS
-if [ -d "$CHECKOUT/galileo/connect_link" ]; then
-    PYTHONPATH="$CHECKOUT" "$PY" tools/mock-master/real_link_server.py > "$OUT/real.txt" 2>&1 &
+if [ -d "$CHECKOUT/galileo/connect_link" ] && [ -d "$PLUGINS/mobileconnect/mobileconnect" ] && PYTHONPATH="$CHECKOUT" "$PY" -c 'import peewee, aiohttp, cryptography' 2>/dev/null; then
+    PYTHONPATH="$PLUGINS/mobileconnect:$CHECKOUT" "$PY" tools/mock-master/real_link_server.py > "$OUT/real.txt" 2>&1 &
     pids="$pids $!"
     wait_ready "$OUT/real.txt"
     read -r _ REAL_PORT < "$OUT/real.txt"
     GALILEO_REAL_ADDRESS="127.0.0.1:$REAL_PORT"
     export GALILEO_REAL_ADDRESS
 else
-    echo "(no Galileo checkout at $CHECKOUT: the real Connect Link test is skipped)"
+    echo "(no Galileo and Galileo-Plugins checkouts with their dependencies: the real plugin test is SKIPPED)"
 fi
 (cd ios/Packages/GalileoCore && swift test 2>&1 | tee "$ROOT/$OUT/core.txt" | grep -E 'error:|✘|skipped|Test run with' || true)
 grep -q 'Test run with .* passed' "$OUT/core.txt"

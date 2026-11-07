@@ -281,7 +281,7 @@ final class AppModel {
         Task { await session.stopHold() }
     }
 
-    func preview(width: Int, stretch: Stretch) async -> Data? {
+    func preview(width: Int, stretch: Int) async -> Data? {
         guard let pier = workingPier, let session else { return nil }
         return try? await session.preview(pier: pier, width: width, stretch: stretch)
     }

@@ -7,10 +7,12 @@
   "steps": [
     { "do": "act", "action": "stream_start" },
     { "do": "stream", "frame": { "type": "hello", "epoch": "e1", "seq": 0 } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/snapshot", "note": "the client asks once it has seen hello with no state" },
+    { "do": "receive", "status": 200, "body": { "ok": true } },
     { "do": "stream", "frame": { "seq": 1, "data": { "type": "snapshot", "as_of": "2026-11-06T02:00:00Z", "piers": { "p1": { "mount": { "tracking": true } } } } } },
     { "do": "expect", "outcome": "Live", "state": { "p1.mount.tracking": { "value": true, "stale": false } } },
     { "do": "act", "action": "invoke", "pier": "p1", "operation": "mount.slew", "args": { "ra_deg": 83.8, "dec_deg": -5.4 } },
-    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/pier/p1/ops/mount.slew", "headers": { "Idempotency-Key": "k1" }, "body": { "args": { "ra_deg": 83.8, "dec_deg": -5.4 } } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/ops?pier=p1&name=mount.slew", "headers": { "Idempotency-Key": "k1" }, "body": { "args": { "ra_deg": 83.8, "dec_deg": -5.4 } } },
     { "do": "expect", "outcome": "Pending", "state": { "operation.k1": "Pending" } },
     { "do": "drop", "note": "the WebSocket closes without a closing frame" },
     { "do": "expect", "outcome": "OutcomeUnknown", "state": { "operation.k1": "OutcomeUnknown", "p1.mount.tracking": { "stale": true }, "connection": "Reconnecting" } },
@@ -18,6 +20,8 @@
     { "do": "expect_connect", "epoch": "e1", "last": 1 },
     { "do": "stream", "frame": { "type": "resync", "epoch": "e2", "seq": 40 } },
     { "do": "expect", "outcome": "Resyncing", "state": { "operation.k1": "OutcomeUnknown", "requests_sent_with_key": { "k1": 1 } } },
+    { "do": "send", "method": "POST", "path": "/mobileconnect/v1/snapshot", "note": "asked for again: resync discarded the state" },
+    { "do": "receive", "status": 200, "body": { "ok": true } },
     { "do": "stream", "frame": { "seq": 41, "data": { "type": "snapshot", "as_of": "2026-11-06T02:00:09Z", "piers": { "p1": { "mount": { "tracking": true, "slewing": true } } } } } },
     { "do": "expect", "outcome": "Live", "state": { "p1.mount.slewing": { "value": true, "stale": false }, "operation.k1": "OutcomeUnknown" } }
   ]

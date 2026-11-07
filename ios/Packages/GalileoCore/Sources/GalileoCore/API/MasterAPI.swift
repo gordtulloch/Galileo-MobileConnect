@@ -119,16 +119,30 @@ public struct MasterAPI: Sendable {
         }
     }
 
-    public func piers() async throws -> [PierInfo] {
+    /// The Piers, and the Master's reason when there are none.
+    public func piers() async throws -> (piers: [PierInfo], reason: String?) {
         let output = try await calling { try await client.listPiers() }
         switch output {
         case .ok(let response):
-            return try response.body.json.piers.map {
-                PierInfo(
-                    id: $0.id, name: $0.name, node: $0.node, observatory: $0.observatory,
-                    access: PierInfo.Access(rawValue: $0.access.rawValue) ?? .none,
-                    reachable: $0.reachable, reason: $0.reason)
-            }
+            let body = try response.body.json
+            return (
+                body.piers.map {
+                    PierInfo(
+                        id: $0.id, name: $0.name, node: $0.node, observatory: $0.observatory,
+                        access: PierInfo.Access(rawValue: $0.access.rawValue) ?? .none,
+                        reachable: $0.reachable, reason: $0.reason)
+                }, body.reason
+            )
+        case .unauthorized: throw LinkError.unpaired
+        case .undocumented(let status, _): throw Self.unexpected(status)
+        }
+    }
+
+    /// Asks for a snapshot on this client's stream: the stream has no connection hook on the Master.
+    public func requestSnapshot() async throws {
+        let output = try await calling { try await client.requestSnapshot() }
+        switch output {
+        case .ok: return
         case .unauthorized: throw LinkError.unpaired
         case .undocumented(let status, _): throw Self.unexpected(status)
         }
@@ -185,7 +199,7 @@ public struct MasterAPI: Sendable {
                 confirmed: emergencyConfirmed ? true : nil)
             let output = try await calling {
                 try await client.invokeOperation(
-                    path: .init(pier: pier, name: name),
+                    query: .init(pier: pier, name: name),
                     headers: .init(Idempotency_hyphen_Key: idempotencyKey, X_hyphen_Confirm_hyphen_Token: confirmToken),
                     body: .json(request))
             }
@@ -232,7 +246,7 @@ public struct MasterAPI: Sendable {
         do {
             let output = try await calling {
                 try await client.acquireLease(
-                    path: .init(pier: pier), headers: .init(X_hyphen_Confirm_hyphen_Token: takeOverToken))
+                    query: .init(pier: pier), headers: .init(X_hyphen_Confirm_hyphen_Token: takeOverToken))
             }
             switch output {
             case .ok(let response):
@@ -256,19 +270,17 @@ public struct MasterAPI: Sendable {
     }
 
     public func releaseLease(pier: String) async -> Bool {
-        guard let output = try? await calling({ try await client.releaseLease(path: .init(pier: pier)) }) else {
+        guard let output = try? await calling({ try await client.releaseLease(query: .init(pier: pier)) }) else {
             return false
         }
         if case .ok = output { return true }
         return false
     }
 
-    /// The Master renders the picture; the stretch travels to it so that it agrees with the desktop (`S-IMG`).
-    public func preview(pier: String, width: Int, quality: Int, stretch: Stretch) async throws -> Data? {
+    /// The Master renders the picture; the stretch (0-100) travels to it so that it agrees with the desktop (`S-IMG`).
+    public func preview(pier: String, width: Int, quality: Int, stretch: Int) async throws -> Data? {
         let output = try await calling {
-            try await client.getPreview(
-                path: .init(pier: pier),
-                query: .init(w: width, q: quality, black: stretch.black, mid: stretch.mid, white: stretch.white))
+            try await client.getPreview(query: .init(pier: pier, w: width, q: quality, stretch: stretch))
         }
         switch output {
         case .ok(let response):
@@ -311,18 +323,6 @@ public struct LeaseRefusal: Error, Sendable, Equatable {
         self.reason = reason
         self.holder = holder
         self.takeOverToken = takeOverToken
-    }
-}
-
-public struct Stretch: Sendable, Equatable {
-    public var black: Double
-    public var mid: Double
-    public var white: Double
-
-    public init(black: Double = 0, mid: Double = 0.5, white: Double = 1) {
-        self.black = black
-        self.mid = mid
-        self.white = white
     }
 }
 

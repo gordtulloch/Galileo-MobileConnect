@@ -64,11 +64,11 @@ private struct PreviewCard: View {
     @Environment(\.displayScale) private var scale
     @State private var image: UIImage?
     @State private var problem: String?
-    @State private var stretch = Stretch()
+    @State private var stretch = 50.0
 
     /// A new frame, Pier or stretch means a new picture from the Master.
     private var request: String {
-        "\(model.workingPier ?? "")/\(model.value("imaging.frame")?.value.displayText ?? "")/\(stretch.black)/\(stretch.mid)/\(stretch.white)"
+        "\(model.workingPier ?? "")/\(model.value("imaging.frame")?.value.displayText ?? "")/\(Int(stretch))"
     }
 
     var body: some View {
@@ -91,17 +91,15 @@ private struct PreviewCard: View {
 
             Histogram()
 
-            StretchSlider(label: "Black point", value: $stretch.black, range: 0...0.5)
-            StretchSlider(label: "Midtone", value: $stretch.mid, range: 0.05...0.95)
-            StretchSlider(label: "White point", value: $stretch.white, range: 0.5...1)
-            Button("Reset stretch") { stretch = Stretch() }
+            StretchSlider(label: "Stretch", value: $stretch, range: 0...100)
+            Button("Reset stretch") { stretch = 50 }
                 .buttonStyle(ActionStyle())
         }
         .task(id: request) {
             // Give a dragged slider a moment to settle; the current image stays until the new one arrives.
             try? await Task.sleep(for: .milliseconds(180))
             guard !Task.isCancelled else { return }
-            if let data = await model.preview(width: Int(1200 * min(scale, 2) / 2), stretch: stretch), let decoded = UIImage(data: data) {
+            if let data = await model.preview(width: Int(1200 * min(scale, 2) / 2), stretch: Int(stretch)), let decoded = UIImage(data: data) {
                 image = decoded
                 problem = nil
             } else if image == nil {
@@ -119,7 +117,7 @@ private struct StretchSlider: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("\(label): \(value, format: .number.precision(.fractionLength(2)))").font(.footnote).foregroundStyle(theme.textSecondary)
+            Text("\(label): \(Int(value))").font(.footnote).foregroundStyle(theme.textSecondary)
             ThemedSlider(label: label, value: $value, range: range)
         }
     }

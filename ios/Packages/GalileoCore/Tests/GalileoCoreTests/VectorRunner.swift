@@ -8,6 +8,7 @@ import Testing
 /// A Master whose every answer comes from the vector: a request stays in flight until the `receive` step.
 actor VectorTransport: ClientTransport, StreamTransport {
     struct Seen: Sendable {
+        let id: Int
         let method: String
         let path: String
         let headers: HTTPFields
@@ -15,7 +16,8 @@ actor VectorTransport: ClientTransport, StreamTransport {
     }
 
     private var unclaimed: [Seen] = []
-    private var inFlight: [CheckedContinuation<(HTTPResponse, HTTPBody?), any Error>] = []
+    private var inFlight: [Int: CheckedContinuation<(HTTPResponse, HTTPBody?), any Error>] = [:]
+    private var lastClaimed: Int?
     private(set) var total = 0
     private(set) var keys: [String: Int] = [:]
 
@@ -32,15 +34,24 @@ actor VectorTransport: ClientTransport, StreamTransport {
         }
         total += 1
         if let key = request.headerFields[HTTPField.Name("Idempotency-Key")!] { keys[key, default: 0] += 1 }
-        unclaimed.append(Seen(method: request.method.rawValue, path: request.path ?? "", headers: request.headerFields, body: parsed))
-        return try await withCheckedThrowingContinuation { inFlight.append($0) }
+        let id = total
+        unclaimed.append(Seen(id: id, method: request.method.rawValue, path: request.path ?? "", headers: request.headerFields, body: parsed))
+        return try await withCheckedThrowingContinuation { inFlight[id] = $0 }
     }
 
-    func claim() -> Seen? { unclaimed.isEmpty ? nil : unclaimed.removeFirst() }
+    func claim() -> Seen? {
+        guard !unclaimed.isEmpty else { return nil }
+        let seen = unclaimed.removeFirst()
+        lastClaimed = seen.id
+        return seen
+    }
 
+    /// Answers the request the last `send` step observed. An earlier one may stay unanswered on purpose.
     func answer(status: Int, body: JSONValue) throws {
-        guard !inFlight.isEmpty else { throw VectorFailure("a receive step with no request in flight") }
-        let continuation = inFlight.removeFirst()
+        guard let id = lastClaimed, let continuation = inFlight.removeValue(forKey: id) else {
+            throw VectorFailure("a receive step with no request in flight")
+        }
+        lastClaimed = nil
         let data = try JSONEncoder().encode(body)
         continuation.resume(
             returning: (
@@ -50,8 +61,8 @@ actor VectorTransport: ClientTransport, StreamTransport {
     }
 
     func failAll() {
-        let waiting = inFlight
-        inFlight = []
+        let waiting = inFlight.values
+        inFlight = [:]
         for continuation in waiting { continuation.resume(throwing: URLError(.networkConnectionLost)) }
         stream?.finish()
         stream = nil

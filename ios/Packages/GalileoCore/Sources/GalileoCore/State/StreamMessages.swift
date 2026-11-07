@@ -34,7 +34,7 @@ public enum StreamEvent: Sendable, Equatable {
     case delta(pier: String, key: String, value: JSONValue, asOf: Date)
     case operation(OperationEvent)
     case alert(AlertEvent)
-    case lease(pier: String, holder: String?)
+    case lease(pier: String, holder: String?, holderName: String?)
     case access(pier: String, access: String, reachable: Bool?, reason: String?)
     case closing(reason: String)
     /// A newer Master's message. Ignored, never an error (`events.schema.json`).
@@ -96,7 +96,7 @@ public enum StreamMessage: Sendable, Equatable {
                     important: json["important"]?.boolValue ?? false))
         case "lease":
             guard let pier = json["pier"]?.stringValue else { return .unknown }
-            return .lease(pier: pier, holder: json["holder"]?.stringValue)
+            return .lease(pier: pier, holder: json["holder"]?.stringValue, holderName: json["holder_name"]?.stringValue)
         case "access":
             guard let pier = json["pier"]?.stringValue, let access = json["access"]?.stringValue else { return .unknown }
             return .access(

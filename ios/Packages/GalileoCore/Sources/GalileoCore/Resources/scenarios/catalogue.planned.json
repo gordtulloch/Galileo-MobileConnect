@@ -1,15 +1,104 @@
 {
   "_comment": "Operations the MVP screens need that Galileo core does not register yet. The names are this repository's proposal, not the server's. They exist only so that the mock Master can exercise those screens; a real Master simply lacks them and the screens show that. Remove an entry when catalogue.json gains the real one.",
   "operations": [
-    { "name": "device.connect", "area": "device", "class": "operate", "lease": true, "description": "Connect a device",
-      "args": [ { "name": "device", "type": "str", "required": true } ] },
-    { "name": "device.disconnect", "area": "device", "class": "operate", "lease": true, "description": "Disconnect a device",
-      "args": [ { "name": "device", "type": "str", "required": true } ] },
-    { "name": "mount.hold_start", "area": "mount", "class": "operate", "lease": true, "description": "Move the mount while held",
-      "args": [ { "name": "direction", "type": "enum", "required": true, "choices": ["north", "south", "east", "west"] } ] },
-    { "name": "mount.hold_beat", "area": "mount", "class": "operate", "lease": false, "args": [ { "name": "hold_id", "type": "str", "required": true } ] },
-    { "name": "mount.hold_stop", "area": "mount", "class": "operate", "lease": false, "args": [ { "name": "hold_id", "type": "str", "required": true } ] },
-    { "name": "focus.autofocus", "area": "focus", "class": "operate", "lease": true, "long_running": true, "description": "Run autofocus", "args": [] },
-    { "name": "focus.autofocus_cancel", "area": "focus", "class": "operate", "lease": true, "description": "Cancel autofocus", "args": [] }
+    {
+      "name": "device.connect",
+      "area": "device",
+      "class": "operate",
+      "lease": true,
+      "description": "Connect a device",
+      "args": [
+        {
+          "name": "device",
+          "type": "str",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "device.disconnect",
+      "area": "device",
+      "class": "operate",
+      "lease": true,
+      "description": "Disconnect a device",
+      "args": [
+        {
+          "name": "device",
+          "type": "str",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "mount.hold_start",
+      "area": "mount",
+      "class": "operate",
+      "lease": true,
+      "description": "Move the mount while held",
+      "args": [
+        {
+          "name": "direction",
+          "type": "enum",
+          "required": true,
+          "choices": [
+            "north",
+            "south",
+            "east",
+            "west"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mount.hold_beat",
+      "area": "mount",
+      "class": "operate",
+      "lease": false,
+      "args": [
+        {
+          "name": "hold_id",
+          "type": "str",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "mount.hold_stop",
+      "area": "mount",
+      "class": "operate",
+      "lease": false,
+      "args": [
+        {
+          "name": "hold_id",
+          "type": "str",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "focus.autofocus",
+      "area": "focus",
+      "class": "operate",
+      "lease": true,
+      "long_running": true,
+      "description": "Run autofocus",
+      "args": []
+    },
+    {
+      "name": "focus.autofocus_cancel",
+      "area": "focus",
+      "class": "operate",
+      "lease": true,
+      "description": "Cancel autofocus",
+      "args": []
+    },
+    {
+      "name": "session.skip",
+      "area": "session",
+      "class": "operate",
+      "lease": true,
+      "description": "Skip to the next block",
+      "args": []
+    }
   ]
 }
