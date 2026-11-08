@@ -153,7 +153,7 @@ Capture and the display of images (PSD G5, PC7). The app handles node-rendered p
 | MAPP-IMG-030 | All | The app shall display the current frame as a preview rendered by the Master, scaled to the device, with pinch-to-zoom and pan, loading further detail as tiles when the user zooms. | MVP |
 | MAPP-IMG-040 | All | The app shall let the user adjust the preview stretch interactively and shall show the histogram. | MVP |
 | MAPP-IMG-050 | All | The app shall show the image statistics the Master reports for the frame: star count, HFR and FWHM. | MVP |
-| MAPP-IMG-060 | All | The app shall show the live-stack result and its progress. | P2 |
+| MAPP-IMG-060 | All | The app shall let the user ask for live stacking on a series, show the live-stack result as a picture the user can choose beside the latest exposure (with the same stretch and zoom), and show its progress as frames stacked and integration time. | P2 |
 | MAPP-IMG-070 | All | The app shall let an Operator reject a frame. | P2 |
 | MAPP-IMG-080 | All | The app shall let the user download a full FITS frame as an explicit action, with its size shown first and the transfer cancellable and resumable. | P2 |
 | MAPP-IMG-090 | All | The app shall adapt preview size and quality to the quality of the link, and shall offer a data-saver setting. | P2 |
@@ -170,6 +170,11 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 | MAPP-SKY-040 | All | The app shall let an Operator who holds the lease slew the mount to a selected target. Before the request is sent the app shall show a confirmation that names the target, its current altitude and the Master's horizon and limit check, and shall send nothing if the user does not confirm. | MVP |
 | MAPP-SKY-050 | All | The app shall provide the Framing Assistant: the sensor field of view for the Pier's optical train at a chosen rotation, mosaic panel layout, and the ability to use the result in a session or schedule job. | P2 |
 | MAPP-SKY-060 | All | The app shall show the Master's ranked target lists (What's Up Tonight) and altitude curves for a chosen date. | P2 |
+| MAPP-SKY-070 | All | The app shall draw real sky behind the stars from the Master's all-sky survey tiles, at a resolution matching the zoom and correctly placed, on dark themes (in Night using red only), with their credit visible and a switch to turn it off; the sky view shall work normally without them. It shall keep them in memory only, and shall fetch no new tiles while the view is narrower than 3°. | P2 |
+| MAPP-SKY-080 | All | The app shall hide everything below 0 degrees altitude behind an opaque landscape-style ground, with a switch to turn it off and the selection and mount markers still shown, and shall fill the sky between 0 degrees and the local horizon profile in transparent red. | P2 |
+| MAPP-SKY-090 | All | The app's sky view shall use the same projection as Galileo's Star Atlas: the same field-of-view definition, precession, sidereal time and limits, so that a position is drawn in the same place for the same view. | P2 |
+| MAPP-SKY-100 | All | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add to Session. | P2 |
+| MAPP-SKY-110 | All | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as the Star Atlas does. | P2 |
 
 ### 3.6 `MAPP-SOL` — Plate Solving and Alignment
 

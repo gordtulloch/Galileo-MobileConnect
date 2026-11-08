@@ -211,6 +211,13 @@ public actor MockMaster: ClientTransport, StreamTransport {
             return try reply(200, site)
         case ("GET", "/mobileconnect/v1/sky/constellations"):
             return try reply(200, skyConstellations())
+        case ("GET", "/mobileconnect/v1/sky/catalogs"):
+            return try reply(200, skyCatalogs())
+        case ("GET", "/mobileconnect/v1/sky/survey/tile"):
+            // The demo ships no sky pictures, as they aren't ours to. Tests can point it at a folder of real tiles.
+            guard let image = Self.testSurveyTile(query: query) else { return try reply(404, ["error": "no sky survey in the demo"]) }
+            let fields: HTTPFields = [.contentType: "image/jpeg", HTTPField.Name("X-Image-Credit")!: "Test tiles"]
+            return (HTTPResponse(status: .ok, headerFields: fields), HTTPBody(image))
         case ("GET", "/mobileconnect/v1/sky/check"):
             guard let check = skyCheck(query: query) else { return try reply(404, ["error": "no location set"]) }
             return try reply(200, check)
@@ -590,6 +597,26 @@ public actor MockMaster: ClientTransport, StreamTransport {
             time = time.addingTimeInterval(step)
         }
         return ["as_of": .string(WireTime.string(clock.now())), "samples": .array(samples)]
+    }
+
+    /// By name, as `catalogs_of` in core has it.
+    private func skyCatalogs() -> JSONValue {
+        let starCount = scenario["sky"]?["stars"]?.doubleValue.map(Int.init) ?? 0
+        let objects = scenario["sky"]?["objects"]?.arrayValue ?? []
+        func members(_ test: (String) -> Bool) -> JSONValue {
+            .array(objects.indices.filter { test(objects[$0]["name"]?.stringValue ?? "") }.map { .number(Double(starCount + $0)) })
+        }
+        func catalog(_ name: String, _ prefix: String) -> JSONValue {
+            .object(["name": .string(name), "indexes": members { $0.hasPrefix(prefix) && $0.dropFirst(prefix.count).first?.isNumber == true }])
+        }
+        return .object(["catalogs": .array([catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC ")])])
+    }
+
+    private static func testSurveyTile(query: [String: String]) -> Data? {
+        guard let folder = ProcessInfo.processInfo.environment["GALILEO_TEST_SURVEY_DIR"],
+            let order = query["order"].flatMap(Int.init), let npix = query["npix"].flatMap(Int.init)
+        else { return nil }
+        return try? Data(contentsOf: URL(fileURLWithPath: "\(folder)/Norder\(order)/Dir\(npix / 10000 * 10000)/Npix\(npix).jpg"))
     }
 
     private func skyCheck(query: [String: String]) -> JSONValue? {

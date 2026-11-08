@@ -9,9 +9,10 @@ final class DemoUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    private func launch(scenario: String = "normal-night", theme: String = "night") {
+    private func launch(scenario: String = "normal-night", theme: String = "night", surveyFolder: String? = nil) {
         app = XCUIApplication()
         app.launchArguments += ["-GalileoDemo", scenario, "-GalileoTheme", theme]
+        if let surveyFolder { app.launchEnvironment["GALILEO_TEST_SURVEY_DIR"] = surveyFolder }
         app.launch()
     }
 
@@ -25,6 +26,9 @@ final class DemoUITests: XCTestCase {
 
     private func open(_ area: String) {
         let row = element("area.\(area)")
+        // On a tablet the menu hides itself; on a phone the areas are always showing.
+        let menu = element("menu")
+        if menu.waitForExistence(timeout: 2), !row.exists { menu.tap() }
         XCTAssertTrue(row.waitForExistence(timeout: 5), area)
         // On a phone the areas are a strip that scrolls; a person would scroll it too.
         // A short drag rather than a swipe: a swipe's momentum flies past a button in the middle of the strip.
@@ -118,13 +122,28 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
         sleep(3)  // let the first pages arrive
         screenshot("night-sky")
+        XCTAssertFalse(element("sky.search").exists, "the panel stays out of the way until asked for")
+        openSkyPanel()
+        screenshot("night-sky-panel")
         let figures = element("sky.constellations")
         XCTAssertTrue(figures.waitForExistence(timeout: 5))
         for _ in 0..<3 where figures.frame.maxY > app.windows.firstMatch.frame.height { app.swipeUp() }
+        XCTAssertEqual(figures.value as? String, "On")
         figures.tap()
-        XCTAssertTrue(app.staticTexts["Show constellations"].waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertEqual(figures.value as? String, "Off")
         figures.tap()
-        XCTAssertTrue(app.staticTexts["Hide constellations"].waitForExistence(timeout: 5))
+        sleep(1)
+        XCTAssertEqual(figures.value as? String, "On")
+        XCTAssertEqual(element("sky.catalog.Messier").value as? String, "On")
+        let ngc = element("sky.catalog.NGC")
+        XCTAssertEqual(ngc.value as? String, "Off")
+        ngc.tap()
+        sleep(1)
+        XCTAssertEqual(ngc.value as? String, "On")
+        ngc.tap()
+        XCTAssertTrue(element("sky.survey").exists)
+        XCTAssertEqual(element("sky.ground").value as? String, "On")
 
         let search = element("sky.search")
         XCTAssertTrue(search.waitForExistence(timeout: 5))
@@ -149,6 +168,15 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(element("confirm.accept").waitForExistence(timeout: 5))
         element("confirm.accept").tap()
         XCTAssertTrue(app.staticTexts["Done."].waitForExistence(timeout: 15))
+        // The rest of what the Star Atlas offers on an object.
+        XCTAssertTrue(app.buttons["Goto and Centre"].exists)
+        XCTAssertTrue(app.buttons["Sync"].exists)
+        element("sky.addsession").tap()
+        XCTAssertTrue(element("session.target").waitForExistence(timeout: 5), "the target goes to the Sessions screen")
+        screenshot("night-session-target")
+        element("session.target.clear").tap()
+        open("Sky")
+
     }
 
     /// `MAPP-STR-060`: a dropped link says so inside the view.
@@ -159,6 +187,52 @@ final class DemoUITests: XCTestCase {
         XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
         sleep(2)
         screenshot("night-sky-link")
+    }
+
+    /// The sky gets the whole screen: the panel comes when asked for, goes when told to, and can be kept.
+    func testSkyPanelAutoHidesAndCanBeKeptOpen() {
+        launch()
+        waitForShell()
+        open("Sky")
+        XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
+        let wholeWidth = element("sky.view").frame.width
+        XCTAssertFalse(element("sky.search").exists)
+        openSkyPanel()
+        XCTAssertEqual(element("sky.view").frame.width, wholeWidth, "over the sky, not beside it")
+        element("sky.panel.close").tap()
+        XCTAssertTrue(waitForGone(element("sky.search")))
+        openSkyPanel()
+        element("sky.panel.pin").tap()
+        XCTAssertFalse(element("sky.panel.close").waitForExistence(timeout: 1))
+        element("sky.panel.pin").tap()   // leave it as other tests expect it
+        element("sky.panel.close").tap()
+        XCTAssertTrue(waitForGone(element("sky.search")))
+    }
+
+    /// `MAPP-SKY-070`: real tiles through the whole path to the screen. Only with a folder of them, which the repository
+    /// doesn't have: `TEST_RUNNER_GALILEO_TEST_SURVEY_DIR=<a Galileo cache's sky_survey/DSSColor>`. Look at the pictures.
+    func testRealSurveyTiles() throws {
+        let folder = ProcessInfo.processInfo.environment["GALILEO_TEST_SURVEY_DIR"]
+        try XCTSkipIf(folder == nil, "needs a folder of survey tiles")
+        launch(surveyFolder: folder)
+        waitForShell()
+        open("Sky")
+        XCTAssertTrue(element("sky.view").waitForExistence(timeout: 10))
+        XCTAssertTrue(element("sky.credit").waitForExistence(timeout: 30), "a tile must arrive, with its credit")
+        sleep(12)
+        screenshot("night-survey-real-tiles")
+        app.terminate()
+        app.launchArguments += ["-GalileoTheme", "standard"]
+        app.launch()
+        waitForShell()
+        open("Sky")
+        sleep(14)
+        screenshot("standard-survey-real-tiles")   // whichever appearance the simulator is set to
+    }
+
+    private func openSkyPanel() {
+        if !element("sky.search").exists { element("sky.panel").tap() }
+        XCTAssertTrue(element("sky.search").waitForExistence(timeout: 5))
     }
 
     /// `MAPP-IMG-020`: the loop starts, keeps going, and stops when asked.
@@ -177,6 +251,44 @@ final class DemoUITests: XCTestCase {
         screenshot("night-liveloop")
         loop.tap()
         XCTAssertTrue(app.staticTexts["Start live loop"].waitForExistence(timeout: 5))
+    }
+
+    /// `MAPP-LAY-010`: the tablet's menu hides itself once used, and can be kept open instead. The phone has no menu.
+    func testMenuAutoHidesAndCanBeKeptOpen() throws {
+        launch()
+        waitForShell()
+        let menu = element("menu")
+        guard menu.waitForExistence(timeout: 3) else { throw XCTSkip("phones use the strip of areas") }
+        let imaging = element("area.Imaging")
+        XCTAssertFalse(imaging.exists, "hidden until asked for")
+        menu.tap()
+        XCTAssertTrue(imaging.waitForExistence(timeout: 3))
+        screenshot("night-menu-open")
+        imaging.tap()
+        XCTAssertTrue(waitForGone(imaging), "choosing an area closes it")
+        XCTAssertEqual(menu.label, "Menu, showing Imaging")
+        screenshot("night-menu-hidden")
+
+        menu.tap()
+        XCTAssertTrue(imaging.waitForExistence(timeout: 3))
+        element("menu.dismiss").coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5)).tap()
+        XCTAssertTrue(waitForGone(imaging), "tapping away closes it")
+
+        menu.tap()
+        element("menu.pin").tap()
+        XCTAssertTrue(imaging.waitForExistence(timeout: 3))
+        element("area.Focus").tap()
+        XCTAssertTrue(imaging.exists, "kept open stays open")
+        XCTAssertFalse(menu.exists)
+        screenshot("night-menu-pinned")
+        element("menu.pin").tap()           // leave it as the other tests expect
+        XCTAssertTrue(menu.waitForExistence(timeout: 3))
+    }
+
+    private func waitForGone(_ element: XCUIElement) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while element.exists, Date() < deadline { usleep(100_000) }
+        return !element.exists
     }
 
     /// `MAPP-SOL-010`: a solve runs and its result appears.

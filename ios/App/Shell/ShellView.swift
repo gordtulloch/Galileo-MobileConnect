@@ -39,49 +39,58 @@ struct ShellView: View {
     @Environment(\.theme) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var selection: Area? = .overview
-    @State private var columns = NavigationSplitViewVisibility.all
+    @State private var menuOpen = false
+    @AppStorage("menu.pinned") private var menuPinned = false
+
+    private var area: Area { selection ?? .overview }
 
     var body: some View {
         VStack(spacing: 0) {
-            TopBar()
+            TopBar(area: area, menuOpen: $menuOpen, showsMenuButton: sizeClass == .regular && !menuPinned)
             ConnectionBanner()
-            ZStack {
+            ZStack(alignment: .leading) {
                 if sizeClass == .compact {
                     // No system navigation bar here: its back button can't be held to Night.
                     VStack(spacing: 0) {
                         AreaStrip(selection: $selection)
-                        detail(selection ?? .overview)
+                        detail(area)
                     }
                 } else {
-                NavigationSplitView(columnVisibility: $columns) {
-                    List(Area.allCases, selection: $selection) { area in
-                        Label(area.rawValue, systemImage: area.icon)
-                            .foregroundStyle(selection == area ? theme.onAccent : theme.text)
-                            .frame(minHeight: 44)
-                            .listRowBackground(selection == area ? theme.accent : theme.surface)
-                            .tag(area)
-                            .accessibilityElement(children: .combine)
-                            .accessibilityIdentifier("area.\(area.rawValue)")
+                    HStack(spacing: 0) {
+                        if menuPinned {
+                            AreaMenu(selection: $selection, pinned: $menuPinned, open: $menuOpen)
+                        }
+                        detail(area).frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    .scrollContentBackground(.hidden)
-                    .background(theme.surface)
-                    .toolbar(removing: .sidebarToggle)
-                    .toolbarBackground(theme.surface, for: .navigationBar)
-                    .navigationBarTitleDisplayMode(.inline)
-                } detail: {
-                    NavigationStack {
-                        detail(selection ?? .overview)
+                    if menuOpen && !menuPinned {
+                        // Slides over the screen and goes away by itself, so that the screen keeps its width.
+                        theme.background.opacity(0.6)
+                            .contentShape(Rectangle())
+                            .onTapGesture { closeMenu() }
+                            .accessibilityLabel("Close menu")
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityIdentifier("menu.dismiss")
+                            .transition(.opacity)
+                        AreaMenu(selection: $selection, pinned: $menuPinned, open: $menuOpen)
+                            .transition(.move(edge: .leading))
                     }
-                }
-                .navigationSplitViewStyle(.balanced)
                 }
 
                 DialogLayer()
             }
         }
+        .onChange(of: model.requestedArea) { _, wanted in
+            guard let wanted else { return }
+            selection = wanted
+            model.requestedArea = nil
+        }
         .overlay {
             if model.emergencyOpen { EmergencyPanel() }
         }
+    }
+
+    private func closeMenu() {
+        withAnimation(.easeOut(duration: 0.15)) { menuOpen = false }
     }
 
     @ViewBuilder private func detail(_ area: Area) -> some View {
@@ -98,6 +107,61 @@ struct ShellView: View {
         case .safety: SafetyScreen()
         case .settings: SettingsScreen()
         }
+    }
+}
+
+/// The areas on a tablet, exactly as wide as its longest label at the current text size, so nothing clips.
+struct AreaMenu: View {
+    @Binding var selection: Area?
+    @Binding var pinned: Bool
+    @Binding var open: Bool
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(Area.allCases) { area in
+                    Button {
+                        selection = area
+                        if !pinned { withAnimation(.easeOut(duration: 0.15)) { open = false } }
+                    } label: {
+                        Label(area.rawValue, systemImage: area.icon)
+                            .font(.body)
+                            .padding(.horizontal, 12)
+                            .frame(maxWidth: .infinity, minHeight: Layout.minimumTarget, alignment: .leading)
+                            .background(selection == area ? theme.accent : .clear, in: RoundedRectangle(cornerRadius: 8))
+                            .foregroundStyle(selection == area ? theme.onAccent : theme.text)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(selection == area ? "selected" : "")
+                    .accessibilityIdentifier("area.\(area.rawValue)")
+                }
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        pinned.toggle()
+                        open = false
+                    }
+                } label: {
+                    Label(pinned ? "Auto-hide" : "Keep open", systemImage: pinned ? "sidebar.left" : "pin")
+                        .font(.footnote)
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity, minHeight: Layout.minimumTarget, alignment: .leading)
+                        .foregroundStyle(theme.textSecondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 8)
+                .accessibilityIdentifier("menu.pin")
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(6)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxHeight: .infinity)
+        .background(theme.surface)
+        .overlay(alignment: .trailing) { Rectangle().fill(theme.border).frame(width: 1) }
     }
 }
 
@@ -139,6 +203,9 @@ struct AreaStrip: View {
 
 /// The working Pier, connection, role and lease, safety, and the emergency button (iOS SDD 3.1).
 struct TopBar: View {
+    var area: Area = .overview
+    @Binding var menuOpen: Bool
+    var showsMenuButton = false
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -149,6 +216,7 @@ struct TopBar: View {
             // A phone on its side has the width for one row and not the height for two.
             if sizeClass == .regular || heightClass == .compact {
                 HStack(spacing: 10) {
+                    if showsMenuButton { menuButton }
                     pierPicker
                     connection
                     role
@@ -177,6 +245,23 @@ struct TopBar: View {
         .padding(.vertical, 6)
         .background(theme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.border).frame(height: 1) }
+    }
+
+    /// Opens the menu, and says where you are while it's hidden.
+    private var menuButton: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.15)) { menuOpen.toggle() }
+        } label: {
+            Label(area.rawValue, systemImage: "line.3.horizontal")
+                .font(.headline)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 44)
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(theme.text)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Menu, showing \(area.rawValue)")
+        .accessibilityIdentifier("menu")
     }
 
     private var pierPicker: some View {

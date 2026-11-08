@@ -498,6 +498,13 @@ paths:
           required: true
           schema:
             type: string
+        - name: source
+          in: query
+          required: false
+          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published."
+          schema:
+            type: string
+            enum: [current, stack]
         - name: w
           in: query
           required: false
@@ -558,6 +565,13 @@ paths:
           required: true
           schema:
             type: string
+        - name: source
+          in: query
+          required: false
+          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published."
+          schema:
+            type: string
+            enum: [current, stack]
         - name: z
           in: query
           required: true
@@ -776,6 +790,83 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Constellations"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+  /mobileconnect/v1/sky/survey/tile:
+    get:
+      tags: [sky]
+      operationId: getSkySurveyTile
+      summary: One tile of an all-sky survey, to draw behind the stars.
+      description: >-
+        HiPS: the HEALPix nested cell `npix` at `order`, in J2000, as a 512-pixel JPEG. For a position in the cell at
+        fractions (fx, fy) of its nested x and y axes, the image column is fy and the row fx, from the top left. The
+        Master fetches tiles from the internet as they're asked for, so one can take seconds, and one it can't get is 404:
+        a client asks for a few at a time, and again later. The app keeps them in memory only.
+      x-galileo-status: implemented
+      parameters:
+        - name: order
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 9
+        - name: npix
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        "200":
+          description: The tile.
+          headers:
+            X-Image-Credit:
+              description: Who the picture is by, in ASCII. A client showing the image shows this with it.
+              required: true
+              schema:
+                type: string
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "404":
+          description: Not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+  /mobileconnect/v1/sky/catalogs:
+    get:
+      tags: [sky]
+      operationId: getSkyCatalogs
+      summary: Which deep-sky objects are in which catalog.
+      description: Fixed for a given Master, so a client needs this once. Indexes are those of the sky catalog stream.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: Messier, Caldwell and NGC, with the objects of each. An object can be in several.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [catalogs]
+                properties:
+                  catalogs:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, indexes]
+                      properties:
+                        name:
+                          type: string
+                        indexes:
+                          type: array
+                          items:
+                            type: integer
         "401":
           $ref: "#/components/responses/Unauthorised"
   /mobileconnect/v1/sky/check:

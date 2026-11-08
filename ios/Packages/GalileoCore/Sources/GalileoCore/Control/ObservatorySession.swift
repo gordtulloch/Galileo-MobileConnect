@@ -364,12 +364,12 @@ public actor ObservatorySession {
 
     // MARK: Images
 
-    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int) async throws -> MasterAPI.PreviewImage? {
-        try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch)
+    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int, stack: Bool = false) async throws -> MasterAPI.PreviewImage? {
+        try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch, stack: stack)
     }
 
-    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int) async throws -> Data? {
-        try await connection.api.tile(pier: pier, level: level, x: x, y: y, stretch: stretch)
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async throws -> Data? {
+        try await connection.api.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack)
     }
 
     // MARK: Sky (S-SKY)

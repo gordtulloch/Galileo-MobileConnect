@@ -57,13 +57,33 @@ struct SessionsScreen: View {
         }
     }
 
+    private func runArguments(_ template: String) -> [String: JSONValue] {
+        var args: [String: JSONValue] = ["template": .string(template)]
+        if let target = model.sessionTarget {
+            args["target_name"] = .string(target.name)
+            args["ra_deg"] = .number(target.raDeg)
+            args["dec_deg"] = .number(target.decDeg)
+        }
+        return args
+    }
+
     private var saved: some View {
         Card("Saved sessions") {
             let names = model.value("session.templates")?.value.arrayValue?.compactMap(\.stringValue) ?? []
             if names.isEmpty { Note("The Master reports no saved sessions.") }
+            if let target = model.sessionTarget {
+                HStack {
+                    Text("Target from the sky: \(target.name)").fontWeight(.semibold).accessibilityIdentifier("session.target")
+                    Spacer()
+                    Button("Clear") { model.sessionTarget = nil }
+                        .buttonStyle(ActionStyle())
+                        .fixedSize()
+                        .accessibilityIdentifier("session.target.clear")
+                }
+            }
             ForEach(names, id: \.self) { name in
                 if model.canOperate {
-                    OperationButton(title: "Run \(name)", operation: "session.run", icon: "play.fill", args: ["template": .string(name)])
+                    OperationButton(title: "Run \(name)", operation: "session.run", icon: "play.fill", args: runArguments(name))
                 } else {
                     Text(name)
                 }

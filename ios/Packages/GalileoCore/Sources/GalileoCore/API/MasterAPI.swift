@@ -285,9 +285,9 @@ public struct MasterAPI: Sendable {
         public var frameHeight: Int?
     }
 
-    public func preview(pier: String, width: Int, quality: Int, stretch: Int) async throws -> PreviewImage? {
+    public func preview(pier: String, width: Int, quality: Int, stretch: Int, stack: Bool = false) async throws -> PreviewImage? {
         let output = try await calling {
-            try await client.getPreview(query: .init(pier: pier, w: width, q: quality, stretch: stretch))
+            try await client.getPreview(query: .init(pier: pier, source: stack ? .stack : .current, w: width, q: quality, stretch: stretch))
         }
         switch output {
         case .ok(let response):
@@ -310,9 +310,9 @@ public struct MasterAPI: Sendable {
         return nil
     }
 
-    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int) async throws -> Data? {
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async throws -> Data? {
         let output = try await calling {
-            try await client.getTile(query: .init(pier: pier, z: level, x: x, y: y, stretch: stretch))
+            try await client.getTile(query: .init(pier: pier, source: stack ? .stack : .current, z: level, x: x, y: y, stretch: stretch))
         }
         switch output {
         case .ok(let response): return try await Data(collecting: response.body.jpeg, upTo: 4 * 1024 * 1024)

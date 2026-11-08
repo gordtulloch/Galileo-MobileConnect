@@ -5,6 +5,7 @@ struct Card<Content: View>: View {
     let title: String?
     @ViewBuilder var content: Content
     @Environment(\.theme) private var theme
+    @Environment(\.compactControls) private var compact
 
     init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -12,13 +13,13 @@ struct Card<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Layout.spacing) {
+        VStack(alignment: .leading, spacing: compact ? 6 : Layout.spacing) {
             if let title {
-                Text(title).font(.headline).foregroundStyle(theme.text).accessibilityAddTraits(.isHeader)
+                Text(title).font(compact ? .subheadline.weight(.semibold) : .headline).foregroundStyle(theme.text).accessibilityAddTraits(.isHeader)
             }
             content
         }
-        .padding(Layout.spacing + 4)
+        .padding(compact ? 8 : Layout.spacing + 4)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(theme.surface, in: RoundedRectangle(cornerRadius: Layout.cornerRadius))
         .overlay(RoundedRectangle(cornerRadius: Layout.cornerRadius).stroke(theme.border))
@@ -141,9 +142,16 @@ struct LiveRow: View {
 
 enum ActionKind { case normal, prominent, destructive }
 
+extension EnvironmentValues {
+    /// For a panel whose space is short and which sits beside what it controls: smaller controls, by the user's choice,
+    /// over the gloved-hands size used everywhere else.
+    @Entry var compactControls = false
+}
+
 struct ActionStyle: ButtonStyle {
     var kind: ActionKind = .normal
     @Environment(\.theme) private var theme
+    @Environment(\.compactControls) private var compact
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -153,14 +161,14 @@ struct ActionStyle: ButtonStyle {
         case .destructive: (theme.danger, theme.onDanger)
         }
         configuration.label
-            .font(.body.weight(.semibold))
+            .font(compact ? .footnote.weight(.semibold) : .body.weight(.semibold))
             .multilineTextAlignment(.center)
             .lineLimit(2)
             .minimumScaleFactor(0.7)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .frame(maxWidth: .infinity, minHeight: Layout.minimumTarget)
-            .background(background, in: RoundedRectangle(cornerRadius: 10))
+            .padding(.horizontal, compact ? 6 : 10)
+            .padding(.vertical, compact ? 4 : 8)
+            .frame(maxWidth: .infinity, minHeight: compact ? Layout.compactTarget : Layout.minimumTarget)
+            .background(background, in: RoundedRectangle(cornerRadius: compact ? 7 : 10))
             .foregroundStyle(foreground)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border))
             .opacity(!isEnabled ? 0.5 : configuration.isPressed ? 0.7 : 1)
@@ -239,10 +247,11 @@ struct ThemedSlider: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     @Environment(\.theme) private var theme
+    @Environment(\.compactControls) private var compact
 
     var body: some View {
         GeometryReader { geometry in
-            let thumb: CGFloat = 28
+            let thumb: CGFloat = compact ? 20 : 28
             let span = range.upperBound - range.lowerBound
             let fraction = (value - range.lowerBound) / span
             let x = (geometry.size.width - thumb) * fraction
@@ -260,7 +269,7 @@ struct ThemedSlider: View {
                 }
             )
         }
-        .frame(height: 44)
+        .frame(height: compact ? 28 : 44)
         .accessibilityElement()
         .accessibilityLabel(label)
         .accessibilityValue(value.formatted(.number.precision(.fractionLength(2))))
@@ -325,6 +334,7 @@ struct OperationForm: View {
     var kind: ActionKind = .normal
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
+    @Environment(\.compactControls) private var compact
     @State private var text: [String: String] = [:]
     @State private var flags: [String: Bool] = [:]
     @State private var message: String?
@@ -333,8 +343,17 @@ struct OperationForm: View {
         if model.canOperate {
             let info = model.operation(operation)
             VStack(alignment: .leading, spacing: 8) {
-                ForEach(shown(info)) { argument in
-                    field(argument)
+                if compact {
+                    // Short boxes side by side, so the form takes a line or two rather than a screenful.
+                    let arguments = shown(info)
+                    HStack(alignment: .bottom, spacing: 6) {
+                        ForEach(arguments.filter(\.isBoxed)) { field($0) }
+                    }
+                    ForEach(arguments.filter { !$0.isBoxed }) { field($0) }
+                } else {
+                    ForEach(shown(info)) { argument in
+                        field(argument)
+                    }
                 }
                 let record = model.record(of: operation)
                 Button {
@@ -386,12 +405,13 @@ struct OperationForm: View {
         switch argument.kind {
         case .bool:
             Toggle(label, isOn: Binding(get: { flags[argument.name] ?? false }, set: { flags[argument.name] = $0 }))
-                .frame(minHeight: Layout.minimumTarget)
+                .frame(minHeight: compact ? Layout.compactTarget : Layout.minimumTarget)
+                .font(compact ? .footnote : .body)
         case .enum:
             // Buttons rather than a Picker: a system menu can't be held to Night.
             let selected = text[argument.name] ?? argument.defaultValue?.stringValue ?? argument.choices.first ?? ""
-            Text(label).font(.footnote).foregroundStyle(theme.textSecondary)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 88))], spacing: 8) {
+            Text(label).font(compact ? .caption2 : .footnote).foregroundStyle(theme.textSecondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 56 : 88))], spacing: compact ? 4 : 8) {
                 ForEach(argument.choices, id: \.self) { choice in
                     Button(choice) { text[argument.name] = choice }
                         .buttonStyle(ActionStyle(kind: selected == choice ? .prominent : .normal))
@@ -399,24 +419,38 @@ struct OperationForm: View {
                 }
             }
         default:
-            HStack {
-                Text(label + (argument.unit.map { " (\($0))" } ?? "")).foregroundStyle(theme.textSecondary)
-                TextField(
-                    "", text: Binding(get: { text[argument.name] ?? "" }, set: { text[argument.name] = $0 }),
-                    prompt: Text(hint(argument)).foregroundStyle(theme.textSecondary)
-                )
-                    .multilineTextAlignment(.trailing)
-                    .keyboardType(argument.kind == .str ? .default : .numbersAndPunctuation)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .foregroundStyle(theme.text)
-                    .accessibilityLabel(label)
-                    .accessibilityIdentifier("\(operation).\(argument.name)")
+            if compact {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(label + (argument.unit.map { " (\($0))" } ?? ""))
+                        .font(.caption2).foregroundStyle(theme.textSecondary).lineLimit(1).minimumScaleFactor(0.7)
+                    entry(argument, label: label).font(.footnote)
+                }
+                .frame(minHeight: Layout.compactTarget)
+                .padding(.horizontal, 6)
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: 7))
+            } else {
+                HStack {
+                    Text(label + (argument.unit.map { " (\($0))" } ?? "")).foregroundStyle(theme.textSecondary)
+                    entry(argument, label: label).multilineTextAlignment(.trailing)
+                }
+                .frame(minHeight: Layout.minimumTarget)
+                .padding(.horizontal, 10)
+                .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
             }
-            .frame(minHeight: Layout.minimumTarget)
-            .padding(.horizontal, 10)
-            .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
         }
+    }
+
+    private func entry(_ argument: ArgumentInfo, label: String) -> some View {
+        TextField(
+            "", text: Binding(get: { text[argument.name] ?? "" }, set: { text[argument.name] = $0 }),
+            prompt: Text(hint(argument)).foregroundStyle(theme.textSecondary)
+        )
+        .keyboardType(argument.kind == .str ? .default : .numbersAndPunctuation)
+        .autocorrectionDisabled()
+        .textInputAutocapitalization(.never)
+        .foregroundStyle(theme.text)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier("\(operation).\(argument.name)")
     }
 
     private func hint(_ argument: ArgumentInfo) -> String {
@@ -557,4 +591,9 @@ struct HoldToConfirm: View {
         firing = nil
         withAnimation(.easeOut(duration: 0.15)) { progress = 0 }
     }
+}
+
+extension ArgumentInfo {
+    /// Typed in, rather than switched or chosen.
+    fileprivate var isBoxed: Bool { kind != .bool && kind != .enum }
 }

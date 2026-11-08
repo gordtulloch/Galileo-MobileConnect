@@ -16,6 +16,9 @@ struct ThemeTokens: Equatable {
     let warning: Color
     let good: Color
     let imageTint: Color
+    let horizonFill: Color
+    let landNear: Color
+    let landFar: Color
 }
 
 extension ThemeTokens {
@@ -32,7 +35,10 @@ extension ThemeTokens {
         onDanger: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000),
         warning: Color(.sRGB, red: 0.5412, green: 0.3529, blue: 0.0000),
         good: Color(.sRGB, red: 0.1059, green: 0.4314, blue: 0.2353),
-        imageTint: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000)
+        imageTint: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000),
+        horizonFill: Color(.sRGB, red: 0.7765, green: 0.1569, blue: 0.1569),
+        landNear: Color(.sRGB, red: 0.3059, green: 0.3569, blue: 0.2275),
+        landFar: Color(.sRGB, red: 0.5608, green: 0.6275, blue: 0.4784)
     )
     static let dark = ThemeTokens(
         background: Color(.sRGB, red: 0.0627, green: 0.0667, blue: 0.0784),
@@ -47,7 +53,10 @@ extension ThemeTokens {
         onDanger: Color(.sRGB, red: 0.1686, green: 0.0314, blue: 0.0196),
         warning: Color(.sRGB, red: 0.9098, green: 0.7216, blue: 0.3529),
         good: Color(.sRGB, red: 0.4980, green: 0.8196, blue: 0.6078),
-        imageTint: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000)
+        imageTint: Color(.sRGB, red: 1.0000, green: 1.0000, blue: 1.0000),
+        horizonFill: Color(.sRGB, red: 0.8980, green: 0.2235, blue: 0.2078),
+        landNear: Color(.sRGB, red: 0.0588, green: 0.0784, blue: 0.0471),
+        landFar: Color(.sRGB, red: 0.1647, green: 0.2000, blue: 0.1412)
     )
     static let night = ThemeTokens(
         background: Color(.sRGB, red: 0.0000, green: 0.0000, blue: 0.0000),
@@ -62,12 +71,16 @@ extension ThemeTokens {
         onDanger: Color(.sRGB, red: 0.0000, green: 0.0000, blue: 0.0000),
         warning: Color(.sRGB, red: 1.0000, green: 0.0000, blue: 0.0000),
         good: Color(.sRGB, red: 1.0000, green: 0.0000, blue: 0.0000),
-        imageTint: Color(.sRGB, red: 1.0000, green: 0.0000, blue: 0.0000)
+        imageTint: Color(.sRGB, red: 1.0000, green: 0.0000, blue: 0.0000),
+        horizonFill: Color(.sRGB, red: 0.5333, green: 0.0000, blue: 0.0000),
+        landNear: Color(.sRGB, red: 0.0706, green: 0.0000, blue: 0.0000),
+        landFar: Color(.sRGB, red: 0.1725, green: 0.0000, blue: 0.0000)
     )
 }
 
 enum Layout {
     static let minimumTarget: CGFloat = 56
+    static let compactTarget: CGFloat = 36
     static let spacing: CGFloat = 12
     static let cornerRadius: CGFloat = 12
 }

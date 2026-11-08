@@ -283,20 +283,31 @@ final class AppModel {
         Task { await session.stopHold() }
     }
 
-    func preview(width: Int, stretch: Int) async -> MasterAPI.PreviewImage? {
+    func preview(width: Int, stretch: Int, stack: Bool = false) async -> MasterAPI.PreviewImage? {
         guard let pier = workingPier, let session else { return nil }
-        return try? await session.preview(pier: pier, width: width, stretch: stretch)
+        return try? await session.preview(pier: pier, width: width, stretch: stretch, stack: stack)
     }
 
-    func tile(level: Int, x: Int, y: Int, stretch: Int) async -> Data? {
+    func tile(level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async -> Data? {
         guard let pier = workingPier, let session else { return nil }
-        return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch)
+        return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack)
     }
 
     func makeSkyModel() -> SkyModel? {
         guard let pier = workingPier, let session else { return nil }
         return SkyModel(session: session, pier: pier)
     }
+
+    /// From the sky's Add to Session: a target waiting on the Sessions screen, whose saved sessions then run on it.
+    struct SessionTarget: Equatable {
+        var name: String
+        var raDeg: Double
+        var decDeg: Double
+    }
+
+    var sessionTarget: SessionTarget?
+    /// An area to go to: the shell takes it and clears it.
+    var requestedArea: Area?
 
     /// `MAPP-SKY-040`: asks first, always. Nil when the answer needs nothing more from the screen.
     func goTo(name: String, raDeg: Double, decDeg: Double) async -> String? {

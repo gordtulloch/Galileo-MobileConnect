@@ -30,19 +30,11 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		0CB2A5D2C31E41EB33CEEB90 /* UITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = UITests;
 			sourceTree = "<group>";
 		};
 		E0FE44403B9AC65AD2F21818 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			explicitFileTypes = {
-			};
-			explicitFolders = (
-			);
 			path = App;
 			sourceTree = "<group>";
 		};

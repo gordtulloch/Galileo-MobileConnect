@@ -69,6 +69,7 @@ struct LiveMasterTests {
         #expect(await eventually(timeout: 8) { seen.current.count > 2000 })
         await skyStore.stop()
         #expect(seen.current.contains { $0.isDeepSky })
+        #expect(await link.api.surveyTile(SkyTile(order: 0, npix: 0)) == nil, "the mock ships no sky pictures")
         let figures = try #require(await link.api.constellations())
         #expect(figures.names.contains { $0.name == "Orion" } && figures.lines.first?.count == 6)
         #expect(await link.api.identify(index: 2500)?.name == "M 42")

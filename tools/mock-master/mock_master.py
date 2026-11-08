@@ -180,6 +180,8 @@ class MockMaster:
         r.add_get("/mobileconnect/v1/sky/ephemeris", self.sky_ephemeris)
         r.add_get("/mobileconnect/v1/sky/site", self.sky_site)
         r.add_get("/mobileconnect/v1/sky/constellations", self.sky_constellations)
+        r.add_get("/mobileconnect/v1/sky/catalogs", self.sky_catalogs)
+        r.add_get("/mobileconnect/v1/sky/survey/tile", self.sky_survey_tile)
         r.add_get("/mobileconnect/v1/sky/check", self.sky_check)
         r.add_get("/mobileconnect/v1/sky/identify", self.sky_identify)
         return app
@@ -290,6 +292,20 @@ class MockMaster:
 
     def figure_stars(self) -> list[list]:
         return [star for figure in self.s.get("sky", {}).get("constellations", []) for star in figure["stars"]]
+
+    async def sky_catalogs(self, request):
+        sky = self.s.get("sky", {})
+        offset = sky.get("stars", 0)
+        names = [o["name"] for o in sky.get("objects", [])]
+
+        def members(prefix):
+            return [offset + i for i, n in enumerate(names) if n.startswith(prefix) and n[len(prefix):][:1].isdigit()]
+        return web.json_response({"catalogs": [{"name": "Messier", "indexes": members("M ")},
+                                               {"name": "Caldwell", "indexes": members("C ")},
+                                               {"name": "NGC", "indexes": members("NGC ")}]})
+
+    async def sky_survey_tile(self, request):
+        return web.json_response({"error": "no sky survey in the demo"}, status=404)  # they aren't ours to ship
 
     async def sky_constellations(self, request):
         lines, names = [], []

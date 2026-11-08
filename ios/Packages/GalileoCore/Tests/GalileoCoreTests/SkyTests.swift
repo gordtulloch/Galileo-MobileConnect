@@ -76,17 +76,17 @@ struct SkyTests {
     @Test("The camera: what's looked at is centred; up is up; east is left when facing south... and it inverts")
     func camera() throws {
         let camera = SkyCamera(altitude: 40, azimuth: 180, fieldOfView: 60)
-        let centre = try #require(camera.project(altitude: 40, azimuth: 180, viewShorterSide: 800))
+        let centre = try #require(camera.project(altitude: 40, azimuth: 180, viewHeight: 800))
         #expect(abs(centre.x) < 0.01 && abs(centre.y) < 0.01)
-        let above = try #require(camera.project(altitude: 50, azimuth: 180, viewShorterSide: 800))
+        let above = try #require(camera.project(altitude: 50, azimuth: 180, viewHeight: 800))
         #expect(above.y > 0 && abs(above.x) < 0.01)
         // Facing south, east (azimuth 90) is on the left.
-        let eastward = try #require(camera.project(altitude: 40, azimuth: 170, viewShorterSide: 800))
+        let eastward = try #require(camera.project(altitude: 40, azimuth: 170, viewHeight: 800))
         #expect(eastward.x < 0)
-        let place = camera.unproject(x: Double(eastward.x), y: Double(eastward.y), viewShorterSide: 800)
+        let place = camera.unproject(x: Double(eastward.x), y: Double(eastward.y), viewHeight: 800)
         #expect(abs(place.altitude - 40) < 0.01 && abs(place.azimuth - 170) < 0.01)
         // The field of view is what it says: half of it is at the edge of the shorter side.
-        let edge = try #require(camera.project(altitude: 70, azimuth: 180, viewShorterSide: 800))
+        let edge = try #require(camera.project(altitude: 70, azimuth: 180, viewHeight: 800))
         #expect(abs(edge.y - 400) < 1)
     }
 
@@ -98,10 +98,10 @@ struct SkyTests {
         camera.zoom(by: 0.000_1)
         #expect(camera.fieldOfView == SkyCamera.fieldRange.upperBound)
         camera.fieldOfView = 90
-        camera.pan(deltaX: 0, deltaY: 100_000, viewShorterSide: 800)
+        camera.pan(deltaX: 0, deltaY: 100_000, viewHeight: 800)
         #expect(camera.altitude == 90)
         camera.altitude = 45
-        camera.pan(deltaX: 400, deltaY: 0, viewShorterSide: 800)
+        camera.pan(deltaX: 400, deltaY: 0, viewHeight: 800)
         #expect(camera.azimuth >= 0 && camera.azimuth < 360)
     }
 
@@ -233,6 +233,9 @@ struct SkyTests {
         let star = try #require(await api.identify(index: 0))
         #expect(!star.isDeepSky && star.name == nil)
         #expect(await api.identify(index: 999_999) == nil)
+        if ProcessInfo.processInfo.environment["GALILEO_TEST_SURVEY_DIR"] == nil {
+            #expect(await api.surveyTile(SkyTile(order: 0, npix: 0)) == nil, "the demo ships no sky pictures")
+        }
         let figures = try #require(await api.constellations())
         #expect(figures.names.contains { $0.name == "Orion" })
         #expect(figures.lines.first?.count == 6)
@@ -241,5 +244,135 @@ struct SkyTests {
         #expect(vega.name == "Vega" && !vega.isDeepSky)
         let samples = try #require(await api.ephemeris(from: Date(), to: Date().addingTimeInterval(3600), stepSeconds: 600))
         #expect(samples.count == 7 && samples[0].bodies.contains { $0.name == "Moon" })
+    }
+
+    /// The horizon fill undoes the stars' turn with a transpose, and the survey's plan both: only right for pure rotations.
+    @Test func theSkyTurnsAreRotationsSoTheyCanBeUndone() {
+        var camera = SkyCamera()
+        camera.altitude = 37
+        camera.azimuth = 251
+        let site = SkySite(latitude: 49.9, longitude: -97.1)
+        for matrix in [camera.horizonToView, SkyGeometry.equatorialToHorizon(site: site, at: Date(timeIntervalSince1970: 1_800_000_000))] {
+            let product = matrix * matrix.transpose
+            for column in 0..<3 {
+                for row in 0..<3 {
+                    #expect(abs(product[column][row] - (column == row ? 1 : 0)) < 1e-5)
+                }
+            }
+        }
+    }
+
+    /// `MAPP-SKY-070`: the same answers as astropy_healpix, which `galileo.planning.sky_survey` is held to as well.
+    @Test func surveyTilesAreTheSameCellsAsCore() throws {
+        let data = try Data(contentsOf: Paths.vectors.appending(path: "sky/healpix.json"))
+        let cases = try #require(try JSONDecoder().decode(JSONValue.self, from: data)["cases"]?.arrayValue)
+        #expect(cases.count > 300)
+        for item in cases {
+            let ra = try #require(item["ra_deg"]?.doubleValue)
+            let dec = try #require(item["dec_deg"]?.doubleValue)
+            let order = try #require(item["order"]?.doubleValue)
+            let npix = try #require(item["npix"]?.doubleValue)
+            #expect(SkySurvey.tile(raDeg: ra, decDeg: dec, order: Int(order)).tile == SkyTile(order: Int(order), npix: Int(npix)), "\(ra) \(dec) \(order)")
+        }
+    }
+
+    /// The mesh is built with this inverse, so a tile lies where its name says.
+    @Test func aPlaceInATileGoesBackToTheSameDirection() {
+        for (ra, dec) in [(83.8, -5.4), (10.68, 41.27), (200.0, 80.0), (300.0, -75.0), (0.5, 0.2), (359.0, 44.0), (135.0, 89.5)] {
+            for order in [0, 3, 7] {
+                let found = SkySurvey.tile(raDeg: ra, decDeg: dec, order: order)
+                let back = SkySurvey.direction(of: found.tile, fx: found.fx, fy: found.fy)
+                let want = SkyGeometry.unitVector(raDeg: Float(ra), decDeg: Float(dec))
+                #expect(simd_distance(SIMD3<Float>(Float(back.x), Float(back.y), Float(back.z)), want) < 1e-4, "\(ra) \(dec) \(order)")
+            }
+        }
+    }
+
+    /// `MAPP-SKY-070`: everything on screen is asked for, finer as the view zooms, and never more than a screen can hold.
+    @Test func aViewAsksForItsTilesAndFinerAsItZooms() {
+        let site = SkySite(latitude: 49.9, longitude: -97.1)
+        let moment = Date(timeIntervalSince1970: 1_800_000_000)
+        let size = CGSize(width: 1000, height: 700)
+        var camera = SkyCamera()
+        camera.altitude = 40
+        camera.azimuth = 200
+        var lastOrder = -1
+        for field in [100.0, 20.0, 2.0] {
+            camera.fieldOfView = field
+            let wanted = SkySurvey.plan(camera: camera, site: site, at: moment, size: size, pixelsPerPoint: 2)
+            #expect(!wanted.isEmpty && wanted.count <= SkySurvey.maxViewTiles)
+            let order = wanted[0].order
+            #expect(order > lastOrder)
+            lastOrder = order
+            // Screen corners and middle: each lands in a tile that was asked for.
+            let shorter = min(size.width, size.height)
+            let scale = camera.scale(viewHeight: shorter)
+            let toSky = SkyGeometry.equatorialToHorizon(site: site, at: moment).transpose * camera.horizonToView.transpose
+            for (x, y) in [(0.0, 0.0), (500.0, 350.0), (-500.0, -350.0), (500.0, -350.0), (-500.0, 350.0)] {
+                let p = SIMD2(x / scale, y / scale)
+                let r = simd_dot(p, p) / 4
+                let view = SIMD3<Float>(Float(p.x / (1 + r)), Float(p.y / (1 + r)), Float((1 - r) / (1 + r)))
+                let sky = toSky * view
+                let ra = atan2(Double(sky.y), Double(sky.x)) * 180 / .pi
+                let dec = asin(min(1, max(-1, Double(sky.z)))) * 180 / .pi
+                #expect(wanted.contains(SkySurvey.tile(raDeg: ra < 0 ? ra + 360 : ra, decDeg: dec, order: order).tile), "\(field) \(x) \(y)")
+            }
+        }
+    }
+
+    @Test func theSkylineInterpolatesRoundTheCircle() {
+        var site = SkySite(latitude: 0, longitude: 0)
+        #expect(site.skylineAltitude(azimuth: 123) == 0, "no profile: the true horizon")
+        site.horizon = [.init(azimuth: 0, altitude: 10), .init(azimuth: 180, altitude: 30)]
+        #expect(abs(site.skylineAltitude(azimuth: 90) - 20) < 1e-9)
+        #expect(abs(site.skylineAltitude(azimuth: 270) - 20) < 1e-9)
+    }
+
+    /// `MAPP-SKY-090`: what the app draws is where Galileo's Star Atlas draws it, from values its own code wrote: the stars
+    /// on the GPU's path, and everything else on the CPU's.
+    @Test func theProjectionIsTheStarAtlases() throws {
+        let data = try Data(contentsOf: Paths.vectors.appending(path: "sky/projection.json"))
+        let cases = try #require(try JSONDecoder().decode(JSONValue.self, from: data)["cases"]?.arrayValue)
+        #expect(cases.count == 120)
+        func number(_ item: JSONValue, _ key: String) throws -> Double { try #require(item[key]?.doubleValue) }
+        for item in cases {
+            let site = SkySite(latitude: try number(item, "latitude"), longitude: try number(item, "longitude"))
+            let moment = Date(timeIntervalSince1970: try number(item, "unix"))
+            let ra = try number(item, "ra_deg")
+            let dec = try number(item, "dec_deg")
+            let camera = SkyCamera(
+                altitude: try number(item, "view_altitude"), azimuth: try number(item, "view_azimuth"), fieldOfView: try number(item, "field"))
+            let width = try number(item, "width")
+            let height = try number(item, "height")
+
+            let place = SkyGeometry.horizontal(raDeg: ra, decDeg: dec, site: site, at: moment)
+            #expect(abs(place.altitude - (try number(item, "altitude"))) < 1e-6)
+            let azimuthError = abs(place.azimuth - (try number(item, "azimuth")))
+            #expect(min(azimuthError, 360 - azimuthError) < 1e-5)
+
+            let point = camera.project(altitude: place.altitude, azimuth: place.azimuth, viewHeight: height)
+            // Viewport's own limit is -0.85 too, so only a hair's breadth of float difference can disagree.
+            guard let point else { continue }
+            let x = try number(item, "x")
+            let y = try number(item, "y")
+            guard abs(x - width / 2) < 4 * width, abs(y - height / 2) < 4 * height else { continue }
+            #expect(abs(width / 2 + point.x - x) < 0.5, "\(item)")
+            #expect(abs(height / 2 - point.y - y) < 0.5, "\(item)")
+
+            let view = camera.horizonToView * (SkyGeometry.equatorialToHorizon(site: site, at: moment)
+                * SkyGeometry.unitVector(raDeg: Float(ra), decDeg: Float(dec)))
+            let k = Double(2 / (1 + view.z)) * camera.scale(viewHeight: height)
+            #expect(abs(width / 2 + Double(view.x) * k - x) < 1.5, "the stars' path: \(item)")
+            #expect(abs(height / 2 - Double(view.y) * k - y) < 1.5, "the stars' path: \(item)")
+        }
+    }
+
+    /// `MAPP-SKY-110`: what's in which catalog is the Master's to say.
+    @Test func theMasterSaysWhatIsInWhichCatalog() async throws {
+        let master = try MockMaster(scenarioNamed: "normal-night")
+        let api = MasterConnection.demo(master, identity: testIdentity, token: MockMaster.token).api
+        let catalogs = await api.skyCatalogs()
+        #expect(catalogs["Messier"]?.contains(2500) == true, "M 42")
+        #expect(catalogs["NGC"] != nil && catalogs["Caldwell"] != nil)
     }
 }

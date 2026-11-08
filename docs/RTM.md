@@ -97,6 +97,11 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-SKY-040 | The app shall let an Operator who holds the lease slew the mount to a selected target | All | MVP | S-CTL, S-SKY | I-SKY, I-SAFE | GAP | GAP | TC-MAPP-SKY-040 | U, UI |
 | MAPP-SKY-050 | The app shall provide the Framing Assistant: the sensor field of view for the Pier's optical train at a chosen rotation, mosaic panel layout, and… | All | P2 | S-SCH, S-SKY | I-SKY | GAP | GAP | TC-MAPP-SKY-050 | U, UI |
 | MAPP-SKY-060 | The app shall show the Master's ranked target lists (What's Up Tonight) and altitude curves for a chosen date | All | P2 | S-SKY | I-SKY | GAP | GAP | TC-MAPP-SKY-060 | U, UI |
+| MAPP-SKY-070 | The app shall draw real sky behind the stars from the Master's all-sky survey tiles, at a resolution matching the zoom and correctly placed, on dark themes (in Night using red only), with their credit visible and a switch to turn it off; the sky view shall work normally without them. It shall keep them in memory only, and shall fetch no new tiles while the view is narrower than 3°. | All | P2 | S-SKY | I-SKY | `SkyTests`, `LiveMasterTests` | `DemoUITests`, `scripts/check_night.py` | TC-MAPP-SKY-070 | U, UI |
+| MAPP-SKY-080 | The app shall hide everything below 0 degrees altitude behind an opaque landscape-style ground, with a switch to turn it off and the selection and mount markers still shown, and shall fill the sky between 0 degrees and the local horizon profile in transparent red. | All | P2 | S-SKY | I-SKY | `SkyTests` | `DemoUITests`, `scripts/check_night.py` | TC-MAPP-SKY-080 | U, UI |
+| MAPP-SKY-090 | The app's sky view shall use the same projection as Galileo's Star Atlas. | All | P2 | S-SKY | I-SKY | `SkyTests`, `api/vectors/sky/projection.json` | — | TC-MAPP-SKY-090 | U |
+| MAPP-SKY-100 | Selecting an object shall offer what the Star Atlas's context menu offers: Goto, Goto and Centre, Sync and Add to Session. | All | P2 | S-SKY | I-SKY | — | `DemoUITests` | TC-MAPP-SKY-100 | UI |
+| MAPP-SKY-110 | The app shall let the user choose which deep-sky catalogs are shown, by the Master's membership. | All | P2 | S-SKY | I-SKY | `SkyTests` | `DemoUITests` | TC-MAPP-SKY-110 | U, UI |
 
 ## 7. MAPP-SOL — Plate Solving and Alignment
 

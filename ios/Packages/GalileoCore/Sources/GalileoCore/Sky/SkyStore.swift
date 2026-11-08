@@ -114,6 +114,21 @@ extension MasterAPI {
         }
     }
 
+    /// `nil` if the Master can't get it just now: ask again later.
+    public func surveyTile(_ tile: SkyTile) async -> SkyTileImage? {
+        let output = try? await callingForSky { try await client.getSkySurveyTile(query: .init(order: tile.order, npix: tile.npix)) }
+        guard case .ok(let response)? = output, let data = try? await Data(collecting: response.body.jpeg, upTo: 4 * 1024 * 1024)
+        else { return nil }
+        return SkyTileImage(jpeg: data, credit: response.headers.X_hyphen_Image_hyphen_Credit)
+    }
+
+    /// Which deep-sky objects are in which catalog, by the Master's index. Empty if this Master can't say.
+    public func skyCatalogs() async -> [String: Set<Int32>] {
+        let output = try? await callingForSky { try await client.getSkyCatalogs() }
+        guard case .ok(let response)? = output, let body = try? response.body.json else { return [:] }
+        return Dictionary(uniqueKeysWithValues: body.catalogs.map { ($0.name, Set($0.indexes.compactMap { Int32(exactly: $0) })) })
+    }
+
     public func constellations() async -> SkyConstellations? {
         let output = try? await callingForSky { try await client.getConstellations() }
         guard case .ok(let response)? = output, let body = try? response.body.json else { return nil }

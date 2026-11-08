@@ -38,6 +38,28 @@ final class SkyModel {
         didSet { UserDefaults.standard.set(showConstellations, forKey: "sky.constellations") }
     }
 
+    /// The deep-sky objects of the catalogs chosen, as the Star Atlas's own choice works: Messier to start with.
+    private(set) var shownDeepSky: [SkyObject] = []
+    /// Everything below 0 degrees hidden behind the land, as the Star Atlas's Ground option does.
+    var showGround = UserDefaults.standard.object(forKey: "sky.ground") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showGround, forKey: "sky.ground") }
+    }
+
+    private var catalogMembers: [String: Set<Int32>] = [:]
+    var shownCatalogs = Set(UserDefaults.standard.stringArray(forKey: "sky.catalogs") ?? ["Messier"]) {
+        didSet {
+            UserDefaults.standard.set(Array(shownCatalogs), forKey: "sky.catalogs")
+            chooseDeepSky()
+        }
+    }
+    nonisolated static let catalogs = ["Messier", "Caldwell", "NGC"]
+
+    /// Survey tiles behind the stars.
+    let survey: SkySurveyLayer
+    var showSurvey = UserDefaults.standard.object(forKey: "sky.survey") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(showSurvey, forKey: "sky.survey") }
+    }
+
     private let session: ObservatorySession
     private let pier: String
     private let store: SkyStore
@@ -50,6 +72,7 @@ final class SkyModel {
         self.session = session
         self.pier = pier
         store = SkyStore(api: session.api)
+        survey = SkySurveyLayer(api: session.api)
     }
 
     /// `LOD_MAGNITUDE` in `galileo.skystream`, with the last level's "everything" cut off for drawing.
@@ -76,6 +99,8 @@ final class SkyModel {
         await fetchSamples(around: time(now: now))
         await fetchFieldOfView()
         if let figures = await session.api.constellations() { constellations = figures }
+        catalogMembers = await session.api.skyCatalogs()
+        chooseDeepSky()
     }
 
     private func pointingNow() async -> HorizontalPosition? {
@@ -87,7 +112,7 @@ final class SkyModel {
     }
 
     func lookAt(altitude: Double, azimuth: Double) {
-        camera.altitude = max(5, altitude)
+        camera.altitude = min(90, max(-10, altitude))
         camera.azimuth = azimuth
     }
 
@@ -118,8 +143,19 @@ final class SkyModel {
         stars = sorted.stars
         starsVersion += 1
         deepSky = sorted.deepSky
+        chooseDeepSky()
         bright = sorted.bright
         loading = false
+    }
+
+    private func chooseDeepSky() {
+        // A Master that can't say which is which has its objects all shown, rather than none.
+        guard !catalogMembers.isEmpty else {
+            shownDeepSky = deepSky
+            return
+        }
+        let wanted = shownCatalogs.reduce(into: Set<Int32>()) { $0.formUnion(catalogMembers[$1] ?? []) }
+        shownDeepSky = deepSky.filter { wanted.contains($0.index) }
     }
 
     private nonisolated static func sortOut(_ objects: [SkyObject]) -> (stars: [SIMD4<Float>], deepSky: [SkyObject], bright: [SkyObject]) {
@@ -180,17 +216,20 @@ final class SkyModel {
     func select(_ object: JSONValue, now: Date) async {
         guard let name = object["name"]?.stringValue, let ra = object["ra_deg"]?.doubleValue, let dec = object["dec_deg"]?.doubleValue else { return }
         results = []
-        await selectPosition(name: name, raDeg: ra, decDeg: dec, now: now, centre: true)
+        await selectPosition(name: name, raDeg: ra, decDeg: dec, now: now, centre: true, askForDetails: true)
     }
 
     /// Something tapped in the view: `index` is the Master's, and only it knows what that is.
     func tapped(_ object: SkyObject, now: Date) async {
         let identified = await session.api.identify(index: Int(object.index))
         let name = identified?.name ?? (object.isDeepSky ? "Deep-sky object" : "Star")
-        await selectPosition(name: name, raDeg: Double(object.raDeg), decDeg: Double(object.decDeg), now: now, centre: false)
+        await selectPosition(
+            name: name, raDeg: Double(object.raDeg), decDeg: Double(object.decDeg), now: now, centre: false,
+            askForDetails: object.isDeepSky)
     }
 
-    private func selectPosition(name: String, raDeg: Double, decDeg: Double, now: Date, centre: Bool) async {
+    /// `askForDetails`: `sky.object` knows deep-sky objects only, and a star would just be a refusal in the audit log.
+    private func selectPosition(name: String, raDeg: Double, decDeg: Double, now: Date, centre: Bool, askForDetails: Bool) async {
         var chosen = Selection(name: name, raDeg: raDeg, decDeg: decDeg)
         if centre, let site {
             let place = SkyGeometry.horizontal(raDeg: raDeg, decDeg: decDeg, site: site, at: time(now: now))
@@ -198,7 +237,10 @@ final class SkyModel {
             cameraMoved(now: now)
         }
         selection = chosen
-        async let details = session.read(pier: pier, operation: "sky.object", args: ["name": .string(name)])
+        let session = self.session
+        let pier = self.pier
+        async let details: JSONValue? = askForDetails
+            ? session.read(pier: pier, operation: "sky.object", args: ["name": .string(name)]) : nil
         async let check = session.api.checkPosition(pier: pier, raDeg: raDeg, decDeg: decDeg)
         let (found, checked) = await (details, check)
         chosen.check = checked
@@ -219,6 +261,7 @@ final class SkyModel {
 
     func stop() async {
         settling?.cancel()
+        survey.stop()
         await store.stop()
     }
 }
