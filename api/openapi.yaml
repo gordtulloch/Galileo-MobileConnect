@@ -501,10 +501,10 @@ paths:
         - name: source
           in: query
           required: false
-          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published."
+          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published; `guide` is the whole frame PHD2 is guiding on, which exists only while the Master can read the file PHD2 saves it to (`guiding.status` `frame.available`); `solve` is the frame last captured for plate solving or polar alignment, which exists once one has been (`polar.state.frame`)."
           schema:
             type: string
-            enum: [current, stack]
+            enum: [current, stack, guide, solve]
         - name: w
           in: query
           required: false
@@ -568,10 +568,10 @@ paths:
         - name: source
           in: query
           required: false
-          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published."
+          description: "`current` (the default) is the latest single exposure; `stack` is the live stack of the series under way, which exists only while `imaging.stack.count` is published; `guide` is the whole frame PHD2 is guiding on, which exists only while the Master can read the file PHD2 saves it to (`guiding.status` `frame.available`); `solve` is the frame last captured for plate solving or polar alignment, which exists once one has been (`polar.state.frame`)."
           schema:
             type: string
-            enum: [current, stack]
+            enum: [current, stack, guide, solve]
         - name: z
           in: query
           required: true

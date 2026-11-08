@@ -77,25 +77,31 @@ struct ImagingScreen: View {
         }
     }
 
-    /// Which picture, only while there are two to choose from.
+    /// A checkbox for the stack over the latest exposure, only while there is a stack to show. Not a system
+    /// toggle: those can't be held to Night.
     @ViewBuilder private var picker: some View {
         if stackFrames != nil {
-            HStack(spacing: 0) {
-                choice("Frame", on: !showStack) { showStack = false }
-                choice("Stack", on: showStack) { showStack = true }
+            Button { showStack.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: showStack ? "checkmark.square.fill" : "square").accessibilityHidden(true)
+                    Text("Show stack")
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(theme.text)
+                .padding(.horizontal, 10)
+                .frame(minHeight: Layout.compactTarget)
+                .background(theme.background.opacity(0.6), in: RoundedRectangle(cornerRadius: 7))
+                .contentShape(Rectangle())
             }
-            .environment(\.compactControls, true)
-            .fixedSize()
+            .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.horizontal, 12)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityValue(showStack ? "checked" : "unchecked")
+            .accessibilityLabel("Show stack")
+            .accessibilityHint("Checked shows the live stack; unchecked shows the latest exposure.")
+            .accessibilityIdentifier("imaging.showstack")
         }
-    }
-
-    private func choice(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(ActionStyle(kind: on ? .prominent : .normal))
-            .accessibilityValue(on ? "Showing" : "")
-            .accessibilityIdentifier("imaging.show.\(title)")
     }
 
     /// Exposure and live stack, as bars along the bottom of the picture and nothing more.
@@ -244,21 +250,29 @@ struct ProgressRow: View {
 }
 
 /// The current frame, as large as the space it's given.
-private struct FramePicture: View {
+struct FramePicture: View {
     let stretch: Double
     /// The live stack rather than the latest exposure, and how many frames are in it (a new one is a new picture).
     let stack: Bool
     let stackFrames: Int
+    /// Anything else that means a new picture, for a screen whose frames don't arrive as imaging frames (a solve's).
+    var refresh: String = ""
+    /// The frame last captured for solving rather than the latest exposure (the Solve screen's).
+    var solve = false
+    /// The polar-alignment circle, cross and vector for the frame with this `refresh`, drawn over it and zoomed with it.
+    var marks: PolarMarks?
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.displayScale) private var scale
     @State private var image: UIImage?
     @State private var frameSize: CGSize?
     @State private var problem: String?
+    /// The `refresh` the picture on screen was fetched for, so that marks for another frame are not drawn on it.
+    @State private var loadedRefresh = ""
 
     /// A new frame, Pier or stretch means a new picture from the Master.
     private var request: String {
-        "\(model.workingPier ?? "")/\(model.value("imaging.frame")?.value.displayText ?? "")/\(model.record(of: "imaging.capture")?.id ?? "")/\(model.record(of: "imaging.capture")?.state.isOpen == true)/\(Int(stretch))/\(stack)/\(stackFrames)"
+        "\(model.workingPier ?? "")/\(model.value("imaging.frame")?.value.displayText ?? "")/\(model.record(of: "imaging.capture")?.id ?? "")/\(model.record(of: "imaging.capture")?.state.isOpen == true)/\(Int(stretch))/\(stack)/\(stackFrames)/\(refresh)/\(solve)"
     }
 
     var body: some View {
@@ -267,8 +281,10 @@ private struct FramePicture: View {
             if let image {
                 ZoomableImage(
                     image: image, frameSize: frameSize, stretch: Int(stretch), generation: request,
-                    loadTile: { [stretch, stack] level, x, y in
-                        await model.tile(level: level, x: x, y: y, stretch: Int(stretch), stack: stack)
+                    marks: marks.flatMap { $0.refresh == loadedRefresh ? $0 : nil },
+                    colours: (UIColor(theme.accent), UIColor(theme.danger), UIColor(theme.warning)),
+                    loadTile: { [stretch, stack, solve] level, x, y in
+                        await model.tile(level: level, x: x, y: y, stretch: Int(stretch), stack: stack, solve: solve)
                     })
                     .colorMultiply(theme.imageTint)
                     .accessibilityLabel("Current frame. Pinch to zoom.")
@@ -282,10 +298,12 @@ private struct FramePicture: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: request) {
             // Give a dragged slider a moment to settle; the current image stays until the new one arrives.
-            try? await Task.sleep(for: .milliseconds(180))
+            try? await Task.sleep(for: .milliseconds(solve ? 0 : 180))
             guard !Task.isCancelled else { return }
-            if let shot = await model.preview(width: Int(1600 * min(scale, 2) / 2), stretch: Int(stretch), stack: stack), let decoded = UIImage(data: shot.data) {
+            let wanted = refresh
+            if let shot = await model.preview(width: Int(1600 * min(scale, 2) / 2), stretch: Int(stretch), stack: stack, solve: solve), let decoded = UIImage(data: shot.data) {
                 image = decoded
+                loadedRefresh = wanted
                 if let width = shot.frameWidth, let height = shot.frameHeight {
                     frameSize = CGSize(width: width, height: height)
                 }
@@ -342,6 +360,8 @@ private struct ZoomableImage: UIViewRepresentable {
     let frameSize: CGSize?
     let stretch: Int
     let generation: String
+    var marks: PolarMarks?
+    var colours: (UIColor, UIColor, UIColor) = (.green, .red, .yellow)
     let loadTile: @MainActor (_ level: Int, _ x: Int, _ y: Int) async -> Data?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -359,6 +379,10 @@ private struct ZoomableImage: UIViewRepresentable {
         view.frame = scroll.bounds
         view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         scroll.addSubview(view)
+        let marksView = PolarMarksView(frame: view.bounds)
+        marksView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(marksView)
+        context.coordinator.marksView = marksView
         context.coordinator.imageView = view
         context.coordinator.scroll = scroll
         return scroll
@@ -367,6 +391,8 @@ private struct ZoomableImage: UIViewRepresentable {
     func updateUIView(_ scroll: UIScrollView, context: Context) {
         let coordinator = context.coordinator
         coordinator.imageView?.image = image
+        coordinator.marksView?.colours = colours
+        coordinator.marksView?.marks = marks
         coordinator.frameSize = frameSize
         coordinator.loadTile = loadTile
         if coordinator.generation != generation {
@@ -379,6 +405,7 @@ private struct ZoomableImage: UIViewRepresentable {
     @MainActor
     final class Coordinator: NSObject, UIScrollViewDelegate {
         var imageView: UIImageView?
+        var marksView: PolarMarksView?
         weak var scroll: UIScrollView?
         var frameSize: CGSize?
         var generation = ""
@@ -389,6 +416,9 @@ private struct ZoomableImage: UIViewRepresentable {
         private let maximumTiles = 24
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
+
+        /// The marks keep their size on screen as the picture zooms under them.
+        func scrollViewDidZoom(_ scrollView: UIScrollView) { marksView?.zoom = scrollView.zoomScale }
 
         func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) { refreshTiles() }
         func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) { refreshTiles() }
@@ -444,10 +474,92 @@ private struct ZoomableImage: UIViewRepresentable {
                             width: tile.size.width * CGFloat(1 << level) * perPixel,
                             height: tile.size.height * CGFloat(1 << level) * perPixel)
                         imageView.addSubview(view)
+                        if let marks = self.marksView { imageView.bringSubviewToFront(marks) }
                         self.tiles[key] = view
                     }
                 }
             }
         }
+    }
+}
+
+
+/// Where polar alignment's circle (the point the mount's axis aims at) and cross (the celestial pole) lie in the frame
+/// whose `refresh` this is, in that frame's pixels from its top left.
+struct PolarMarks: Equatable {
+    var refresh: String
+    var frame: CGSize
+    var axis: CGPoint
+    var pole: CGPoint
+    var arcminPerPixel: Double
+}
+
+/// Draws the marks over the picture: a circle where the axis aims, a cross at the pole, and the vector between them with
+/// its length, which is how far and which way to move the axis. It lives inside the zoomed view so it stays on the stars,
+/// and draws at a size that does not grow as the picture is zoomed.
+final class PolarMarksView: UIView {
+    var marks: PolarMarks? { didSet { if marks != oldValue { setNeedsDisplay() } } }
+    var colours: (UIColor, UIColor, UIColor) = (.green, .red, .yellow) { didSet { setNeedsDisplay() } }
+    var zoom: CGFloat = 1 { didSet { if abs(oldValue - zoom) > 0.01 { setNeedsDisplay() } } }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        isUserInteractionEnabled = false
+        isOpaque = false
+        contentMode = .redraw
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func draw(_ rect: CGRect) {
+        guard let marks, marks.frame.width > 0, marks.frame.height > 0, let context = UIGraphicsGetCurrentContext() else { return }
+        let fit = min(bounds.width / marks.frame.width, bounds.height / marks.frame.height)
+        let origin = CGPoint(x: (bounds.width - marks.frame.width * fit) / 2, y: (bounds.height - marks.frame.height * fit) / 2)
+        func place(_ p: CGPoint) -> CGPoint { CGPoint(x: origin.x + p.x * fit, y: origin.y + p.y * fit) }
+        let k = 1 / max(zoom, 1)
+        let (circleColour, crossColour, vectorColour) = colours
+        let axis = place(marks.axis), pole = place(marks.pole)
+        let ring: CGFloat = 13 * k
+        let length = hypot(pole.x - axis.x, pole.y - axis.y)
+
+        // The vector first, so the circle and cross sit on top of its ends: from the axis point to the pole.
+        if length > ring {
+            context.setStrokeColor(vectorColour.cgColor)
+            context.setLineWidth(2.5 * k)
+            let ux = (pole.x - axis.x) / length, uy = (pole.y - axis.y) / length
+            let start = CGPoint(x: axis.x + ux * ring, y: axis.y + uy * ring)
+            context.move(to: start)
+            context.addLine(to: pole)
+            let head: CGFloat = 12 * k
+            let back = CGPoint(x: pole.x - ux * head, y: pole.y - uy * head)
+            context.move(to: pole)
+            context.addLine(to: CGPoint(x: back.x - uy * head * 0.5, y: back.y + ux * head * 0.5))
+            context.move(to: pole)
+            context.addLine(to: CGPoint(x: back.x + uy * head * 0.5, y: back.y - ux * head * 0.5))
+            context.strokePath()
+
+            let arcsec = Double(hypot(marks.pole.x - marks.axis.x, marks.pole.y - marks.axis.y)) * marks.arcminPerPixel * 60
+            let text = PolarAlignmentReadout.angle(arcsec) as NSString
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.monospacedDigitSystemFont(ofSize: 15 * k, weight: .bold), .foregroundColor: vectorColour,
+            ]
+            let size = text.size(withAttributes: attributes)
+            // Beside the middle of the vector, on the side away from the cross-hairs so it doesn't sit on the line.
+            let middle = CGPoint(x: (axis.x + pole.x) / 2, y: (axis.y + pole.y) / 2)
+            text.draw(at: CGPoint(x: middle.x - uy * (size.width / 2 + 8 * k) - size.width / 2,
+                                  y: middle.y + ux * (size.height / 2 + 8 * k) - size.height / 2), withAttributes: attributes)
+        }
+
+        context.setStrokeColor(circleColour.cgColor)
+        context.setLineWidth(3 * k)
+        context.strokeEllipse(in: CGRect(x: axis.x - ring, y: axis.y - ring, width: ring * 2, height: ring * 2))
+
+        context.setStrokeColor(crossColour.cgColor)
+        context.setLineWidth(3.5 * k)
+        let arm: CGFloat = 10 * k
+        context.move(to: CGPoint(x: pole.x - arm, y: pole.y - arm)); context.addLine(to: CGPoint(x: pole.x + arm, y: pole.y + arm))
+        context.move(to: CGPoint(x: pole.x - arm, y: pole.y + arm)); context.addLine(to: CGPoint(x: pole.x + arm, y: pole.y - arm))
+        context.strokePath()
     }
 }

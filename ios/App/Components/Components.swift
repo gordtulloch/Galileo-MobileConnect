@@ -209,7 +209,8 @@ struct OperationButton: View {
                 .accessibilityIdentifier(operation)
                 if info == nil {
                     Note("This Master doesn't offer this yet.")
-                } else if let reason = info?.unavailableBecause, info?.available == false {
+                } else if let reason = info?.unavailableBecause, info?.available == false, record?.state.isOpen != true {
+                    // Not while this very operation is the thing running: "already running" would be our own doing.
                     Note(reason)
                 } else if let message {
                     Note(message)
@@ -530,7 +531,7 @@ extension HoldSession.State {
         switch reason {
         case .released, .background: return nil
         case .connectionLost: return "Connection lost. The Master stops the motion by itself within a second."
-        case .leaseLost: return "Stopped: this device no longer holds the lease."
+        case .leaseLost: return "Stopped: this device no longer has control."
         case .beatFailed: return "Stopped: the Master ended the motion."
         case .refused(let why): return why
         }

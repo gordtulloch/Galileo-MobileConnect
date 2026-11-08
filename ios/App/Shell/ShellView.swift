@@ -306,22 +306,22 @@ struct TopBar: View {
             switch model.snapshot.lease(pier: pier) {
             case .mine:
                 Button { model.releaseLease() } label: {
-                    Label("Lease: yours", systemImage: "lock.open").font(.subheadline)
+                    Label("Control: yours", systemImage: "lock.open").font(.subheadline)
                 }
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
-                .accessibilityHint("Releases the lease")
+                .accessibilityHint("Gives up control")
                 .accessibilityIdentifier("lease.release")
             case .free:
                 Button { model.takeLease() } label: {
-                    Label("Take lease", systemImage: "lock").font(.subheadline)
+                    Label("Take control", systemImage: "lock").font(.subheadline)
                 }
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
                 .accessibilityIdentifier("lease.take")
             case .other(let holder):
                 Button { model.takeLease() } label: {
-                    Label("Lease: \(holder)", systemImage: "lock.fill").font(.subheadline)
+                    Label("Control: \(holder)", systemImage: "lock.fill").font(.subheadline)
                 }
                 .buttonStyle(.plain)
                 .frame(minHeight: 44)
@@ -329,7 +329,7 @@ struct TopBar: View {
                 .accessibilityIdentifier("lease.ask")
             }
         } else if let pier = model.workingPier, case .other(let holder) = model.snapshot.lease(pier: pier) {
-            Label("Lease: \(holder)", systemImage: "lock.fill").font(.subheadline)
+            Label("Control: \(holder)", systemImage: "lock.fill").font(.subheadline)
         }
     }
 
@@ -430,7 +430,7 @@ struct DialogLayer: View {
                 Button("Close") { model.pierPickerOpen = false }.buttonStyle(ActionStyle())
             }
         } else if let offer = model.leaseOffer {
-            Dialog(title: "The lease is held") {
+            Dialog(title: "Control is held") {
                 Text(offer.reason)
                 Button("Close") { model.leaseOffer = nil }
                     .buttonStyle(ActionStyle())
@@ -484,7 +484,7 @@ struct EmergencyPanel: View {
 
     var body: some View {
         Dialog(title: "Emergency") {
-            Note("Press and hold for a second. On \(model.pier?.name ?? "this Pier"). No lease needed.")
+            Note("Press and hold for a second. On \(model.pier?.name ?? "this Pier"). No control needed.")
             ForEach(actions, id: \.2) { title, icon, operation in
                 let info = model.operation(operation)
                 HoldToConfirm(title: title, icon: icon, identifier: "emergency.\(operation)") {

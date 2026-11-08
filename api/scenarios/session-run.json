@@ -1,0 +1,12 @@
+{ "extends": "normal-night", "name": "session-run", "description": "A session from start to finish: it starts, steps through its blocks (slew, centre, focus, series), reports progress, and completes.",
+  "loop_s": 0, "timeline": [
+    { "at_s": 2, "pier": "p1", "set": { "session.state": "Starting", "activity.session": "Starting", "session.progress": 0.0, "session.block_index": 1, "session.frames_done": 0, "imaging.frame": 0, "imaging.state": "Idle", "activity.capture": "Idle", "session.block": "Slew to M42", "session.message": "Slewing", "mount.slewing": true, "activity.mount": "Slewing" } },
+    { "at_s": 6, "pier": "p1", "set": { "session.state": "Running", "activity.session": "Running", "session.progress": 0.1, "session.block_index": 2, "session.block": "Centre on target", "session.message": "Solving", "mount.slewing": false, "activity.mount": "Tracking", "activity.solve": "Solving", "solve.running": true } },
+    { "at_s": 10, "pier": "p1", "set": { "session.progress": 0.2, "session.block_index": 3, "session.block": "Autofocus", "session.message": "Focusing", "activity.solve": "Idle", "solve.running": false, "focus.state": "Autofocus", "activity.focus": "Autofocus" } },
+    { "at_s": 14, "pier": "p1", "set": { "session.progress": 0.3, "session.block_index": 4, "session.block": "Series: Red 300 s × 30", "session.message": "Exposure 1 of 30", "focus.state": "Idle", "activity.focus": "Idle", "imaging.state": "Series", "activity.capture": "Exposing", "imaging.count": 30, "imaging.frame": 1, "session.frames_total": 30 } },
+    { "at_s": 18, "pier": "p1", "set": { "session.progress": 0.5, "session.message": "Exposure 8 of 30", "imaging.frame": 8, "session.frames_done": 8 } },
+    { "at_s": 22, "pier": "p1", "set": { "session.progress": 0.75, "session.message": "Exposure 22 of 30", "imaging.frame": 22, "session.frames_done": 22 } },
+    { "at_s": 26, "pier": "p1", "set": { "session.progress": 0.95, "session.message": "Exposure 30 of 30", "imaging.frame": 30, "session.frames_done": 30 } },
+    { "at_s": 30, "pier": "p1", "set": { "session.state": "Complete", "activity.session": "Complete", "session.progress": 1.0, "session.block_index": 12, "session.block": "Done", "session.message": "Session complete: 30 frames", "imaging.state": "Idle", "camera.state": "Idle", "activity.capture": "Idle" } },
+    { "at_s": 30, "alert": { "severity": "info", "pier": "p1", "message": "Session M42 — LRGB complete: 30 frames.", "important": false } }
+  ] }

@@ -27,7 +27,8 @@ struct MockMasterTests {
 
     @Test("Every scenario loads, and its state covers real operations",
         arguments: ["normal-night", "safety-event", "meridian-flip", "lease-contention", "dropped-stream", "revoked-pairing",
-            "first-pairing-refused", "viewer", "pi-class-master", "older-master", "newer-master", "certificate-change"])
+            "first-pairing-refused", "viewer", "pi-class-master", "older-master", "newer-master", "certificate-change",
+            "focus-run", "polar-alignment", "session-run"])
     func scenarioLoads(name: String) throws {
         _ = try MockMaster(scenarioNamed: name)
     }
@@ -36,7 +37,7 @@ struct MockMasterTests {
     func noScenarioForgotten() throws {
         let files = try FileManager.default.contentsOfDirectory(at: Paths.scenarios, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "json" && !$0.lastPathComponent.hasPrefix("catalogue") }
-        #expect(files.count == 12)
+        #expect(files.count == 15)
     }
 
     @Test("Effects only name operations the catalogue has")
@@ -113,7 +114,7 @@ struct MockMasterTests {
             Issue.record("expected a record")
             return
         }
-        #expect(refused.state == .refused("Take the lease on this Pier first."))
+        #expect(refused.state == .refused("Take control of this Pier first."))
 
         #expect(await session.takeLease(pier: "p1") == nil)
         #expect(await session.current.lease(pier: "p1") == .mine)

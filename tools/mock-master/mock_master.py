@@ -418,7 +418,7 @@ class MockMaster:
             token = request.headers.get("X-Confirm-Token", "")
             if self.tokens.pop(token, (None,))[0] != "lease":
                 return web.json_response({
-                    "error": "refused", "reason": f"{holder} holds the lease on this Pier.",
+                    "error": "refused", "reason": f"{holder} has control of this Pier.",
                     "detail": {"kind": "lease_held", "holder": holder, "can_take": True},
                     "confirm_token": self.new_token("lease", None), "expires_in": 60}, status=409)
         self.leases[pier] = PEER
@@ -462,9 +462,9 @@ class MockMaster:
         if op["lease"] and self.leases.get(pier) != PEER:
             holder = self.leases.get(pier)
             if holder:
-                return 409, {"error": "refused", "reason": f"{holder} holds the lease on this Pier.",
+                return 409, {"error": "refused", "reason": f"{holder} has control of this Pier.",
                              "detail": {"kind": "lease_held", "holder": holder, "can_take": True}}
-            return 409, {"error": "refused", "reason": "Take the lease on this Pier first.", "detail": {"kind": "no_lease"}}
+            return 409, {"error": "refused", "reason": "Take control of this Pier first.", "detail": {"kind": "no_lease"}}
         if op["class"] == "confirm":
             stored = self.tokens.pop(token or "", None)
             if stored != (name, args):

@@ -22,6 +22,7 @@ struct OverviewScreen: View {
             } right: {
                 session
                 alerts
+                NodeHealthCard()
             }
         }
     }
@@ -149,5 +150,56 @@ struct ActivityCard: View {
         }
         .frame(height: 16)
         .clipShape(RoundedRectangle(cornerRadius: 3))
+    }
+}
+
+/// How the computer running the Master is doing, with Restart and Shut down (`MAPP-OVR-080`, `CSURF-310`). All of it is
+/// the Master's `node.health`, published every few seconds; the two buttons are confirm-class, so the app asks first, and
+/// the Master refuses them (and says why) while a session is running.
+struct NodeHealthCard: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    var body: some View {
+        Card("Master computer") {
+            if model.value("node.health.status") == nil {
+                Note("Waiting for the Master's health report…")
+            } else {
+                LiveRow(label: "CPU", key: "node.health.cpu_percent", unit: "%", digits: 0)
+                LiveRow(label: "Memory", key: "node.health.memory_percent", unit: "%", digits: 0)
+                LiveRow(label: "Disk free", key: "node.health.disk_free_gb", unit: "GB", digits: 0)
+                if number("node.health.temperature_c") != nil {
+                    LiveRow(label: "Temperature", key: "node.health.temperature_c", unit: "°C", digits: 0)
+                }
+                if let uptime = number("node.health.uptime_s") {
+                    HStack {
+                        Text("Up").foregroundStyle(theme.textSecondary)
+                        Spacer(minLength: 12)
+                        Text(Self.uptimeText(uptime)).fontWeight(.semibold)
+                    }
+                    .frame(minHeight: 28)
+                    .accessibilityElement(children: .combine)
+                }
+                switch model.value("node.health.status")?.value.stringValue {
+                case "critical": Label("A figure is critical — check the Master computer.", systemImage: "exclamationmark.octagon.fill").font(.subheadline.weight(.bold))
+                case "warning": Label("A figure is getting tight.", systemImage: "exclamationmark.triangle").font(.subheadline)
+                default: EmptyView()
+                }
+            }
+            HStack(spacing: Layout.spacing) {
+                OperationButton(title: "Restart", operation: "node.restart", icon: "arrow.clockwise", kind: .destructive)
+                OperationButton(title: "Shut down", operation: "node.shutdown", icon: "power", kind: .destructive)
+            }
+        }
+    }
+
+    private func number(_ key: String) -> Double? { model.value(key)?.value.doubleValue }
+
+    /// 3 d 4 h, 4 h 12 m or 12 m: two units are enough to tell a restart from a Pi that has been up for weeks.
+    static func uptimeText(_ seconds: Double) -> String {
+        let total = Int(seconds)
+        let (days, hours, minutes) = (total / 86400, total % 86400 / 3600, total % 3600 / 60)
+        if days > 0 { return "\(days) d \(hours) h" }
+        return hours > 0 ? "\(hours) h \(minutes) m" : "\(minutes) m"
     }
 }

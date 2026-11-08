@@ -179,10 +179,30 @@
             "ra_deg": 83.8221,
             "dec_deg": -5.3911,
             "rotation_deg": 92.1,
-            "scale_arcsec_px": 1.42
+            "scale_arcsec_px": 1.42,
+            "jnow_ra_hours": 5.59074,
+            "jnow_dec_deg": -5.3801,
+            "d_ra_arcsec": 1.3,
+            "d_dec_arcsec": 0.9,
+            "error_arcsec": 1.6,
+            "fov_arcmin": [
+              98.1,
+              66.8
+            ],
+            "focal_mm": 547.9,
+            "focal_ratio": 5.5,
+            "expected_focal_mm": 540.0,
+            "expected_focal_ratio": 5.4,
+            "scale_ratio": 0.99
           }
         ],
-        "stopped": false
+        "solved": true,
+        "stopped": false,
+        "log": [
+          "Capturing image…",
+          "Image received.",
+          "On target: 1.6″ from it, within the 30″ accuracy."
+        ]
       },
       "flip.enabled": true,
       "flip.pointing": "West of the meridian, pointing east",
@@ -222,6 +242,36 @@
           "total_required": 40,
           "complete": false
         }
+      ],
+      "node.health": {
+        "cpu_percent": 23.0,
+        "cpu_cores": 4,
+        "load": 0.9,
+        "memory_percent": 41.0,
+        "disk_free_gb": 184.0,
+        "disk_used_percent": 63.0,
+        "temperature_c": 54.0,
+        "uptime_s": 273600,
+        "status": "ok"
+      },
+      "solve.accuracy_arcsec": 30,
+      "solve.points": [
+        [
+          14.2,
+          -9.5
+        ],
+        [
+          -8.1,
+          6.3
+        ],
+        [
+          4.0,
+          -2.2
+        ],
+        [
+          1.3,
+          0.9
+        ]
       ]
     },
     "p2": {
@@ -265,7 +315,18 @@
       "session.templates": [
         "M42 — LRGB"
       ],
-      "scheduler.jobs": []
+      "scheduler.jobs": [],
+      "node.health": {
+        "cpu_percent": 23.0,
+        "cpu_cores": 4,
+        "load": 0.9,
+        "memory_percent": 41.0,
+        "disk_free_gb": 184.0,
+        "disk_used_percent": 63.0,
+        "temperature_c": 54.0,
+        "uptime_s": 273600,
+        "status": "ok"
+      }
     }
   },
   "waves": [
@@ -449,12 +510,51 @@
           "ok": true
         }
       ]
+    },
+    "solve.frames": {
+      "frames": [
+        {
+          "id": 101,
+          "name": "M42_Light_Red_120s_0001.fits",
+          "object": "M42",
+          "type": "Light",
+          "filter": "Red",
+          "exposure": "120",
+          "date": "2026-11-07",
+          "session": "M42 — LRGB",
+          "local": true
+        },
+        {
+          "id": 100,
+          "name": "M42_Light_Lum_120s_0007.fits",
+          "object": "M42",
+          "type": "Light",
+          "filter": "Luminance",
+          "exposure": "120",
+          "date": "2026-11-07",
+          "session": "M42 — LRGB",
+          "local": true
+        },
+        {
+          "id": 96,
+          "name": "NGC2244_Light_Ha_300s_0003.fits",
+          "object": "NGC 2244",
+          "type": "Light",
+          "filter": "Ha",
+          "exposure": "300",
+          "date": "2026-11-06",
+          "session": "Rosette",
+          "local": true
+        }
+      ]
     }
   },
   "consequences": {
     "mount.park": "The mount will stop tracking and move to its park position. A running exposure will be spoiled.",
     "flip.now": "The mount will flip across the meridian now. The current exposure is lost and guiding restarts.",
-    "session.stop": "The session stops after aborting the frame in progress."
+    "session.stop": "The session stops after aborting the frame in progress.",
+    "node.restart": "The Master computer restarts. Galileo and every connected device disconnect, and this app reconnects when it is back.",
+    "node.shutdown": "The Master computer powers off. Nothing here can turn it back on; you will need to be at the telescope."
   },
   "durations": {
     "imaging.capture": 8,
@@ -464,7 +564,9 @@
     "flip.now": 8,
     "solve.capture": 3,
     "solve.sync": 3,
-    "solve.centre": 4
+    "solve.centre": 4,
+    "polar.start": 60,
+    "solve.load": 4
   },
   "effects": {
     "mount.park": [
@@ -947,6 +1049,28 @@
         "set": {
           "solve.running": false,
           "activity.solve": "Idle",
+          "solve.points": [
+            [
+              14.2,
+              -9.5
+            ],
+            [
+              -8.1,
+              6.3
+            ],
+            [
+              4.0,
+              -2.2
+            ],
+            [
+              1.3,
+              0.9
+            ],
+            [
+              0.6,
+              -0.4
+            ]
+          ],
           "solve.last": {
             "solutions": [
               {
@@ -954,10 +1078,30 @@
                 "ra_deg": 83.8225,
                 "dec_deg": -5.3907,
                 "rotation_deg": 92.1,
-                "scale_arcsec_px": 1.42
+                "scale_arcsec_px": 1.42,
+                "jnow_ra_hours": 5.59077,
+                "jnow_dec_deg": -5.3797,
+                "d_ra_arcsec": 0.6,
+                "d_dec_arcsec": -0.4,
+                "error_arcsec": 0.7,
+                "fov_arcmin": [
+                  98.1,
+                  66.8
+                ],
+                "focal_mm": 547.9,
+                "focal_ratio": 5.5,
+                "expected_focal_mm": 540.0,
+                "expected_focal_ratio": 5.4,
+                "scale_ratio": 0.99
               }
             ],
-            "stopped": false
+            "solved": true,
+            "stopped": false,
+            "log": [
+              "Capturing image…",
+              "Image received.",
+              "On target: 1.6″ from it, within the 30″ accuracy."
+            ]
           }
         }
       }
@@ -975,6 +1119,28 @@
         "set": {
           "solve.running": false,
           "activity.solve": "Idle",
+          "solve.points": [
+            [
+              14.2,
+              -9.5
+            ],
+            [
+              -8.1,
+              6.3
+            ],
+            [
+              4.0,
+              -2.2
+            ],
+            [
+              1.3,
+              0.9
+            ],
+            [
+              0.6,
+              -0.4
+            ]
+          ],
           "solve.last": {
             "solutions": [
               {
@@ -982,10 +1148,30 @@
                 "ra_deg": 83.8225,
                 "dec_deg": -5.3907,
                 "rotation_deg": 92.1,
-                "scale_arcsec_px": 1.42
+                "scale_arcsec_px": 1.42,
+                "jnow_ra_hours": 5.59077,
+                "jnow_dec_deg": -5.3797,
+                "d_ra_arcsec": 0.6,
+                "d_dec_arcsec": -0.4,
+                "error_arcsec": 0.7,
+                "fov_arcmin": [
+                  98.1,
+                  66.8
+                ],
+                "focal_mm": 547.9,
+                "focal_ratio": 5.5,
+                "expected_focal_mm": 540.0,
+                "expected_focal_ratio": 5.4,
+                "scale_ratio": 0.99
               }
             ],
-            "stopped": false
+            "solved": true,
+            "stopped": false,
+            "log": [
+              "Capturing image…",
+              "Image received.",
+              "On target: 1.6″ from it, within the 30″ accuracy."
+            ]
           }
         }
       }
@@ -1004,23 +1190,61 @@
         "set": {
           "solve.running": false,
           "activity.solve": "Idle",
-          "mount.slewing": false,
+          "solve.points": [
+            [
+              14.2,
+              -9.5
+            ],
+            [
+              -8.1,
+              6.3
+            ],
+            [
+              4.0,
+              -2.2
+            ],
+            [
+              1.3,
+              0.9
+            ],
+            [
+              0.6,
+              -0.4
+            ]
+          ],
           "solve.last": {
             "solutions": [
               {
                 "success": true,
-                "ra_deg": {
-                  "$arg": "ra_deg"
-                },
-                "dec_deg": {
-                  "$arg": "dec_deg"
-                },
+                "ra_deg": 83.8225,
+                "dec_deg": -5.3907,
                 "rotation_deg": 92.1,
-                "scale_arcsec_px": 1.42
+                "scale_arcsec_px": 1.42,
+                "jnow_ra_hours": 5.59077,
+                "jnow_dec_deg": -5.3797,
+                "d_ra_arcsec": 0.6,
+                "d_dec_arcsec": -0.4,
+                "error_arcsec": 0.7,
+                "fov_arcmin": [
+                  98.1,
+                  66.8
+                ],
+                "focal_mm": 547.9,
+                "focal_ratio": 5.5,
+                "expected_focal_mm": 540.0,
+                "expected_focal_ratio": 5.4,
+                "scale_ratio": 0.99
               }
             ],
-            "stopped": false
-          }
+            "solved": true,
+            "stopped": false,
+            "log": [
+              "Capturing image…",
+              "Image received.",
+              "On target: 1.6″ from it, within the 30″ accuracy."
+            ]
+          },
+          "mount.slewing": false
         }
       }
     ],
@@ -1086,6 +1310,353 @@
             ]
           },
           "session.message": "Skipped to the next block"
+        }
+      }
+    ],
+    "polar.start": [
+      {
+        "after_s": 0,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "measuring",
+            "message": "Moving the mount to the zenith to start…",
+            "step": 0,
+            "steps": 3,
+            "error": null,
+            "target_offset_arcmin": null,
+            "stopped": false,
+            "log": []
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 4,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "measuring",
+            "message": "Solving position 1 of 3…",
+            "step": 1,
+            "steps": 3,
+            "error": null,
+            "target_offset_arcmin": null,
+            "stopped": false,
+            "log": []
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 8,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "measuring",
+            "message": "Rotating the mount 30° east…",
+            "step": 1,
+            "steps": 3,
+            "error": null,
+            "target_offset_arcmin": null,
+            "stopped": false,
+            "log": []
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 12,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "measuring",
+            "message": "Solving position 3 of 3…",
+            "step": 3,
+            "steps": 3,
+            "error": null,
+            "target_offset_arcmin": null,
+            "stopped": false,
+            "log": []
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 16,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "adjusting",
+            "message": "Polar axis is 14′40″ from the pole. Turn the altitude and azimuth adjusters to bring the X into the circle.",
+            "step": 3,
+            "steps": 3,
+            "error": {
+              "total_arcsec": 880,
+              "altitude_arcsec": 520,
+              "azimuth_arcsec": -710,
+              "azimuth_rotation_arcsec": -639.0,
+              "altitude_advice": "Lower the polar axis by 8′40″.",
+              "azimuth_advice": "Move the polar axis east by 11′50″ (turn the mount 10′39″ in azimuth).",
+              "quality": "poor",
+              "trend": [
+                880
+              ]
+            },
+            "target_offset_arcmin": [
+              11.8,
+              -6.4
+            ],
+            "stopped": false,
+            "log": [],
+            "frame": {
+              "ref": "solve:p1",
+              "version": 1,
+              "width": 1280,
+              "height": 960,
+              "axis_px": [
+                640.0,
+                480.0
+              ],
+              "pole_px": [
+                663.6,
+                467.2
+              ],
+              "arcmin_per_px": 0.5
+            }
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 22,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "adjusting",
+            "message": "Polar axis is 6′10″ from the pole.",
+            "step": 3,
+            "steps": 3,
+            "error": {
+              "total_arcsec": 370,
+              "altitude_arcsec": 210,
+              "azimuth_arcsec": -300,
+              "azimuth_rotation_arcsec": -270.0,
+              "altitude_advice": "Lower the polar axis by 3′30″.",
+              "azimuth_advice": "Move the polar axis east by 5′00″ (turn the mount 4′30″ in azimuth).",
+              "quality": "poor",
+              "trend": [
+                880,
+                610,
+                370
+              ]
+            },
+            "target_offset_arcmin": [
+              5.1,
+              -2.6
+            ],
+            "stopped": false,
+            "log": [],
+            "frame": {
+              "ref": "solve:p1",
+              "version": 2,
+              "width": 1280,
+              "height": 960,
+              "axis_px": [
+                640.0,
+                480.0
+              ],
+              "pole_px": [
+                650.2,
+                474.8
+              ],
+              "arcmin_per_px": 0.5
+            }
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 28,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "adjusting",
+            "message": "Polar axis is 2′05″ from the pole.",
+            "step": 3,
+            "steps": 3,
+            "error": {
+              "total_arcsec": 125,
+              "altitude_arcsec": 60,
+              "azimuth_arcsec": -110,
+              "azimuth_rotation_arcsec": -99.0,
+              "altitude_advice": "Lower the polar axis by 1′00″.",
+              "azimuth_advice": "Move the polar axis east by 1′50″ (turn the mount 1′39″ in azimuth).",
+              "quality": "fair",
+              "trend": [
+                880,
+                610,
+                370,
+                200,
+                125
+              ]
+            },
+            "target_offset_arcmin": [
+              1.6,
+              -0.9
+            ],
+            "stopped": false,
+            "log": [],
+            "frame": {
+              "ref": "solve:p1",
+              "version": 3,
+              "width": 1280,
+              "height": 960,
+              "axis_px": [
+                640.0,
+                480.0
+              ],
+              "pole_px": [
+                643.2,
+                478.2
+              ],
+              "arcmin_per_px": 0.5
+            }
+          },
+          "activity.solve": "Polar alignment"
+        }
+      },
+      {
+        "after_s": 34,
+        "set": {
+          "polar.state": {
+            "running": true,
+            "phase": "adjusting",
+            "message": "Polar axis is 38″ from the pole.",
+            "step": 3,
+            "steps": 3,
+            "error": {
+              "total_arcsec": 38,
+              "altitude_arcsec": -14,
+              "azimuth_arcsec": -35,
+              "azimuth_rotation_arcsec": -31.5,
+              "altitude_advice": "Raise the polar axis by 14″.",
+              "azimuth_advice": "Move the polar axis east by 35″ (turn the mount 32″ in azimuth).",
+              "quality": "good",
+              "trend": [
+                880,
+                610,
+                370,
+                200,
+                125,
+                70,
+                38
+              ]
+            },
+            "target_offset_arcmin": [
+              0.4,
+              -0.2
+            ],
+            "stopped": false,
+            "log": [],
+            "frame": {
+              "ref": "solve:p1",
+              "version": 4,
+              "width": 1280,
+              "height": 960,
+              "axis_px": [
+                640.0,
+                480.0
+              ],
+              "pole_px": [
+                640.8,
+                479.6
+              ],
+              "arcmin_per_px": 0.5
+            }
+          },
+          "activity.solve": "Polar alignment"
+        }
+      }
+    ],
+    "polar.stop": [
+      {
+        "after_s": 0,
+        "set": {
+          "polar.state": {
+            "running": false,
+            "phase": "finished",
+            "stopped": true
+          },
+          "activity.solve": "Idle"
+        }
+      }
+    ],
+    "solve.load": [
+      {
+        "after_s": 0,
+        "set": {
+          "solve.running": true,
+          "activity.solve": "Loading",
+          "mount.slewing": true
+        }
+      },
+      {
+        "after_s": 4,
+        "set": {
+          "solve.running": false,
+          "activity.solve": "Idle",
+          "solve.points": [
+            [
+              14.2,
+              -9.5
+            ],
+            [
+              -8.1,
+              6.3
+            ],
+            [
+              4.0,
+              -2.2
+            ],
+            [
+              1.3,
+              0.9
+            ]
+          ],
+          "solve.last": {
+            "solutions": [
+              {
+                "success": true,
+                "ra_deg": 83.8221,
+                "dec_deg": -5.3911,
+                "rotation_deg": 92.1,
+                "scale_arcsec_px": 1.42,
+                "jnow_ra_hours": 5.59074,
+                "jnow_dec_deg": -5.3801,
+                "d_ra_arcsec": 0.0,
+                "d_dec_arcsec": 0.0,
+                "error_arcsec": 0.0,
+                "fov_arcmin": [
+                  98.1,
+                  66.8
+                ],
+                "focal_mm": 547.9,
+                "focal_ratio": 5.5,
+                "expected_focal_mm": 540.0,
+                "expected_focal_ratio": 5.4,
+                "scale_ratio": 0.99
+              }
+            ],
+            "solved": true,
+            "stopped": false,
+            "log": [
+              "Capturing image…",
+              "Image received.",
+              "On target: 1.6″ from it, within the 30″ accuracy."
+            ]
+          },
+          "mount.slewing": false
         }
       }
     ]

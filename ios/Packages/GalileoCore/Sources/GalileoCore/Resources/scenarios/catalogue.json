@@ -332,6 +332,44 @@
    "description": "Calibrate again, then guide"
   },
   {
+   "name": "guiding.select_star",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "x",
+     "type": "float",
+     "required": true,
+     "unit": "px",
+     "description": "Where the user tapped, in pixels from the left of the picture they tapped",
+     "min": 0,
+     "max": 100000
+    },
+    {
+     "name": "y",
+     "type": "float",
+     "required": true,
+     "unit": "px",
+     "description": "Pixels from the top of the picture they tapped",
+     "min": 0,
+     "max": 100000
+    },
+    {
+     "name": "space",
+     "type": "enum",
+     "required": false,
+     "description": "'frame' when the tap was on the whole guide frame (guide:<pier>), 'cutout' when it was on the guide-star cut-out (guiding.star)",
+     "default": "frame",
+     "choices": [
+      "frame",
+      "cutout"
+     ]
+    }
+   ],
+   "description": "Choose the guide star nearest a tapped point; PHD2 picks the best star in a small box around it"
+  },
+  {
    "name": "guiding.star",
    "area": "guiding",
    "class": "read",
@@ -465,10 +503,24 @@
      "name": "camera_slot",
      "type": "str",
      "required": false
+    },
+    {
+     "name": "live_stack",
+     "type": "bool",
+     "required": false,
+     "default": false
     }
    ],
-   "description": "Take one frame or a series; each frame is saved to the Library",
+   "description": "Take one frame or a series; each frame is saved to the Library. With live_stack, a series of three or more frames is also registered and averaged into a stack, shown as it builds",
    "long_running": true
+  },
+  {
+   "name": "imaging.controls",
+   "area": "imaging",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The switches ticked Show on imaging, and the flat panel's state, for the Imaging screen"
   },
   {
    "name": "imaging.status",
@@ -596,6 +648,84 @@
    "description": "Every Pier this node runs, with its devices and running session"
   },
   {
+   "name": "polar.start",
+   "area": "polar",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "exposure_s",
+     "type": "float",
+     "required": false,
+     "unit": "s",
+     "default": 5.0,
+     "min": 0.001,
+     "max": 600
+    },
+    {
+     "name": "settle_s",
+     "type": "float",
+     "required": false,
+     "unit": "s",
+     "default": 1.5,
+     "min": 0,
+     "max": 60
+    },
+    {
+     "name": "step_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "description": "How far the mount turns in RA between the three measuring solves",
+     "default": 30.0,
+     "min": 5,
+     "max": 60
+    },
+    {
+     "name": "direction",
+     "type": "enum",
+     "required": false,
+     "description": "Which way the RA axis turns",
+     "default": "east",
+     "choices": [
+      "east",
+      "west"
+     ]
+    },
+    {
+     "name": "refraction",
+     "type": "bool",
+     "required": false,
+     "default": true
+    },
+    {
+     "name": "slew_from_zenith",
+     "type": "bool",
+     "required": false,
+     "description": "Go to the zenith and check the mount first; false measures from where it points now",
+     "default": true
+    }
+   ],
+   "description": "Measure the polar-alignment error with three plate solves, then keep it live while the altitude and azimuth adjusters are turned; runs until polar.stop",
+   "long_running": true
+  },
+  {
+   "name": "polar.status",
+   "area": "polar",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Whether polar alignment is running, and the live error"
+  },
+  {
+   "name": "polar.stop",
+   "area": "polar",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "End the polar-alignment routine in progress"
+  },
+  {
    "name": "rotator.move",
    "area": "rotator",
    "class": "operate",
@@ -648,6 +778,46 @@
    "lease": false,
    "args": [],
    "description": "The Pier's queued scheduler jobs, in priority order, and the next one"
+  },
+  {
+   "name": "session.estimate",
+   "area": "session",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "template",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "target_name",
+     "type": "str",
+     "required": false
+    },
+    {
+     "name": "ra_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "min": 0,
+     "max": 360
+    },
+    {
+     "name": "dec_deg",
+     "type": "float",
+     "required": false,
+     "unit": "deg",
+     "min": -90,
+     "max": 90
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false
+    }
+   ],
+   "description": "Pre-run summary of a saved template: duration, storage against free space, meridian flip time, and warnings if it would run into dawn, the horizon or the flip"
   },
   {
    "name": "session.pause",
@@ -876,9 +1046,21 @@
      "name": "filter",
      "type": "str",
      "required": false
+    },
+    {
+     "name": "action",
+     "type": "enum",
+     "required": false,
+     "description": "What to do with the answer: nothing, sync the mount, or slew to the target",
+     "default": "nothing",
+     "choices": [
+      "nothing",
+      "sync",
+      "slew"
+     ]
     }
    ],
-   "description": "Take a frame and solve it; the mount is not touched",
+   "description": "Take a frame, solve it and do the Solver Action (by default nothing: the mount is not touched)",
    "long_running": true
   },
   {
@@ -960,6 +1142,30 @@
    "long_running": true
   },
   {
+   "name": "solve.frames",
+   "area": "solve",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Recent Library frames that solve.load can solve"
+  },
+  {
+   "name": "solve.load",
+   "area": "solve",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "frame_id",
+     "type": "str",
+     "required": true,
+     "description": "A Library frame, from solve.frames"
+    }
+   ],
+   "description": "Solve a Library frame and slew the mount to where it points",
+   "long_running": true
+  },
+  {
    "name": "solve.status",
    "area": "solve",
    "class": "read",
@@ -1031,6 +1237,41 @@
    ],
    "description": "Take a frame, solve it and tell the mount where it is really pointing",
    "long_running": true
+  },
+  {
+   "name": "switch.panel",
+   "area": "switch",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "Every channel of the switch device and its readings, with which are shown on Imaging"
+  },
+  {
+   "name": "switch.set",
+   "area": "switch",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "channel",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "on",
+     "type": "bool",
+     "required": false
+    },
+    {
+     "name": "duty",
+     "type": "float",
+     "required": false,
+     "unit": "%",
+     "min": 0,
+     "max": 100
+    }
+   ],
+   "description": "Switch a channel on or off and, for a dew heater, set its power in percent"
   },
   {
    "name": "system.stop_everything",

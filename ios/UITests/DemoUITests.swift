@@ -93,7 +93,7 @@ final class DemoUITests: XCTestCase {
         let park = element("mount.park")
         XCTAssertTrue(park.waitForExistence(timeout: 5))
         park.tap()
-        let refusal = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Take the lease'")).firstMatch
+        let refusal = app.staticTexts.containing(NSPredicate(format: "label CONTAINS 'Take control'")).firstMatch
         XCTAssertTrue(refusal.waitForExistence(timeout: 5), "the Master's reason must be shown")
 
         element("lease.take").tap()

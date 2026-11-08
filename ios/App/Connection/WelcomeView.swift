@@ -18,7 +18,7 @@ struct WelcomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Layout.spacing) {
-                Text("Galileo MobileConnect").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                Text("Galileo").font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                 Text("Watch and operate your Galileo observatory.").foregroundStyle(theme.textSecondary)
 
                 if let message = model.welcomeMessage { Banner(icon: "info.circle", text: message) }
@@ -76,7 +76,7 @@ struct WelcomeView: View {
                 .buttonStyle(ActionStyle(kind: .prominent))
             } else if denied {
                 Text("Local network access is off, so this app can't find or reach your observatory.")
-                Note("Turn it on in Settings › Privacy & Security › Local Network › Galileo MobileConnect. Discovery, pairing and control all need it; only the demo works without.")
+                Note("Turn it on in Settings › Privacy & Security › Local Network › Galileo. Discovery, pairing and control all need it; only the demo works without.")
             } else if found.isEmpty {
                 HStack(spacing: 10) {
                     ProgressView().tint(theme.text)

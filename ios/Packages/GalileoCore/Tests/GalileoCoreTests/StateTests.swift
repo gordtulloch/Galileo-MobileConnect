@@ -24,6 +24,17 @@ struct StateTests {
         #expect(state.piers["p"]?.values["weather.wind"]?.value == 3)
     }
 
+    @Test("MAPP-OVR-080: the node's health report goes stale if the Master stops sending it, and its fields are readable by path")
+    func nodeHealthFreshness() {
+        let report: JSONValue = .object(["cpu_percent": .number(23), "status": .string("ok")])
+        let state = reduce(snapshotted + [.frame(seq: 2, event: .delta(pier: "p", key: "node.health", value: report, asOf: t0))])
+        let fresh = state.view(pier: "p", key: "node.health.cpu_percent", now: t0.addingTimeInterval(10), connected: true)
+        let silent = state.view(pier: "p", key: "node.health.cpu_percent", now: t0.addingTimeInterval(120), connected: true)
+        #expect(fresh?.stale == false && fresh?.value.doubleValue == 23)
+        #expect(silent?.stale == true)
+        #expect(state.view(pier: "p", key: "mount.tracking", now: t0.addingTimeInterval(120), connected: true)?.stale == false)   // unchanged state does not age
+    }
+
     @Test("A delta replaces the subtree at its key")
     func deltaReplacesSubtree() {
         let state = reduce([

@@ -34,7 +34,7 @@ targets:
     info:
       path: Config/Info.plist
       properties:
-        CFBundleDisplayName: Galileo MobileConnect
+        CFBundleDisplayName: Galileo
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # Only the system's own HTTPS and WSS: exempt from export documentation.

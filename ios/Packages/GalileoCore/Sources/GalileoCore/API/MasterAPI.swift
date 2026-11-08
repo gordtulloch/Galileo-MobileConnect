@@ -259,7 +259,7 @@ public struct MasterAPI: Sendable {
                 let detail = error.detail.flatMap { try? JSONValue(encoding: $0.additionalProperties) }
                 return .failure(
                     LeaseRefusal(
-                        reason: error.reason ?? "The Master refused the lease.", holder: detail?["holder"]?.stringValue,
+                        reason: error.reason ?? "The Master refused control.", holder: detail?["holder"]?.stringValue,
                         takeOverToken: (detail?["can_take"]?.boolValue ?? false) ? error.confirm_token : nil))
             }
         } catch let error as LinkError {
@@ -285,9 +285,9 @@ public struct MasterAPI: Sendable {
         public var frameHeight: Int?
     }
 
-    public func preview(pier: String, width: Int, quality: Int, stretch: Int, stack: Bool = false) async throws -> PreviewImage? {
+    public func preview(pier: String, width: Int, quality: Int, stretch: Int, stack: Bool = false, guide: Bool = false, solve: Bool = false) async throws -> PreviewImage? {
         let output = try await calling {
-            try await client.getPreview(query: .init(pier: pier, source: stack ? .stack : .current, w: width, q: quality, stretch: stretch))
+            try await client.getPreview(query: .init(pier: pier, source: solve ? .solve : guide ? .guide : stack ? .stack : .current, w: width, q: quality, stretch: stretch))
         }
         switch output {
         case .ok(let response):
@@ -310,9 +310,9 @@ public struct MasterAPI: Sendable {
         return nil
     }
 
-    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async throws -> Data? {
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false, solve: Bool = false) async throws -> Data? {
         let output = try await calling {
-            try await client.getTile(query: .init(pier: pier, source: stack ? .stack : .current, z: level, x: x, y: y, stretch: stretch))
+            try await client.getTile(query: .init(pier: pier, source: solve ? .solve : stack ? .stack : .current, z: level, x: x, y: y, stretch: stretch))
         }
         switch output {
         case .ok(let response): return try await Data(collecting: response.body.jpeg, upTo: 4 * 1024 * 1024)

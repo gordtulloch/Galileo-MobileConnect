@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from galileo.control_surface import catalogue, flips, guiding, history, holds, imaging, piers, registry
-from galileo.control_surface import safety, schedule, sessions, sky, solve
+from galileo.control_surface import polar, safety, schedule, sessions, sky, solve
 
 OUT = Path(__file__).resolve().parents[2] / "api" / "scenarios" / "catalogue.json"
 REGISTERS = [
@@ -19,6 +19,7 @@ REGISTERS = [
     imaging.register_imaging_operations, piers.register_pier_operations, safety.register_safety_operations,
     schedule.register_schedule_operations, sessions.register_session_operations,
     sessions.register_start_operations, sky.register_sky_operations, solve.register_solve_operations,
+    polar.register_polar_operations,
 ]
 
 

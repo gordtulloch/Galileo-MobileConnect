@@ -283,14 +283,20 @@ final class AppModel {
         Task { await session.stopHold() }
     }
 
-    func preview(width: Int, stretch: Int, stack: Bool = false) async -> MasterAPI.PreviewImage? {
+    func preview(width: Int, stretch: Int, stack: Bool = false, guide: Bool = false, solve: Bool = false) async -> MasterAPI.PreviewImage? {
         guard let pier = workingPier, let session else { return nil }
-        return try? await session.preview(pier: pier, width: width, stretch: stretch, stack: stack)
+        return try? await session.preview(pier: pier, width: width, stretch: stretch, stack: stack, guide: guide, solve: solve)
     }
 
-    func tile(level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async -> Data? {
+    /// One read-class operation's value on the working Pier (the guide-star cut-out, for one).
+    func read(_ operation: String) async -> JSONValue? {
         guard let pier = workingPier, let session else { return nil }
-        return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack)
+        return await session.read(pier: pier, operation: operation)
+    }
+
+    func tile(level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false, solve: Bool = false) async -> Data? {
+        guard let pier = workingPier, let session else { return nil }
+        return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack, solve: solve)
     }
 
     func makeSkyModel() -> SkyModel? {

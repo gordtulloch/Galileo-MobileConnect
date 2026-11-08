@@ -60,6 +60,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-OVR-050 | The app shall receive state, progress and alerts as events pushed by the Master and shall not poll for them in a loop | All | MVP | S-LINK, S-STATE | I-SHELL | GAP | GAP | TC-MAPP-OVR-050 | U, UI |
 | MAPP-OVR-060 | The app shall show recent alerts with their severity and time, and shall show when a new alert arrives while the app is connected | All | MVP | S-STATE | I-SHELL | GAP | GAP | TC-MAPP-OVR-060 | U, UI |
 | MAPP-OVR-070 | The app shall show a state of the observatory within 5 seconds of connecting (value to be confirmed, Section 5) | All | MVP | S-STATE, S-LINK | I-SHELL | GAP | GAP | TC-MAPP-OVR-070 | D |
+| MAPP-OVR-080 | The app shall show, on the Overview screen, the health of the computer running the Master (CPU use, memory use, free disk space, temperature where reported, and uptime), taken from the Master's published state rather than polled, and shall offer Restart and Shut down for that computer as confirm-class operations that the Master refuses, with a reason, while a session is running. The Master side is `CSURF-310`. | All | P2 | S-STATE | I-SHELL | `StateTests` (freshness) | GAP | TC-MAPP-OVR-080 | UI |
 
 ## 4. MAPP-DEV — Devices
 
@@ -125,6 +126,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 |---|---|---|---|---|---|---|---|---|---|
 | MAPP-GUI-010 | The app shall connect and disconnect the guider service, start and stop guiding, dither and recalibrate | All | MVP | S-API | I-OPS | GAP | GAP | TC-MAPP-GUI-010 | C, UI |
 | MAPP-GUI-020 | The app shall display the guide error trace and the guide-star cut-out the Master supplies | All | MVP | S-STATE | I-OPS | GAP | GAP | TC-MAPP-GUI-020 | C, UI |
+| MAPP-GUI-030 | The app shall show the guide star as the cut-out or as the whole guide frame, and let the user choose the guide star by tapping either | All | MVP | S-API | I-OPS | GAP | GAP | TC-MAPP-GUI-030 | C, UI |
 
 ## 10. MAPP-FLP — Meridian Flip
 

@@ -19,7 +19,7 @@ How the iPadOS/iOS app puts a native SwiftUI interface on the core specified in 
 
 ### 1.2 Status
 
-Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; `I-SKY` without the P2 framing and target lists; and of `I-SES` the run view and job queue. Not built, all P2: session authoring, Library, calibration, notifications, polar alignment. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
+Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; `I-SKY` without the P2 framing and target lists; and of `I-SES` the run view and job queue. Polar alignment is on the Solve screen (2026-11-08, `MAPP-SOL-030`; against the mock only). Not built, all P2: session authoring, Library, calibration, notifications. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
 
 ---
 
@@ -117,8 +117,8 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 | Screen | Contents | Requirements |
 |---|---|---|
 | Equipment | Per-device cards with connect/disconnect, state, and the device's controls: mount (slew, sync, tracking, park/unpark, home, pulse, **jog pad**), camera (cooling, parameters), filter wheel, rotator, dome, flat panel, switches, weather | `DEV-*` |
-| Imaging | The frame fills the screen (pinch, pan, tiles). Exposure, count, frame type, gain and offset sit in a compact panel that slides down from the top, with stretch, single exposure, abort and live loop one tap further; exposure, series and live-stack progress are bars along the bottom edge, with a Frame/Stack switch for which picture and statistics a small caption, with no panels | `IMG-010`, `020`, `050`, `060` |
-| Solve | Solve, centre, sync, polar alignment | `SOL-*` |
+| Imaging | The frame fills the screen (pinch, pan, tiles). Exposure, count, frame type, gain and offset sit in a compact panel that slides down from the top, with stretch, single exposure, abort and live loop one tap further; exposure, series and live-stack progress are bars along the bottom edge, with a Show stack checkbox for which picture and statistics a small caption, with no panels | `IMG-010`, `020`, `050`, `060` |
+| Solve | Latest frame on the left; on the right, stacked panes (solver control with the bullseye, exposure, Capture & Solve, Load & Slew, Stop and the Solver Action; latest result with Solution Coordinates (JNow); centre; polar alignment; polar error) that the user can hide, so polar alignment's prompts can have the column | `SOL-*` |
 | Focus | Manual focus (focus-module operations only: step in/out, absolute move, halt, position and temperature) and autofocus (progress, V-curve chart, result, temperature compensation) | `FOC-*` |
 | Guiding | Connect, start/stop, dither, recalibrate, error trace, star cut-out | `GUI-*` |
 | Flip | State, time remaining, trigger/defer with confirmation | `FLP-*` |

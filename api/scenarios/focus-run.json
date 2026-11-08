@@ -1,0 +1,9 @@
+{ "extends": "normal-night", "name": "focus-run", "description": "An autofocus run: the V-curve fills in, the focuser settles, and the result is reported. The run also starts by itself so the demo needs no tap.",
+  "loop_s": 0, "timeline": [
+    { "at_s": 3, "pier": "p1", "set": { "focus.state": "Autofocus", "activity.focus": "Autofocus", "activity.capture": "Idle", "imaging.state": "Idle", "focus.vcurve": { "position": 21000, "hfr": 4.1 } } },
+    { "at_s": 5, "pier": "p1", "set": { "focus.vcurve": { "position": 21200, "hfr": 3.2 }, "focus.position": 21200, "focus.moving": true } },
+    { "at_s": 7, "pier": "p1", "set": { "focus.vcurve": { "position": 21400, "hfr": 2.3 }, "focus.position": 21400 } },
+    { "at_s": 9, "pier": "p1", "set": { "focus.vcurve": { "position": 21600, "hfr": 2.6 }, "focus.position": 21600 } },
+    { "at_s": 11, "pier": "p1", "set": { "focus.vcurve": { "position": 21800, "hfr": 3.5 }, "focus.position": 21800 } },
+    { "at_s": 14, "pier": "p1", "set": { "focus.state": "Idle", "activity.focus": "Idle", "focus.moving": false, "focus.position": 21440, "focus.last_result": "Best focus 21440, HFR 2.25", "imaging.state": "Series", "activity.capture": "Exposing", "imaging.stats": { "stars": 1342, "hfr": 2.25, "fwhm": 3.3 } } }
+  ] }

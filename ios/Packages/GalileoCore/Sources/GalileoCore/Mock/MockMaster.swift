@@ -282,7 +282,7 @@ public actor MockMaster: ClientTransport, StreamTransport {
                 return (
                     409,
                     [
-                        "error": "refused", "reason": .string("\(holder) holds the lease on this Pier."),
+                        "error": "refused", "reason": .string("\(holder) has control of this Pier."),
                         "detail": ["kind": "lease_held", "holder": .string(holder), "can_take": true],
                         "confirm_token": .string(makeConfirmToken(operation: "lease", args: nil)), "expires_in": 60,
                     ]
@@ -358,10 +358,10 @@ public actor MockMaster: ClientTransport, StreamTransport {
         if info.needsLease, leases[pier] != Self.peerID {
             if let holder = leases[pier] {
                 return refuse(
-                    "refused", "\(holder) holds the lease on this Pier.",
+                    "refused", "\(holder) has control of this Pier.",
                     detail: ["kind": "lease_held", "holder": .string(holder), "can_take": true])
             }
-            return refuse("refused", "Take the lease on this Pier first.", detail: ["kind": "no_lease"])
+            return refuse("refused", "Take control of this Pier first.", detail: ["kind": "no_lease"])
         }
         if info.operationClass == .confirm {
             guard let confirmToken, let stored = confirmTokens.removeValue(forKey: confirmToken),

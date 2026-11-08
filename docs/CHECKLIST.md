@@ -75,7 +75,7 @@ Every MVP screen is built. What's below can't be finished in the app alone.
 
 - [ ] Connecting devices (`MAPP-DEV-010`), mount jog (`MAPP-DEV-030`), autofocus (`MAPP-FOC-020`): the screens are built and work on the mock's proposed operations, and say "doesn't offer this yet" on a real Master.
 - [ ] Find home, tracking rate and pulse (`MAPP-DEV-020`); per-exposure region of interest (`MAPP-DEV-040`): no operation exists yet, and no control either.
-- [ ] Guide-star cut-out (`MAPP-GUI-020`): `guiding.star` returns raw pixels, and the app doesn't draw them yet.
+- [x] Guide-star cut-out (`MAPP-GUI-020`) and tap-to-choose on the cut-out or the whole guide frame (`MAPP-GUI-030`): the iOS Guiding screen draws the cut-out from `guiding.star` and the frame from `GET /preview?source=guide`. Not yet run against a real PHD2: the frame needs the Master to read the file PHD2 saves, and the star choice needs PHD2 to accept `find_star` with a region.
 - [ ] Solve the current or last frame (`MAPP-SOL-010`): `solve.capture` takes a new one. Skip a session step (`MAPP-SES-020`), defer a flip (`MAPP-FLP-020`), nested blocks and time remaining (`MAPP-SES-030`), current filter (`MAPP-DEV-050`): no operation or state yet.
 
 **The plugin** is drafted (`Galileo-Plugins/mobileconnect`) and not yet installed in a running Galileo: see the end of this file.

@@ -1,0 +1,306 @@
+{
+ "extends": "normal-night",
+ "name": "polar-alignment",
+ "description": "A polar alignment: the mount turns to three positions and solves at each, then the live adjustment loop with the error shrinking as the user turns the altitude and azimuth knobs. polar.state is the object core publishes (CSURF-145): phase, message, step, error with its quality band and trend, and the pole's offset in the latest frame.",
+ "loop_s": 0,
+ "timeline": [
+  {
+   "at_s": 2.0,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "measuring",
+     "message": "Moving the mount to the zenith to start…",
+     "step": 0,
+     "steps": 3,
+     "error": null,
+     "target_offset_arcmin": null,
+     "stopped": false,
+     "log": []
+    },
+    "activity.solve": "Polar alignment",
+    "session.state": "Idle",
+    "imaging.state": "Idle",
+    "camera.state": "Idle",
+    "activity.session": "Idle",
+    "activity.capture": "Idle"
+   }
+  },
+  {
+   "at_s": 5.2,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "measuring",
+     "message": "Solving position 1 of 3…",
+     "step": 1,
+     "steps": 3,
+     "error": null,
+     "target_offset_arcmin": null,
+     "stopped": false,
+     "log": []
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 8.4,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "measuring",
+     "message": "Rotating the mount 30° east…",
+     "step": 1,
+     "steps": 3,
+     "error": null,
+     "target_offset_arcmin": null,
+     "stopped": false,
+     "log": []
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 11.600000000000001,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "measuring",
+     "message": "Solving position 3 of 3…",
+     "step": 3,
+     "steps": 3,
+     "error": null,
+     "target_offset_arcmin": null,
+     "stopped": false,
+     "log": []
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 14.8,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "adjusting",
+     "message": "Polar axis is 14′40″ from the pole. Turn the altitude and azimuth adjusters to bring the X into the circle.",
+     "step": 3,
+     "steps": 3,
+     "error": {
+      "total_arcsec": 880,
+      "altitude_arcsec": 520,
+      "azimuth_arcsec": -710,
+      "azimuth_rotation_arcsec": -639.0,
+      "altitude_advice": "Lower the polar axis by 8′40″.",
+      "azimuth_advice": "Move the polar axis east by 11′50″ (turn the mount 10′39″ in azimuth).",
+      "quality": "poor",
+      "trend": [
+       880
+      ]
+     },
+     "target_offset_arcmin": [
+      11.8,
+      -6.4
+     ],
+     "stopped": false,
+     "log": [],
+     "frame": {
+      "ref": "solve:p1",
+      "version": 1,
+      "width": 1280,
+      "height": 960,
+      "axis_px": [
+       640.0,
+       480.0
+      ],
+      "pole_px": [
+       663.6,
+       467.2
+      ],
+      "arcmin_per_px": 0.5
+     }
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 19.6,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "adjusting",
+     "message": "Polar axis is 6′10″ from the pole.",
+     "step": 3,
+     "steps": 3,
+     "error": {
+      "total_arcsec": 370,
+      "altitude_arcsec": 210,
+      "azimuth_arcsec": -300,
+      "azimuth_rotation_arcsec": -270.0,
+      "altitude_advice": "Lower the polar axis by 3′30″.",
+      "azimuth_advice": "Move the polar axis east by 5′00″ (turn the mount 4′30″ in azimuth).",
+      "quality": "poor",
+      "trend": [
+       880,
+       610,
+       370
+      ]
+     },
+     "target_offset_arcmin": [
+      5.1,
+      -2.6
+     ],
+     "stopped": false,
+     "log": [],
+     "frame": {
+      "ref": "solve:p1",
+      "version": 2,
+      "width": 1280,
+      "height": 960,
+      "axis_px": [
+       640.0,
+       480.0
+      ],
+      "pole_px": [
+       650.2,
+       474.8
+      ],
+      "arcmin_per_px": 0.5
+     }
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 24.400000000000002,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "adjusting",
+     "message": "Polar axis is 2′05″ from the pole.",
+     "step": 3,
+     "steps": 3,
+     "error": {
+      "total_arcsec": 125,
+      "altitude_arcsec": 60,
+      "azimuth_arcsec": -110,
+      "azimuth_rotation_arcsec": -99.0,
+      "altitude_advice": "Lower the polar axis by 1′00″.",
+      "azimuth_advice": "Move the polar axis east by 1′50″ (turn the mount 1′39″ in azimuth).",
+      "quality": "fair",
+      "trend": [
+       880,
+       610,
+       370,
+       200,
+       125
+      ]
+     },
+     "target_offset_arcmin": [
+      1.6,
+      -0.9
+     ],
+     "stopped": false,
+     "log": [],
+     "frame": {
+      "ref": "solve:p1",
+      "version": 3,
+      "width": 1280,
+      "height": 960,
+      "axis_px": [
+       640.0,
+       480.0
+      ],
+      "pole_px": [
+       643.2,
+       478.2
+      ],
+      "arcmin_per_px": 0.5
+     }
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 29.200000000000003,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": true,
+     "phase": "adjusting",
+     "message": "Polar axis is 38″ from the pole.",
+     "step": 3,
+     "steps": 3,
+     "error": {
+      "total_arcsec": 38,
+      "altitude_arcsec": -14,
+      "azimuth_arcsec": -35,
+      "azimuth_rotation_arcsec": -31.5,
+      "altitude_advice": "Raise the polar axis by 14″.",
+      "azimuth_advice": "Move the polar axis east by 35″ (turn the mount 32″ in azimuth).",
+      "quality": "good",
+      "trend": [
+       880,
+       610,
+       370,
+       200,
+       125,
+       70,
+       38
+      ]
+     },
+     "target_offset_arcmin": [
+      0.4,
+      -0.2
+     ],
+     "stopped": false,
+     "log": [],
+     "frame": {
+      "ref": "solve:p1",
+      "version": 4,
+      "width": 1280,
+      "height": 960,
+      "axis_px": [
+       640.0,
+       480.0
+      ],
+      "pole_px": [
+       640.8,
+       479.6
+      ],
+      "arcmin_per_px": 0.5
+     }
+    },
+    "activity.solve": "Polar alignment"
+   }
+  },
+  {
+   "at_s": 33.2,
+   "pier": "p1",
+   "set": {
+    "polar.state": {
+     "running": false,
+     "phase": "finished",
+     "stopped": true
+    },
+    "activity.solve": "Idle"
+   }
+  },
+  {
+   "at_s": 33.2,
+   "alert": {
+    "severity": "info",
+    "pier": "p1",
+    "message": "Polar alignment finished: 38″ from the pole.",
+    "important": false
+   }
+  }
+ ]
+}

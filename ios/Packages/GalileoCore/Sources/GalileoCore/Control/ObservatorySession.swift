@@ -117,6 +117,8 @@ public actor ObservatorySession {
 
     // MARK: Lifecycle
 
+    private var retrying: Task<Void, Never>?
+
     public func start() {
         startLink(prepare: true)
     }
@@ -133,6 +135,7 @@ public actor ObservatorySession {
     }
 
     public func stop() async {
+        retrying?.cancel()
         await hold?.stop(.released)
         await link?.stop()
         link = nil
@@ -189,6 +192,37 @@ public actor ObservatorySession {
         if snapshot.live.alerts.isEmpty { snapshot.live.alerts = alerts }
         snapshot.notice = piersReason
         publish()
+        if piersReason != nil { retryUntilPiersAppear() }
+    }
+
+    /// The Master was up but Galileo's control surface was not (Galileo is still starting, or was restarted while the
+    /// phone stayed connected). The stream does not drop for that, so nothing would reconnect and ask again: the Piers
+    /// and the red notice would stay as they were. Ask again until there are Piers, then ask for the live state.
+    private func retryUntilPiersAppear() {
+        guard retrying == nil else { return }
+        retrying = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, !Task.isCancelled else { return }
+                if await self.retryPiersOnce() { return }
+            }
+        }
+    }
+
+    /// True when there is nothing more to retry: the Piers are there, or the session is over.
+    private func retryPiersOnce() async -> Bool {
+        guard link != nil else { retrying = nil; return true }
+        do {
+            try await loadFromMaster()
+            if snapshot.notice == nil {
+                try? await connection.api.requestSnapshot()
+                retrying = nil
+                return true
+            }
+        } catch {
+            if (error as? LinkError) == .unpaired || error is StartStop { retrying = nil; return true }
+        }
+        return false
     }
 
     enum StartStop: Error { case stop(SessionStop) }
@@ -364,12 +398,12 @@ public actor ObservatorySession {
 
     // MARK: Images
 
-    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int, stack: Bool = false) async throws -> MasterAPI.PreviewImage? {
-        try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch, stack: stack)
+    public func preview(pier: String, width: Int, quality: Int = 80, stretch: Int, stack: Bool = false, guide: Bool = false, solve: Bool = false) async throws -> MasterAPI.PreviewImage? {
+        try await connection.api.preview(pier: pier, width: width, quality: quality, stretch: stretch, stack: stack, guide: guide, solve: solve)
     }
 
-    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false) async throws -> Data? {
-        try await connection.api.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack)
+    public func tile(pier: String, level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false, solve: Bool = false) async throws -> Data? {
+        try await connection.api.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack, solve: solve)
     }
 
     // MARK: Sky (S-SKY)

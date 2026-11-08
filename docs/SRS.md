@@ -127,6 +127,7 @@ What the user sees on opening the app (PSD G7, G8).
 | MAPP-OVR-050 | All | The app shall receive state, progress and alerts as events pushed by the Master and shall not poll for them in a loop. | MVP |
 | MAPP-OVR-060 | All | The app shall show recent alerts with their severity and time, and shall show when a new alert arrives while the app is connected. | MVP |
 | MAPP-OVR-070 | All | The app shall show a state of the observatory within 5 seconds of connecting (value to be confirmed, Section 5). | MVP |
+| MAPP-OVR-080 | All | The app shall show, on the Overview screen, the health of the computer running the Master (CPU use, memory use, free disk space, temperature where reported, and uptime), taken from the Master's published state rather than polled, and shall offer Restart and Shut down for that computer as confirm-class operations that the Master refuses, with a reason, while a session is running. The Master side is `CSURF-310`. | P2 |
 
 ### 3.3 `MAPP-DEV` — Devices
 
@@ -182,7 +183,7 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 |---|---|---|---|
 | MAPP-SOL-010 | All | The app shall solve the current or last frame, show the result, and centre the mount on a target by plate solving. | MVP |
 | MAPP-SOL-020 | All | The app shall sync the mount to a solved position when the user asks. | MVP |
-| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the resulting error. | P2 |
+| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the live error in altitude and azimuth (as the correction in words, a quality band, a trend and the pole's position against the axis), refreshed with each solve. | P2 |
 
 ### 3.7 `MAPP-FOC` — Focus
 
@@ -200,6 +201,7 @@ Manual and automatic focus, both from the Master's focus module (`MAPP` follows 
 |---|---|---|---|
 | MAPP-GUI-010 | All | The app shall connect and disconnect the guider service, start and stop guiding, dither and recalibrate. | MVP |
 | MAPP-GUI-020 | All | The app shall display the guide error trace and the guide-star cut-out the Master supplies. | MVP |
+| MAPP-GUI-030 | All | The app shall show the guide star as the cut-out or as the whole guide frame, and let the user choose the guide star by tapping either. | MVP |
 
 ### 3.9 `MAPP-FLP` — Meridian Flip
 
@@ -382,13 +384,13 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | Area | Requirements | MVP | P2 | P3 |
 |---|---|---|---|---|
 | MAPP-CON | 12 | 11 | 1 | 0 |
-| MAPP-OVR | 7 | 7 | 0 | 0 |
+| MAPP-OVR | 8 | 7 | 1 | 0 |
 | MAPP-DEV | 7 | 5 | 2 | 0 |
 | MAPP-IMG | 9 | 5 | 4 | 0 |
 | MAPP-SKY | 6 | 4 | 2 | 0 |
 | MAPP-SOL | 3 | 2 | 1 | 0 |
 | MAPP-FOC | 3 | 3 | 0 | 0 |
-| MAPP-GUI | 2 | 2 | 0 | 0 |
+| MAPP-GUI | 3 | 3 | 0 | 0 |
 | MAPP-FLP | 2 | 2 | 0 | 0 |
 | MAPP-SES | 8 | 3 | 5 | 0 |
 | MAPP-SCH | 3 | 1 | 2 | 0 |
@@ -403,7 +405,7 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | MAPP-LAY | 6 | 5 | 1 | 0 |
 | MAPP-PLT | 10 | 10 | 0 | 0 |
 | MAPP-QST | 29 | 22 | 4 | 3 |
-| **Total** | **135** | **106** | **26** | **3** |
+| **Total** | **136** | **107** | **26** | **3** |
 
 ---
 

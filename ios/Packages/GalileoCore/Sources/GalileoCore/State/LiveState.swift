@@ -188,7 +188,7 @@ public struct ValueView: Sendable, Equatable {
 /// while the stream is up: silence means "unchanged". Only values that move continuously have a limit.
 public enum FreshnessLimits {
     static let prefixes: [(prefix: String, seconds: TimeInterval)] = [
-        ("mount.position", 10), ("guiding.error", 15), ("weather.", 300),
+        ("mount.position", 10), ("guiding.error", 15), ("weather.", 300), ("node.health", 60),
     ]
 
     public static func limit(for key: String) -> TimeInterval? {
