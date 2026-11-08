@@ -16,6 +16,8 @@ All notable changes to this repository are recorded here, in [Keep a Changelog](
 
 ### Fixed
 
+- **"A plate solve is already running on this Pier" no longer shows on the Solver Control card while your own solve runs.** The card showed the Master's reason a new solve cannot start, which during a solve is the solve itself. It is still shown when something else (a session, polar alignment) is what stops a solve.
+
 - **Capture & Solve now shows the frame being solved, and no longer reports "a plate solve is already running" while its own solve runs.** The Solve screen switches to the solve's frame as soon as the Master announces it (`solve.frame.version`), not once there is a result, and an operation button stops showing its "unavailable because" note while the operation it started is the one in progress. Needs a Galileo with the same change.
 
 - **The red "Galileo's control surface is not running" bar stayed after Galileo came up.** The phone only asked for the Piers when it (re)connected, and the stream does not drop when the Master's plugin is up but Galileo's control surface is not yet, so a Galileo that started or restarted later never cleared it. While that notice is showing the app now asks again every five seconds, and when the Piers appear it takes their catalogues and the live state and drops the bar.

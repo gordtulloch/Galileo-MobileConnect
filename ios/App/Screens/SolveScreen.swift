@@ -298,7 +298,9 @@ struct SolverControl: View {
                 .frame(height: 220)
                 .accessibilityLabel("Where each solution landed against its target, \(points.count) shown")
                 .accessibilityIdentifier("solve.bullseye")
-            if let why = model.value("solve.why_not")?.value.stringValue, !why.isEmpty { Note(why) }
+            // Not while a solve is running: the Master's reason is then "a plate solve is already running", which is this one.
+            if model.value("solve.running")?.value.boolValue != true,
+               let why = model.value("solve.why_not")?.value.stringValue, !why.isEmpty { Note(why) }
             if model.canOperate {
                 HStack {
                     Text("Exposure (s)").foregroundStyle(theme.textSecondary)
