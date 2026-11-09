@@ -6,6 +6,8 @@ All notable changes to this repository are recorded here, in [Keep a Changelog](
 
 ### Changed
 
+- **The Imaging screen's stretch slider is back along the bottom of the picture** (with a Reset button), instead of inside the capture settings' *More* section where it could not be used while watching the picture.
+
 - **The Solve screen's menu hides and shows as a whole; the per-pane checklist is gone.** One button on the picture hides the menu (Solver Control, Latest result and the polar-alignment panes) so the picture has the screen, and brings it back; the choice is kept on the device. Choosing which panes to show is no longer offered.
 
 - **The app is named just *Galileo* on the iOS home screen**, in the welcome screen's title and in the Settings path the Local Network help gives (it was *Galileo MobileConnect*). The bundle identifier is unchanged, so an installed copy updates in place.

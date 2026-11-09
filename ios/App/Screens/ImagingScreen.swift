@@ -23,7 +23,7 @@ struct ImagingScreen: View {
                 .contentShape(Rectangle())
                 .onTapGesture { if panelOpen { panelOpen = false } }
                 .overlay(alignment: .topLeading) { statistics }
-                .overlay(alignment: .bottom) { VStack(spacing: 6) { picker; progress } }
+                .overlay(alignment: .bottom) { VStack(spacing: 6) { picker; progress; stretchBar } }
             VStack(spacing: 6) {
                 if let reason = model.workingPier.flatMap({ model.snapshot.unavailableReason(pier: $0) }) {
                     Banner(icon: "exclamationmark.triangle", text: "\(model.pier?.name ?? "This Pier"): \(reason)")
@@ -104,6 +104,26 @@ struct ImagingScreen: View {
         }
     }
 
+    /// The stretch, along the bottom edge of the picture where it is within reach while looking at it. The Master
+    /// renders the picture with it, so it agrees with the desktop (`MAPP-IMG-030`).
+    private var stretchBar: some View {
+        HStack(spacing: 10) {
+            StretchSlider(label: "Stretch", value: $stretch, range: 0...100)
+            Button("Reset") { stretch = 50 }
+                .buttonStyle(ActionStyle())
+                .environment(\.compactControls, true)
+                .fixedSize()
+                .disabled(Int(stretch) == 50)
+                .accessibilityLabel("Reset stretch")
+                .accessibilityIdentifier("imaging.stretch.reset")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(theme.background.opacity(0.6))
+        .accessibilityIdentifier("imaging.stretch")
+    }
+
     /// Exposure and live stack, as bars along the bottom of the picture and nothing more.
     @ViewBuilder private var progress: some View {
         let exposing = model.value("imaging.exposure_progress")?.value.doubleValue
@@ -175,11 +195,7 @@ struct ImagingScreen: View {
             }
             if more {
                 Histogram()
-                StretchSlider(label: "Stretch", value: $stretch, range: 0...100)
-                HStack(spacing: 6) {
-                    Button("Reset stretch") { stretch = 50 }.buttonStyle(ActionStyle())
-                    OperationButton(title: "Abort exposure", operation: "camera.abort", icon: "xmark")
-                }
+                OperationButton(title: "Abort exposure", operation: "camera.abort", icon: "xmark")
                 OperationForm(title: "Single exposure", operation: "camera.expose", icon: "camera.shutter.button", fields: ["seconds", "binning"])
                 LiveLoop()
             }
