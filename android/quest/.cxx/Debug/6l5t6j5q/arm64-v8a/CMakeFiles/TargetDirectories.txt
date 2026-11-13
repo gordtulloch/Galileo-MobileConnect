@@ -1,0 +1,4 @@
+C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a/CMakeFiles/native_app_glue.dir
+C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a/CMakeFiles/galileo_quest.dir
+C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a/CMakeFiles/edit_cache.dir
+C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a/CMakeFiles/rebuild_cache.dir

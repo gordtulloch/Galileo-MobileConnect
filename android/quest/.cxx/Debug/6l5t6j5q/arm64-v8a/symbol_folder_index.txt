@@ -1,0 +1,1 @@
+C:\Users\gordt\Projects\Galileo-MobileConnect\android\quest\build\intermediates\cxx\Debug\6l5t6j5q\obj\arm64-v8a

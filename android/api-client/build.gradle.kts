@@ -2,14 +2,13 @@
 // (docs/SDD.md, ADR-APP-001). Nothing generated is committed: it lands in build/ and is compiled with
 // the module. Edit the description, not the output.
 //
-// Runs on Windows, macOS or Linux with JDK 17+. Plugin and library versions below are starting points
-// and must be pinned the first time Gradle is run (there is no Gradle wrapper in the repository yet:
-// run `gradle wrapper` once from android/).
+// Runs on Windows, macOS or Linux with JDK 17+. Versions live in gradle/libs.versions.toml; the Gradle 8.7
+// wrapper is committed in android/ (build with `gradlew` and JDK 17).
 
 plugins {
-    kotlin("jvm") version "2.0.21"
-    kotlin("plugin.serialization") version "2.0.21"
-    id("org.openapi.generator") version "7.10.0"
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.openapi.generator)
 }
 
 repositories {
@@ -34,6 +33,9 @@ openApiGenerate {
             "enumPropertyNaming" to "UPPERCASE",
         )
     )
+    // Free-form JSON (Arg.default, OperationOk.result, args maps): kotlin.Any has no serializer, so use JsonElement.
+    typeMappings.set(mapOf("AnyType" to "JsonElement"))
+    importMappings.set(mapOf("JsonElement" to "kotlinx.serialization.json.JsonElement"))
     // Emit only the client and models; never the generator's sample build files or docs.
     globalProperties.set(mapOf("apis" to "", "models" to "", "supportingFiles" to ""))
 }
@@ -49,9 +51,9 @@ tasks.named("compileKotlin") {
 }
 
 dependencies {
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.kotlinx.coroutines.core)
 }
 
 kotlin {

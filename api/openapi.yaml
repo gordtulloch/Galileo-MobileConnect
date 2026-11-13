@@ -633,23 +633,27 @@ paths:
           description: Region centre, right ascension in degrees.
           schema:
             type: number
+            format: double
         - name: dec
           in: query
           required: true
           schema:
             type: number
+            format: double
         - name: radius
           in: query
           required: true
           description: Region radius in degrees.
           schema:
             type: number
+            format: double
         - name: mag
           in: query
           required: false
           description: Limiting magnitude.
           schema:
             type: number
+            format: double
         - name: lod
           in: query
           required: false
@@ -728,6 +732,7 @@ paths:
           description: Seconds between samples in a range.
           schema:
             type: number
+            format: double
       responses:
         "200":
           description: A sampled time series the client interpolates.
@@ -887,11 +892,13 @@ paths:
           required: true
           schema:
             type: number
+            format: double
         - name: dec
           in: query
           required: true
           schema:
             type: number
+            format: double
       responses:
         "200":
           description: The check.
@@ -1016,6 +1023,7 @@ components:
           description: Shown on both screens for the person to compare.
         expires_in:
           type: number
+          format: double
           description: Seconds until the request lapses.
         fingerprint:
           type: string
@@ -1160,6 +1168,7 @@ components:
           type: integer
         rate_per_s:
           type: number
+          format: double
           description: Requests a second this client may make. Stay under it.
 
     Arg:
@@ -1180,8 +1189,10 @@ components:
         default: {}
         min:
           type: number
+          format: double
         max:
           type: number
+          format: double
         choices:
           type: array
           items:
@@ -1308,6 +1319,7 @@ components:
           description: With `confirmation_required`; single-use, bound to the operation and its arguments.
         expires_in:
           type: number
+          format: double
 
     LeaseState:
       type: object
@@ -1352,6 +1364,7 @@ components:
               type: array
               items:
                 type: number
+                format: double
         names:
           type: array
           items:
@@ -1367,8 +1380,10 @@ components:
           type: string
         ra_deg:
           type: number
+          format: double
         dec_deg:
           type: number
+          format: double
 
     PositionCheck:
       type: object
@@ -1376,8 +1391,10 @@ components:
       properties:
         altitude_deg:
           type: number
+          format: double
         azimuth_deg:
           type: number
+          format: double
         above_horizon:
           type: boolean
           description: Above this Observatory's horizon profile at that azimuth.
@@ -1400,10 +1417,13 @@ components:
           type: string
         ra_deg:
           type: number
+          format: double
         dec_deg:
           type: number
+          format: double
         magnitude:
           type: number
+          format: double
 
     EphemerisBody:
       type: object
@@ -1413,10 +1433,13 @@ components:
           type: string
         ra_deg:
           type: number
+          format: double
         dec_deg:
           type: number
+          format: double
         magnitude:
           type: number
+          format: double
 
     EphemerisSample:
       type: object
@@ -1448,8 +1471,10 @@ components:
       properties:
         az_deg:
           type: number
+          format: double
         alt_deg:
           type: number
+          format: double
 
     Site:
       type: object
@@ -1461,10 +1486,13 @@ components:
           type: string
         latitude_deg:
           type: number
+          format: double
         longitude_deg:
           type: number
+          format: double
         elevation_m:
           type: number
+          format: double
         horizon:
           type: array
           items:

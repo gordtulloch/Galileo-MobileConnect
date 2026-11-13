@@ -173,7 +173,7 @@ The shared-architecture SDD exists because splitting the design only by platform
 | Q2 | Is Kotlin Multiplatform the shared layer, or a generated client plus shared specifications only? | **Resolved 2026-11-06: generated clients plus shared specifications** (shared SDD ADR-APP-001). No Kotlin Multiplatform |
 | Q3 | Minimum OS versions | Fix in the SRS from store statistics and API needs (PC2) |
 | Q4 | Mock node for development and store review | Yes — a scripted fake Master, also used by the test suite |
-| Q5 | App name and bundle identifiers | iOS bundle identifier **decided 2026-11-06: `com.gordtulloch.galileo.mobileconnect`**. Android's, and the store name, before their first submission; **Galileo MobileConnect** is the working name |
+| Q5 | App name and bundle identifiers | iOS bundle identifier **decided 2026-11-06: `com.gordtulloch.galileo.mobileconnect`**. Android's **decided 2026-11-12: the same, `com.gordtulloch.galileo.mobileconnect`**; the store name before first submission; **Galileo MobileConnect** is the working name |
 | Q6 | Rendering technology for the immersive scenes: Meta's native Android SDK (Kotlin) or a game engine such as Unity? | *Spike completed successfully on the Quest 2.* The stack the spike used and validated is to be named, with its measured performance, in the Quest SDD; this question closes when it is |
 | Q7 | When is Quest 3-specific support worth building? | When utilisation of the Quest 2 edition shows demand (Q-12); the trigger and the figures to use are set in the SRS |
 | Q8 | Who holds the Meta developer account and Meta Horizon Store listing? | To be confirmed (the Apple and Google accounts are held by Gord Tulloch) |

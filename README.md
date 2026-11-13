@@ -41,7 +41,7 @@ Not in the app: equipment profiles, Observatories, safety limits, Options and pl
 
 ## Repository layout
 
-This is one monorepo for both platforms, sharing as much as possible below the UI. Not all of it exists yet (`tools/`, `design/`, `quest/`, `docs/android/` and `docs/quest/` are planned).
+This is one monorepo for both platforms, sharing as much as possible below the UI. Not all of it exists yet (`tools/`, `design/`, `quest/`, `docs/quest/` are planned).
 
 ```
 docs/                PSD, SRS and RTM (common to both apps); SDD.md = shared architecture
@@ -68,10 +68,11 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 |---|---|---|
 | [PSD](docs/PSD.md) | Both apps | Draft v0.1 — for review |
 | [SRS](docs/SRS.md) | All platforms (common) | Draft v0.1 — for review |
-| [RTM](docs/RTM.md) | Both apps (common) | Draft v0.1 — generated from the SRS by `scripts/gen_rtm.py`; Android and Quest columns are `GAP` |
+| [RTM](docs/RTM.md) | Both apps (common) | Draft v0.1 — generated from the SRS by `scripts/gen_rtm.py`; the Quest column is `GAP` |
 | [SDD (shared)](docs/SDD.md) | Shared architecture | Draft v0.1 — for review |
 | [SDD (iOS)](docs/ios/SDD.md) | iOS/iPadOS design | Draft v0.1 — for review |
-| SDD (Android), SDD (Meta Quest) | One per platform | Not yet written |
+| SDD (Android) | Android design | Drafted; `:api-client`, `:core` and `:design` are built and the Compose app runs in demo mode on an emulator (120 JVM tests, all shared vectors replay); not yet tried on a real Master |
+| SDD (Meta Quest) | Quest design | Not yet written |
 | [Work checklist](docs/CHECKLIST.md) | What's done and what's next | Current |
 | [Meta Quest VR analysis](docs/analysis/QuestVR.md) | Opportunities for the Quest edition | Draft — for review |
 
@@ -79,7 +80,7 @@ An edition for **Meta Quest** headsets (Android-based), with the **Quest 2 as th
 
 | | |
 |---|---|
-| Stage | **In development** (iOS); in design (Android, Quest) |
+| Stage | **In development** (iOS; Android app, demo mode); in design (Quest) |
 | Done | Scope document (PSD); SRS, RTM, shared SDD and iOS SDD drafted; iOS: Swift client generated from `api/openapi.yaml`; `GalileoCore` core with shared vectors; mock Master (in-process and standalone); app with the screens above, UI-tested on iPad and iPhone simulators; draft server plugin in [Galileo-Plugins](https://github.com/gordtulloch/Galileo-Plugins), tested end to end with this client (2026-11-06) |
 | Next | The plugin with real equipment; what's left of the iOS MVP needs operations in core ([checklist](docs/CHECKLIST.md) section 5a) ([checklist](docs/CHECKLIST.md) section 5a); review of the drafts and the wire-contract differences in `docs/SDD.md` §4.2; run the Kotlin generator (needs a JDK); wireframes (tablet first); Quest SDD recording the VR spike's findings |
 | Depends on | Galileo core's *Connect Link* and *Control Surface*, and the operations listed in `docs/SDD.md` §4.2 item 11 |

@@ -75,11 +75,25 @@ OVR = {
     "MAPP-LAY-050": ("S-DSN", "I-THEME"),
     "MAPP-LAY-040": ("S-DSN", "I-THEME"),
 }
+# Android components deliberately mirror the iOS ones (A-CONN <-> I-CONN, ...; docs/android/SDD.md Section 3),
+# so the Android cell is the iOS cell with the prefix swapped, except where listed here.
+ANDROID_OVR = {
+    "MAPP-PLT-080": "A-CONN, A-REL",
+}
 # Quest: shared components where the shared layer does the work
 QST_SHARED = {
     "060": "S-CTL", "090": "S-LINK, S-CTL", "110": "S-SKY", "120": "S-SKY, S-STATE", "130": "S-SKY",
     "140": "S-SKY, S-CTL", "170": "S-IMG", "180": "S-IMG", "200": "S-LINK", "240": "S-SKY",
     "250": "S-SKY", "260": "S-STATE", "270": "S-IMG", "290": "S-STATE",
+}
+# Quest design components (docs/quest/SDD.md Section 4). Requirements for All/Mobile areas that reach Quest do so through the panes.
+QUEST_COMP = {
+    "010": "Q-HOST, Q-REL", "020": "Q-HOST, Q-REL", "030": "Q-PANE", "040": "Q-SKY, Q-PANE", "050": "Q-INPUT",
+    "060": "Q-INPUT", "070": "Q-SAFE", "080": "Q-SAFE", "090": "Q-SAFE, Q-HOST", "100": "Q-REL", "110": "Q-SKY, Q-DATA",
+    "120": "Q-SKY, Q-DATA", "130": "Q-SKY, Q-DATA", "140": "Q-PICK", "150": "Q-SKY", "160": "Q-SKY", "170": "Q-IMG",
+    "180": "Q-IMG", "190": "Q-DOCK, Q-XR", "200": "Q-HOST, Q-PANE", "210": "Q-REL", "220": "Q-REL", "230": "Q-REL",
+    "240": "Q-SKY, Q-PICK", "250": "Q-SKY, Q-DATA", "260": "Q-DOCK, Q-PANE", "270": "Q-SKY, Q-IMG", "280": "Q-SKY", "290": "Q-PANE", "300": "Q-PICK", "310": "Q-SKY, Q-DATA", "320": "Q-PICK", "330": "Q-DOCK", "340": "Q-PANE", "350": "Q-DOCK",
+    "360": "Q-DOCK",
 }
 # Verification method: U shared unit/vector, C contract vs mock Master, UI platform UI test, D on-device/manual, R review/inspection
 METHOD = {
@@ -114,9 +128,9 @@ a("| | |\n|---|---|")
 a("| **Project** | Galileo MobileConnect — iOS/iPadOS, Android and Meta Quest apps |")
 a("| **Document** | RTM, v0.1, draft — **common to all platforms** |")
 a("| **Status** | Draft — for review |")
-a("| **Date** | 2026-11-06 |")
-a("| **Upstream** | [SRS](SRS.md) v0.1, [Shared SDD](SDD.md) v0.1, [iOS SDD](ios/SDD.md) v0.1 |")
-a("| **Not yet written** | Android SDD, Meta Quest SDD — their columns read `GAP` until they exist |\n")
+a("| **Date** | 2026-11-12 |")
+a("| **Upstream** | [SRS](SRS.md) v0.1, [Shared SDD](SDD.md) v0.1, [iOS SDD](ios/SDD.md) v0.1, [Android SDD](android/SDD.md) v0.1 |")
+a("| **Not yet written** | Meta Quest SDD — its column reads `GAP` until it exists |\n")
 a("---\n")
 a("## 1. How to Read This Matrix\n")
 a("One row per requirement in the [SRS](SRS.md), generated from it so the IDs cannot drift. Columns:\n")
@@ -168,7 +182,14 @@ for area in areas:
         if "ios" in ap and ios_c in ("", None):
             ios_missing += 1
         for p in ("android", "quest"):
-            if p in ap:
+            if p == "android" and "android" in ap and area != "QST":
+                cell[p] = ANDROID_OVR.get(rid) or ios_c.replace("I-", "A-")
+            elif p == "quest" and p in ap:
+                cell[p] = QUEST_COMP.get(r["num"]) if area == "QST" else "Q-PANE"
+                if cell[p] is None:
+                    cell[p] = "GAP"
+                    gaps[p] += 1
+            elif p in ap:
                 cell[p] = "GAP"
                 gaps[p] += 1
             else:
@@ -185,8 +206,10 @@ for r in rows:
 a(f"- Requirements in the SRS: **{len(rows)}** ({', '.join(f'{k} {by_pri[k]}' for k in ('MVP', 'P2', 'P3'))}).")
 ios_n = sum(1 for r in rows if "ios" in applies(r["plat"]))
 a(f"- Applying to **iOS/iPadOS**: {ios_n}; all have a design component in the [iOS SDD](ios/SDD.md).")
-a(f"- Applying to **Android**: {gaps['android']} — all `GAP` until `docs/android/SDD.md` is written.")
-a(f"- Applying to **Meta Quest**: {gaps['quest']} — all `GAP` until `docs/quest/SDD.md` is written; the shared layer already carries the streamed sky, image and control-safety parts (Shared column).")
+android_n = sum(1 for r in rows if "android" in applies(r["plat"]) and r["area"] != "QST")
+a(f"- Applying to **Android**: {android_n}; all have a design component in the [Android SDD](android/SDD.md) (a design only — nothing in it is built yet).")
+quest_n = sum(1 for r in rows if "quest" in applies(r["plat"]))
+a(f"- Applying to **Meta Quest**: {quest_n}; {quest_n - gaps['quest']} have a design component in the [Quest SDD](quest/SDD.md) (a draft for agreement — nothing is built), {gaps['quest']} `GAP`. Requirements for the shared areas reach the headset through the panes (`Q-PANE`).")
 a("- Requirements with no shared component are platform-only (permissions, packaging, theming, notifications) or Quest-only presentation.")
 a("- No test cases exist yet; the `TC-` identifiers are reserved.\n")
 a("*This matrix is regenerated from the SRS when the SRS changes; hand edits belong in the generator's override tables, not in this file.*")

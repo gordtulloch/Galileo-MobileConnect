@@ -7,7 +7,7 @@
 | **Status** | Draft — for review |
 | **Date** | 2026-10-28 |
 | **Upstream document** | [PSD (Project Scope Document)](PSD.md), v0.8 |
-| **Downstream documents** | RTM (common); SDD: shared architecture, iOS, Android, Meta Quest (PSD Section 10) — not yet written |
+| **Downstream documents** | RTM (common); SDD: shared architecture, [iOS](ios/SDD.md), [Android](android/SDD.md), Meta Quest ([Quest](quest/SDD.md), a draft for agreement) |
 | **Server-side counterpart** | MobileConnect plugin PSD, `docs/plugins/mobileconnect/PSD.md` in the [Galileo](https://github.com/gordtulloch/Galileo) repository |
 
 ---
@@ -376,6 +376,13 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | MAPP-QST-270 | Quest | The Quest edition shall overlay the live all-sky camera image on the dome where the Master has one. | P3 |
 | MAPP-QST-280 | Quest | The Quest edition shall show a three-dimensional model of the mount, tube and dome following the live pointing and playing out a meridian flip as it happens, labelled as a visualisation without collision claims. | P3 |
 | MAPP-QST-290 | Quest | The Quest edition shall show the guiding and focus plots, the plate-solve overlay and the polar-alignment error as floating or dome-attached diagnostics. | P3 |
+| MAPP-QST-300 | Quest | The Quest edition shall have no Sky screen: its immersive star field is its sky function, and the `MAPP-SKY` requirements are met by it (`MAPP-QST-110` to `-150`, `-310`, `-320`). | MVP |
+| MAPP-QST-310 | Quest | The immersive star field shall be the Quest edition's home view: after the first-run notice and the connection the app shall open into it, and the user shall be able to look around, zoom and move through time with the controllers or hands. | MVP |
+| MAPP-QST-320 | Quest | Selecting an object in the star field by pointing and pressing the trigger shall mark it and pop up beside it the menu of `MAPP-SKY-100` (Goto, Goto and Centre, Sync, Add to Session) with its name, details and altitude now; Goto and the other operations shall follow `MAPP-SKY-040` and `MAPP-CTL-040` (Operator, lease, the Master's confirmation) and shall not be offered to a Viewer. | MVP |
+| MAPP-QST-330 | Quest | The Quest edition shall show a floating dock in the user's view: one button for each operating area (Overview, Equipment, Imaging, Focus, Solve, Guiding, Flip, Sessions, Safety, Settings), the working Pier, the connection and control-lease state, a passthrough button, and the Emergency button. | MVP |
+| MAPP-QST-340 | Quest | Pressing an area's button on the dock shall open that area as a floating pane, the tablet layout's screen with its controls, which the user can move, resize and close; several panes may be open at once, and panes shall never cover the dock. | MVP |
+| MAPP-QST-350 | Quest | The dock and its Emergency button shall remain reachable from anywhere in the star field, including while a pane or a confirmation is open, and the emergency actions shall keep their deliberate hold (`MAPP-EMG-010`). | MVP |
+| MAPP-QST-360 | Quest | The dock shall appear in front of and below the user's gaze when the app opens, shall be grasped and moved by the user, and shall return in front of the user on one button press; it shall not follow the head (`MAPP-QST-190`). | MVP |
 
 ---
 

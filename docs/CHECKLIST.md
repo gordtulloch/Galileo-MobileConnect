@@ -90,8 +90,8 @@ Every MVP screen is built. What's below can't be finished in the app alone.
 
 - [ ] `cd android && gradle wrapper` once (no wrapper is committed); pin the Kotlin (2.0.21), generator plugin (7.10.0), OkHttp (4.12.0), kotlinx versions in `android/api-client/build.gradle.kts`.
 - [ ] `./gradlew :api-client:openApiGenerate :api-client:compileKotlin`. Fix issues in the description, not the output.
-- [ ] Create `android/core` (pure Kotlin/JVM, no Android dependencies, reused by Quest) and implement the same `S-*` components against the **same vectors**. The vector suite must pass on both platforms in CI (`MAPP-PLT-040`).
-- [ ] Android SDD (`docs/android/SDD.md`) and Quest SDD (`docs/quest/SDD.md`) are **not written** — every Android/Quest row in the RTM reads `GAP`.
+- [ ] Create `android/core` (pure Kotlin/JVM, no Android dependencies, reused by Quest) and implement the same `S-*` components against the **same vectors**. The vector suite must pass on both platforms in CI (`MAPP-PLT-040`). *In progress: link, pairing, stream, state, control and session are built and all 15 vectors replay on the JVM; sky, images, sessions/scheduler and the mock Master remain; CI not set up.*
+- [x] Android SDD (`docs/android/SDD.md`) drafted 2026-11-12 (design only); every Android row in the RTM now names an `A-*` component. [ ] Quest SDD (`docs/quest/SDD.md`) is **not written** — every Quest row in the RTM reads `GAP`.
 
 ## 8. Docs to keep honest (project rule: docs before code, and after)
 

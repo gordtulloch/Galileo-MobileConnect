@@ -7,7 +7,7 @@
 | **Status** | Draft — for review |
 | **Date** | 2026-11-06 |
 | **Upstream documents** | [PSD](PSD.md) v0.8, [SRS](SRS.md) v0.1 |
-| **Downstream documents** | [RTM](RTM.md); per-platform SDDs: [iOS](ios/SDD.md); Android and Meta Quest — not yet written |
+| **Downstream documents** | [RTM](RTM.md); per-platform SDDs: [iOS](ios/SDD.md), [Android](android/SDD.md); Meta Quest — not yet written |
 | **Server-side counterpart** | Galileo repository: `docs/plugins/mobileconnect/SDD.md` (plugin) and `galileo/connect_link/`, `galileo/control_surface/` (core, implemented) |
 
 ---

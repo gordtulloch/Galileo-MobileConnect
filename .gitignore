@@ -9,3 +9,5 @@ xcuserdata/
 .swiftpm/
 .DS_Store
 .venv/
+.kotlin/
+android/local.properties

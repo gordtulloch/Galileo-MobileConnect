@@ -1,0 +1,12 @@
+[
+{
+  "directory": "C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a",
+  "command": "C:\\Users\\gordt\\AppData\\Local\\Android\\Sdk\\ndk\\26.3.11579264\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang.exe --target=aarch64-none-linux-android29 --sysroot=C:/Users/gordt/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot -IC:/Users/gordt/AppData/Local/Android/Sdk/ndk/26.3.11579264/sources/android/native_app_glue -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -fno-limit-debug-info  -fPIC -o CMakeFiles\\native_app_glue.dir\\C_\\Users\\gordt\\AppData\\Local\\Android\\Sdk\\ndk\\26.3.11579264\\sources\\android\\native_app_glue\\android_native_app_glue.c.o -c C:\\Users\\gordt\\AppData\\Local\\Android\\Sdk\\ndk\\26.3.11579264\\sources\\android\\native_app_glue\\android_native_app_glue.c",
+  "file": "C:\\Users\\gordt\\AppData\\Local\\Android\\Sdk\\ndk\\26.3.11579264\\sources\\android\\native_app_glue\\android_native_app_glue.c"
+},
+{
+  "directory": "C:/Users/gordt/Projects/Galileo-MobileConnect/android/quest/.cxx/Debug/6l5t6j5q/arm64-v8a",
+  "command": "C:\\Users\\gordt\\AppData\\Local\\Android\\Sdk\\ndk\\26.3.11579264\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\clang++.exe --target=aarch64-none-linux-android29 --sysroot=C:/Users/gordt/AppData/Local/Android/Sdk/ndk/26.3.11579264/toolchains/llvm/prebuilt/windows-x86_64/sysroot -Dgalileo_quest_EXPORTS -IC:/Users/gordt/AppData/Local/Android/Sdk/ndk/26.3.11579264/sources/android/native_app_glue -isystem C:/Users/gordt/.gradle/caches/8.9/transforms/9f8b83eea7b89cd3143cb2c2f33201d8/transformed/openxr_loader_for_android-1.1.43/prefab/modules/headers/include -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -O2 -fno-limit-debug-info  -fPIC -Wall -Wextra -O2 -std=gnu++17 -o CMakeFiles\\galileo_quest.dir\\quest.cpp.o -c C:\\Users\\gordt\\Projects\\Galileo-MobileConnect\\android\\quest\\src\\main\\cpp\\quest.cpp",
+  "file": "C:\\Users\\gordt\\Projects\\Galileo-MobileConnect\\android\\quest\\src\\main\\cpp\\quest.cpp"
+}
+]

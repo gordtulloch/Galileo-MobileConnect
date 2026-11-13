@@ -1,0 +1,1 @@
+C:\Users\gordt\Projects\Galileo-MobileConnect\android\quest\src\main\cpp\CMakeLists.txt
