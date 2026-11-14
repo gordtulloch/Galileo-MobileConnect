@@ -214,7 +214,11 @@ class ObservatorySession(
         val role = Role.from(identity.permissions, outcome.allowed)
         val (piers, piersReason) = api.piers()
         val catalogues = state.value.catalogues.toMutableMap()
-        for (pier in piers) if (pier.id !in catalogues) catalogues[pier.id] = api.catalogue(pier.id)
+        for (pier in piers) if (pier.id !in catalogues) {
+            catalogues[pier.id] = api.catalogue(pier.id)
+            // TEMPORARY: what this Master really offers
+            System.err.println("GalileoCatalogue pier=${pier.id} ops=${catalogues[pier.id]!!.size} " + catalogues[pier.id]!!.joinToString(",") { it.name })
+        }
         longRunning = catalogues.values.flatten().filter { it.longRunning }.map { it.name }.toSet()
         val capabilities = api.capabilities()
         val alerts = api.alerts()

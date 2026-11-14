@@ -12,5 +12,5 @@ find_package(OpenXR REQUIRED CONFIG)
 
 add_library(galileo_quest SHARED quest.cpp)
 target_compile_options(galileo_quest PRIVATE -Wall -Wextra -O2)
-target_link_libraries(galileo_quest PRIVATE native_app_glue OpenXR::openxr_loader android log EGL GLESv3 jnigraphics)
+target_link_libraries(galileo_quest PRIVATE native_app_glue OpenXR::openxr_loader android log EGL GLESv3 jnigraphics mediandk aaudio)
 set_target_properties(galileo_quest PROPERTIES LINK_FLAGS "-u ANativeActivity_onCreate")

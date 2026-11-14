@@ -30,19 +30,68 @@ class NsdDiscovery(private val context: Context) : MasterDiscovery {
         val lock = wifi?.createMulticastLock("galileo-discovery")?.apply { setReferenceCounted(false) }
         runCatching { lock?.acquire() }
         val found = LinkedHashMap<String, NsdServiceInfo>()
-        fun publish() = trySend(
-            DiscoveryEvent.Results(found.values.map { DiscoveredMaster(it.serviceName, it.serviceName, null, "") }.sortedBy { it.name }),
-        )
+        // The service name is the node's id; the name to show is in the TXT record, readable only once resolved. Android
+        // resolves one service at a time, so the found services wait in a queue.
+        val names = HashMap<String, String>()
+        val toResolve = ArrayDeque<NsdServiceInfo>()
+        var resolvingNow = false
+        fun publish() = synchronized(found) {
+            trySend(
+                DiscoveryEvent.Results(
+                    found.values.map { DiscoveredMaster(it.serviceName, names[it.serviceName] ?: "Galileo observatory", null, "") }
+                        .sortedBy { it.name },
+                ),
+            )
+        }
+        @Suppress("DEPRECATION")
+        fun resolveNext() {
+            val info = synchronized(found) {
+                if (resolvingNow) return
+                val next = toResolve.removeFirstOrNull() ?: return
+                resolvingNow = true
+                next
+            }
+            val done = {
+                synchronized(found) { resolvingNow = false }
+                resolveNext()
+            }
+            try {
+                manager.resolveService(
+                    info,
+                    object : NsdManager.ResolveListener {
+                        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = done()
+
+                        override fun onServiceResolved(serviceInfo: NsdServiceInfo) {
+                            serviceInfo.attributes["name"]?.let { bytes ->
+                                val text = String(bytes, Charsets.UTF_8).trim()
+                                if (text.isNotEmpty()) synchronized(found) { names[serviceInfo.serviceName] = text }
+                            }
+                            publish()
+                            done()
+                        }
+                    },
+                )
+            } catch (e: Exception) {
+                done()
+            }
+        }
         val listener = object : NsdManager.DiscoveryListener {
             override fun onDiscoveryStarted(serviceType: String) = Unit
 
             override fun onServiceFound(info: NsdServiceInfo) {
-                found[info.serviceName] = info
+                synchronized(found) {
+                    found[info.serviceName] = info
+                    if (info.serviceName !in names) toResolve.add(info)
+                }
                 publish()
+                resolveNext()
             }
 
             override fun onServiceLost(info: NsdServiceInfo) {
-                found.remove(info.serviceName)
+                synchronized(found) {
+                    found.remove(info.serviceName)
+                    names.remove(info.serviceName)
+                }
                 publish()
             }
 

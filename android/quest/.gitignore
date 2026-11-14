@@ -1,0 +1,4 @@
+
+# Music is the user's own; only the folder is tracked
+src/main/assets/music/*
+!src/main/assets/music/.gitkeep

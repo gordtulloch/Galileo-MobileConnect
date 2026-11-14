@@ -133,4 +133,12 @@ struct StateTests {
             return
         }
     }
+
+    @Test("A reading that is not a number shows as a dash (a camera that is not connected reports NaN)")
+    func nonFiniteReadingShowsADash() {
+        #expect(JSONValue.number(.nan).displayText == "—")
+        #expect(JSONValue.number(.infinity).displayText == "—")
+        #expect(JSONValue.number(-.infinity).displayText == "—")
+        #expect(JSONValue.number(4).displayText == "4")
+    }
 }

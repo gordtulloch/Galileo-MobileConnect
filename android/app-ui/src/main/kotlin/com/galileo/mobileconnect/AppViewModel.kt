@@ -174,7 +174,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Demonstration mode: the real client against the scripted Master, and nothing kept (MAPP-CON-110). */
     fun startDemo(scenario: String = "normal-night") {
         val mock = runCatching { MockMaster(scenario, viewModelScope, renderer = renderer) }.getOrElse {
-            welcomeMessage = "The demonstration could not start."
+                welcomeMessage = "The demonstration could not start."
             return
         }
         isDemo = true
@@ -193,10 +193,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         route = Route.Pairing
         pairingJob = viewModelScope.launch {
             val first = flow.start()
-            pairing = first
+                pairing = first
             if (first !is PairingStatus.Waiting) return@launch
             val last = flow.waitForAnswer()
-            pairing = last
+                pairing = last
             if (last is PairingStatus.Paired) connect(last.credentials)
         }
     }

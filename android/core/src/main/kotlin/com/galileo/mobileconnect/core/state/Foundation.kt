@@ -41,6 +41,7 @@ fun JsonElement.displayText(): String = when (this) {
             val d = doubleOrNull
             when {
                 d == null -> content
+                !d.isFinite() -> "—"   // NaN or infinity (a sensor reading when its device is not connected): not a number to show
                 d == Math.rint(d) && Math.abs(d) < 1e15 -> d.toLong().toString()
                 else -> BigDecimal(d).round(MathContext(3)).stripTrailingZeros().toPlainString()
             }

@@ -249,6 +249,7 @@ class QuestSky(
     private suspend fun choose(name: String, raDeg: Double, decDeg: Double, askForDetails: Boolean) {
         var chosen = Selection(name, raDeg, decDeg)
         selection = chosen
+        Narration.stop()
         val details = scope.async {
             if (askForDetails) session.read(pier, "sky.object", mapOf("name" to JsonPrimitive(name))) else null
         }
@@ -266,6 +267,7 @@ class QuestSky(
                     if (value != null && value !is JsonNull) lines += "${key.replaceFirstChar { it.uppercase() }}: ${value.displayText()}"
                 }
             }
+            (found["description"].string?.takeIf { it.isNotBlank() } ?: Narration.text(name))?.let { lines += it }
             chosen = chosen.copy(details = lines)
         }
         if (selection?.name == name) selection = chosen

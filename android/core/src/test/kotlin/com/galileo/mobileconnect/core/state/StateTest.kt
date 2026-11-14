@@ -180,4 +180,12 @@ class StateTest {
         assertEquals("0.5", num(0.5).displayText())
         assertEquals("a: 1, b: x", obj("b" to str("x"), "a" to num(1)).displayText())
     }
+
+    @Test
+    fun `a reading that is not a number is shown as a dash instead of crashing`() {
+        // The Equipment screen crashed on a camera temperature of NaN (BigDecimal refuses it).
+        assertEquals("—", num(Double.NaN).displayText())
+        assertEquals("—", num(Double.POSITIVE_INFINITY).displayText())
+        assertEquals("—", num(Double.NEGATIVE_INFINITY).displayText())
+    }
 }

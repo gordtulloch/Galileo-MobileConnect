@@ -59,6 +59,7 @@ public enum JSONValue: Sendable, Equatable, Hashable, Codable {
         case .null: return "—"
         case .bool(let v): return v ? "Yes" : "No"
         case .number(let v):
+            if !v.isFinite { return "—" }  // NaN or infinity: a reading from a device that is not connected
             return v.rounded() == v && abs(v) < 1e15 ? String(Int64(v)) : String(format: "%.3g", v)
         case .string(let v): return v
         case .array(let v): return v.map(\.displayText).joined(separator: ", ")

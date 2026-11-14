@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -239,12 +241,19 @@ fun ObjectMenuContent(sky: QuestSky, onClose: () -> Unit) {
         if (selection == null) return@Column
         var goToMessage by remember(selection.name) { mutableStateOf<String?>(null) }
         val args: Map<String, JsonElement> = mapOf("ra_deg" to JsonPrimitive(selection.raDeg), "dec_deg" to JsonPrimitive(selection.decDeg))
-        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Card(selection.name) {
                 if (selection.details.isNotEmpty()) Note(selection.details.joinToString(" · "))
                 selection.check?.let { check ->
                     Txt("Altitude now: %.1f°".format(check.altitude), size = 14.sp, weight = FontWeight.SemiBold)
                     check.reason?.let { Note(it) }
+                }
+                if (Narration.has(selection.name)) {
+                    var speaking by remember { mutableStateOf(Narration.speaking) }
+                    ActionButton(if (speaking) "■ Stop reading" else "🔊 Read aloud", tag = "object.speak") {
+                        Narration.toggle(selection.name)
+                        speaking = Narration.speaking
+                    }
                 }
                 if (app.canOperate) {
                     ActionButton("Goto", kind = ActionKind.Prominent, tag = "object.goto") {

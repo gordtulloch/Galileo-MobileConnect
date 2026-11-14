@@ -31,9 +31,9 @@ sealed interface Pickable {
  * Objects the ground hides cannot be picked.
  */
 object Picker {
-    const val DEEP_SKY_REACH_DEGREES = 2.5
-    const val STAR_REACH_DEGREES = 2.0
-    const val BODY_REACH_DEGREES = 3.0
+    const val DEEP_SKY_REACH_DEGREES = 4.0
+    const val STAR_REACH_DEGREES = 2.5
+    const val BODY_REACH_DEGREES = 4.0
 
     fun pick(
         ray: Ray,

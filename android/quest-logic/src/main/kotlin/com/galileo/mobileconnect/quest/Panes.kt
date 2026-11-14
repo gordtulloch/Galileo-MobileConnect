@@ -25,7 +25,7 @@ object Dock {
     const val PIXEL_WIDTH = 1600
     const val PIXEL_HEIGHT = 220
     const val DISTANCE = 0.9f
-    const val BELOW_GAZE = 0.40f
+    const val BELOW_GAZE = 0.28f
 
     /**
      * Where the dock goes when the app opens or the user calls it back: in front of and below where they are looking, level,

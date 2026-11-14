@@ -11,3 +11,5 @@ xcuserdata/
 .venv/
 .kotlin/
 android/local.properties
+
+android/quest/src/main/assets/speech/

@@ -11,7 +11,20 @@ import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.Surface
 import android.view.ViewGroup
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -65,6 +78,19 @@ class PaneWindow(
     private var downTime = 0L
     private var touching = false
 
+    /**
+     * Where each controller points on this pane, drawn as a ring. The laser is part of the sky layer and the panes are
+     * composited over it, so on a pane the laser is hidden: the ring is how the wearer sees where a press will land.
+     */
+    private var hoverRight by mutableStateOf<IntOffset?>(null)
+    private var hoverLeft by mutableStateOf<IntOffset?>(null)
+    var night by mutableStateOf(false)
+
+    fun hover(right: Boolean, x: Float?, y: Float?) {
+        val at = if (x == null || y == null) null else IntOffset(x.toInt(), y.toInt())
+        if (right) hoverRight = at else hoverLeft = at
+    }
+
     init {
         val manager = activity.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         display = manager.createVirtualDisplay(
@@ -81,7 +107,22 @@ class PaneWindow(
                 setContentView(
                     ComposeView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                        setContent(content)
+                        setContent {
+                            Box {
+                                content()
+                                val ink = if (night) Color(0xFFFF2A2A) else Color.White
+                                for ((at, radius) in listOf(hoverLeft to 11, hoverRight to 14)) {
+                                    at?.let { h ->
+                                        val diameter = radius * 2
+                                        Box(
+                                            Modifier.offset { IntOffset(h.x - (diameter.dp.roundToPx() / 2), h.y - (diameter.dp.roundToPx() / 2)) }
+                                                .size(diameter.dp)
+                                                .border(3.dp, ink, CircleShape).background(ink.copy(alpha = 0.25f), CircleShape),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     },
                 )
             }
@@ -95,6 +136,26 @@ class PaneWindow(
         val event = MotionEvent.obtain(downTime, now, action, x, y, 0)
         event.source = InputDevice.SOURCE_TOUCHSCREEN
         presentation.window?.decorView?.dispatchTouchEvent(event)
+        event.recycle()
+    }
+
+    /**
+     * Scrolls the content under the pointer, as a mouse wheel would. [lines] is wheel notches: positive moves the view up
+     * (earlier content), negative down.
+     */
+    fun scroll(x: Float, y: Float, lines: Float) {
+        val now = SystemClock.uptimeMillis()
+        val props = arrayOf(MotionEvent.PointerProperties().apply { id = 0; toolType = MotionEvent.TOOL_TYPE_MOUSE })
+        val coords = arrayOf(
+            MotionEvent.PointerCoords().apply {
+                this.x = x
+                this.y = y
+                setAxisValue(MotionEvent.AXIS_VSCROLL, lines)
+                setAxisValue(MotionEvent.AXIS_HSCROLL, 0f)
+            },
+        )
+        val event = MotionEvent.obtain(now, now, MotionEvent.ACTION_SCROLL, 1, props, coords, 0, 0, 1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0)
+        presentation.window?.decorView?.dispatchGenericMotionEvent(event)
         event.recycle()
     }
 

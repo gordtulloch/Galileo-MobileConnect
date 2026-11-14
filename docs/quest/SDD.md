@@ -169,5 +169,7 @@ The `:quest` app was written without a headset and with the spike's measurements
 5. **Time (left stick), zoom (right stick up/down), grip to move a pane or the dock, A passthrough, B recentre the dock, X constellations, Y brightness.**
 6. **Performance** against `MAPP-QST-160`.
 
+**First run, 2026-11-14 (Quest 2):** step 1 works (stars follow the head in the demo launch; labels were mirrored and are fixed). Step 2 fails: `xrCreateSwapchainAndroidSurfaceKHR` returns -1 for every pane whatever the usage flags or format, with `XR_KHR_android_surface_swapchain` enabled and the session running, so the texture route above is now the way forward. Steps 3 to 6 are untested because they need a pane.
+
 Known gaps: no hand tracking (controllers only); text entry in a pane has no keyboard, so pairing a new Master (which needs a typed code) is not possible in the headset: pair on the tablet or use the demo launch for now; the ground is an opaque disc under the user, with passthrough as the way to see the room; panes cannot be resized in the headset yet (the logic exists and is tested).
 

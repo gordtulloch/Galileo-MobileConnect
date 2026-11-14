@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 from galileo.control_surface import catalogue, flips, guiding, history, holds, imaging, piers, registry
-from galileo.control_surface import polar, safety, schedule, sessions, sky, solve
+from galileo.control_surface import autofocus, mounthold, node, polar, safety, schedule, sessions, sky, solve
 
 OUT = Path(__file__).resolve().parents[2] / "api" / "scenarios" / "catalogue.json"
 REGISTERS = [
@@ -19,7 +19,7 @@ REGISTERS = [
     imaging.register_imaging_operations, piers.register_pier_operations, safety.register_safety_operations,
     schedule.register_schedule_operations, sessions.register_session_operations,
     sessions.register_start_operations, sky.register_sky_operations, solve.register_solve_operations,
-    polar.register_polar_operations,
+    polar.register_polar_operations, autofocus.register_autofocus_operations, node.register_node_operations,
 ]
 
 
@@ -40,7 +40,9 @@ class _Access:
 
 def main() -> None:
     reg = _Registry()
-    catalogue.register_device_operations(reg, _Access(), holds.HoldManager())
+    manager = holds.HoldManager()
+    catalogue.register_device_operations(reg, _Access(), manager)
+    mounthold.register_mount_hold_operations(reg, _Access(), manager)
     for register in REGISTERS:
         register(reg, _Access())
     operations = []

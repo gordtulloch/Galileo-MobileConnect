@@ -134,7 +134,7 @@ struct LiveRow: View {
 
     private func text(_ value: JSONValue) -> String {
         var result = value.displayText
-        if let digits, let number = value.doubleValue { result = String(format: "%.\(digits)f", number) }
+        if let digits, let number = value.doubleValue, number.isFinite { result = String(format: "%.\(digits)f", number) }
         if let unit { result += " \(unit)" }
         return result
     }

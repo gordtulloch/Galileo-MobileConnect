@@ -239,7 +239,7 @@ fun LiveRow(label: String, key: String, unit: String? = null, digits: Int? = nul
 fun format(value: JsonElement, unit: String? = null, digits: Int? = null): String {
     var result = value.displayText()
     val number = value.double
-    if (digits != null && number != null) result = String.format(Locale.US, "%.${digits}f", number)
+    if (digits != null && number != null && number.isFinite()) result = String.format(Locale.US, "%.${digits}f", number)
     if (unit != null) result += " $unit"
     return result
 }

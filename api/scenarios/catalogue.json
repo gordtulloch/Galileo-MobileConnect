@@ -84,6 +84,56 @@
    "args": []
   },
   {
+   "name": "device.connect",
+   "area": "device",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "device",
+     "type": "enum",
+     "required": true,
+     "choices": [
+      "mount",
+      "camera",
+      "filter_wheel",
+      "focuser",
+      "rotator",
+      "dome",
+      "flat_panel",
+      "switch",
+      "weather"
+     ]
+    }
+   ],
+   "description": "Connect this Pier's saved device of that kind"
+  },
+  {
+   "name": "device.disconnect",
+   "area": "device",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "device",
+     "type": "enum",
+     "required": true,
+     "choices": [
+      "mount",
+      "camera",
+      "filter_wheel",
+      "focuser",
+      "rotator",
+      "dome",
+      "flat_panel",
+      "switch",
+      "weather"
+     ]
+    }
+   ],
+   "description": "Disconnect this Pier's device of that kind (not while a session runs)"
+  },
+  {
    "name": "dome.abort",
    "area": "dome",
    "class": "operate",
@@ -191,6 +241,24 @@
    "args": []
   },
   {
+   "name": "flip.defer",
+   "area": "flip",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "minutes",
+     "type": "int",
+     "required": false,
+     "unit": "min",
+     "default": 10,
+     "min": 1,
+     "max": 30
+    }
+   ],
+   "description": "Hold the pending meridian flip back for a few minutes; the flip still happens before the mount's limits"
+  },
+  {
    "name": "flip.now",
    "area": "flip",
    "class": "confirm",
@@ -206,6 +274,23 @@
    "lease": false,
    "args": [],
    "description": "Meridian flip state, hour angle, pier side, minutes to the flip limit and the last outcome"
+  },
+  {
+   "name": "focus.autofocus",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Run autofocus: sweep the focuser, measure the star HFR at each point, fit the V-curve, move to the best position and confirm",
+   "long_running": true
+  },
+  {
+   "name": "focus.autofocus_cancel",
+   "area": "focus",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Cancel the autofocus run in progress"
   },
   {
    "name": "focus.halt",
@@ -554,6 +639,54 @@
    "description": "Park the mount now"
   },
   {
+   "name": "mount.hold_beat",
+   "area": "mount",
+   "class": "operate",
+   "lease": false,
+   "args": [
+    {
+     "name": "hold_id",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "Keep a held mount move going"
+  },
+  {
+   "name": "mount.hold_start",
+   "area": "mount",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "direction",
+     "type": "enum",
+     "required": true,
+     "choices": [
+      "north",
+      "south",
+      "east",
+      "west"
+     ]
+    }
+   ],
+   "description": "Move the mount while held; keep it alive with mount.hold_beat"
+  },
+  {
+   "name": "mount.hold_stop",
+   "area": "mount",
+   "class": "operate",
+   "lease": false,
+   "args": [
+    {
+     "name": "hold_id",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "End a held mount move"
+  },
+  {
    "name": "mount.park",
    "area": "mount",
    "class": "confirm",
@@ -640,6 +773,30 @@
    "args": []
   },
   {
+   "name": "node.health",
+   "area": "node",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "CPU, memory, free disk space, temperature and uptime of the computer running Galileo"
+  },
+  {
+   "name": "node.restart",
+   "area": "node",
+   "class": "confirm",
+   "lease": false,
+   "args": [],
+   "description": "Restart the computer running Galileo"
+  },
+  {
+   "name": "node.shutdown",
+   "area": "node",
+   "class": "confirm",
+   "lease": false,
+   "args": [],
+   "description": "Power off the computer running Galileo"
+  },
+  {
    "name": "pier.list",
    "area": "pier",
    "class": "read",
@@ -667,7 +824,8 @@
      "type": "float",
      "required": false,
      "unit": "s",
-     "default": 1.5,
+     "description": "Pause once the mount has stopped, before each frame",
+     "default": 5.0,
      "min": 0,
      "max": 60
     },
@@ -677,7 +835,7 @@
      "required": false,
      "unit": "deg",
      "description": "How far the mount turns in RA between the three measuring solves",
-     "default": 30.0,
+     "default": 15.0,
      "min": 5,
      "max": 60
     },
@@ -703,7 +861,7 @@
      "type": "bool",
      "required": false,
      "description": "Go to the zenith and check the mount first; false measures from where it points now",
-     "default": true
+     "default": false
     }
    ],
    "description": "Measure the polar-alignment error with three plate solves, then keep it live while the altitude and azimuth adjusters are turned; runs until polar.stop",
@@ -874,6 +1032,14 @@
     }
    ],
    "description": "Start a saved session template, with a target for its placeholder"
+  },
+  {
+   "name": "session.skip",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Skip the block the session is on (or the next one if paused) and carry on; shutdown blocks are never skipped"
   },
   {
    "name": "session.status",

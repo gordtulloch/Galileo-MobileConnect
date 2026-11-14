@@ -89,8 +89,11 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         var grab: Grab? = null
         var triggerDown = false
         var squeezeDown = false
+        /** Where the pointer was before the trigger started to move: squeezing it deflects the aim, so a pick uses this. */
+        var restRay: Ray? = null
     }
 
+    private var narrationReady = false
     private val right = Pointer({ input.right }, true)
     private val left = Pointer({ input.left }, false)
     private var lastFrame = System.nanoTime()
@@ -115,6 +118,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
     }
 
     fun stop() {
+        Narration.stop()
         loop?.cancel()
         releaseEverything()
         surfaces.values.toList().forEach { remove(it.id) }
@@ -138,10 +142,14 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         val nowNanos = System.nanoTime()
         val dt = ((nowNanos - lastFrame) / 1e9).coerceIn(0.0, 0.25)
         lastFrame = nowNanos
+        if (!narrationReady) { Narration.init(activity); narrationReady = true }
         if (!NativeBridge.nativeGetInput(raw)) return
         input.read(raw)
 
-        if (dockPlacement == null && input.focused) dockPlacement = Dock.placeInFrontOf(input.head, input.forward)
+        // The pose is only real a moment after the session is focused: until then the head reads as the origin facing -Z,
+        // which put the dock and the first-run notice where the wearer was not.
+        poseFrames = if (input.focused && input.head.length() > 1e-3f) poseFrames + 1 else 0
+        if (dockPlacement == null && poseSettled()) dockPlacement = dockStart()
         syncApp()
         val modal = alertWanted()
 
@@ -153,13 +161,17 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
             } else {
                 p.hold.worn(true)
             }
-            if (!app.canOperate) {
+            // Losing control ends a held move once, when it is lost. Doing it every frame while the app cannot operate (on the
+            // pairing screen, as a Viewer) restarted any held trigger each frame, so no tap on a button ever completed.
+            if (couldOperate && !app.canOperate) {
                 p.hold.leaseLost()
             }
         }
+        couldOperate = app.canOperate
         pointer(right, modal)
         pointer(left, modal)
         NativeBridge.nativeSetLaser(rightLaser, leftLaser)
+        if (input.focused) scrollPane(dt)
         if (input.focused && !modal) controls(dt)
         pushSky()
         pushQuads()
@@ -170,15 +182,27 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         app.emergencyOpen || app.pierPickerOpen || app.leaseOffer != null || state.noticePending
 
     private fun syncApp() {
+        // Leaving the observatory (Exit the demo, a dropped link, un-pairing) ends the panels that belonged to it.
+        if (app.route != Route.Connected) {
+            for (pane in stack.open) closeArea(pane.area)
+        }
         // the alert surface
         val wanted = alertWanted()
         if (wanted && !alertShown) {
-            alertPlacement = inFront(0.7f, -0.05f)
-            ensure(ALERT, ALERT_PW, ALERT_PH, "alert") { QuestRoot(app) { AlertContent(state) { noticeSeen() } } }
+            // Placed from the wearer's real head pose, like the dock: before the headset is worn and tracking, the
+            // pose is a default at the origin facing -Z, which left the first-run notice tilted and seen by one eye.
+            if (poseSettled()) {
+                alertPlacement = inFront(ALERT_DISTANCE, ALERT_HEIGHT)
+                ensure(ALERT, ALERT_PW, ALERT_PH, "alert") { QuestRoot(app) { AlertContent(state) { noticeSeen() } } }
+                alertShown = true
+            }
         } else if (!wanted && alertShown) {
             remove(ALERT)
+            alertShown = false
+            alertOffSince = 0L
+        } else if (alertShown) {
+            recentreAlert()
         }
-        alertShown = wanted
 
         // the sky follows the connection
         val context = app.skyContext()
@@ -202,6 +226,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
             menuPlacement = inFront(0.8f, 0.10f)
             ensure(MENU, MENU_PW, MENU_PH, "object") { QuestRoot(app) { skyState?.let { ObjectMenuContent(it) { it.clearSelection() } } } }
         } else if (!selected && menuShown) {
+            Narration.stop()
             remove(MENU)
         }
         menuShown = selected
@@ -220,7 +245,14 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         val h = p.hand()
         val ray = Ray(h.origin, h.direction)
         val located = if (h.tracked) locate(ray, modal) else null
+        if (p.isRight) rightOver = located else leftOver = located
+        for ((id, surf) in surfaces) {
+            surf.window?.night = app.theme == ThemeChoice.Night
+            if (located != null && located.id == id) surf.window?.hover(p.isRight, located.hit.xPixels, located.hit.yPixels)
+            else surf.window?.hover(p.isRight, null, null)
+        }
 
+        if (h.tracked && h.trigger < 0.08f) p.restRay = ray
         val trigger = if (p.triggerDown) h.trigger > 0.3f else h.trigger > 0.6f
         p.triggerDown = trigger
         val squeeze = if (p.squeezeDown) h.squeeze > 0.3f else h.squeeze > 0.7f
@@ -232,7 +264,12 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
 
         // grab: the grip on a surface moves it, at the distance it was grabbed
         if (gripping && !p.squeezeDown && located != null && located.id != ALERT) p.grab = Grab(located.id, located.hit.distance.coerceIn(0.5f, 3f))
-        if (!gripping) p.grab = null
+        if (!gripping) {
+            if (p.grab?.id == DOCK) saveDockPlacement()
+            p.grab = null
+        }
+        // right grip with an object open and nothing under the pointer to grab: read the description aloud, or stop it
+        if (p.isRight && gripping && !p.squeezeDown && located == null && menuShown) skyState?.selection?.let { Narration.toggle(it.name) }
         p.squeezeDown = gripping
         p.grab?.let { moveSurface(it, ray) }
 
@@ -245,7 +282,8 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
 
         if (p.grab != null) return // gripping: the trigger does nothing
 
-        when (val action = p.hold.button(trigger)) {
+        val holdAction = p.hold.button(trigger)
+        when (val action = holdAction) {
             HoldControl.Action.Start -> {
                 if (located != null) {
                     surfaces[located.id]?.window?.let {
@@ -255,7 +293,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
                         p.lastY = located.hit.yPixels
                     }
                 } else if (!modal) {
-                    pickSky(ray)
+                    pickSky(p.restRay ?: ray)
                 }
             }
             is HoldControl.Action.Stop -> {
@@ -280,8 +318,24 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         }
     }
 
+    private var rightOver: Located? = null
+    private var couldOperate = false
+    private var leftOver: Located? = null
+    private var alertOffSince = 0L
+    private var poseFrames = 0
+    private fun poseSettled() = poseFrames >= 30
     private var leftLaser = -1f
     private var rightLaser = -1f
+
+    /** Right stick up/down scrolls the panel under the right pointer, like a mouse wheel; harder push, faster scroll. */
+    private fun scrollPane(dt: Double) {
+        val over = rightOver ?: return
+        val stick = input.right.stickY
+        if (abs(stick) < SCROLL_DEADZONE) return
+        val eased = (abs(stick) - SCROLL_DEADZONE) / (1f - SCROLL_DEADZONE)
+        val rate = SCROLL_NOTCHES_PER_SECOND * eased * eased * (if (stick > 0) 1f else -1f)
+        surfaces[over.id]?.window?.scroll(over.hit.xPixels, over.hit.yPixels, (rate * dt).toFloat())
+    }
 
     private fun cancelTouch(p: Pointer) {
         if (p.touching >= 0) surfaces[p.touching]?.window?.touchCancel()
@@ -348,7 +402,8 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         val dtSky = TimeStick.delta(input.left.stickX, dt)
         if (dtSky != 0.0) timeOffset += dtSky
         val before = zoom
-        zoom = ZoomStick.next(zoom, input.right.stickY, dt)
+        // The right stick scrolls a panel while the right pointer is on one (scrollPane), and zooms the sky otherwise.
+        zoom = ZoomStick.next(zoom, if (rightOver != null) 0f else input.right.stickY, dt)
         if (before <= 1.001f && zoom > 1.001f) zoomCentre = input.forward.normalized()
         val clicks = Pair(input.left.stickClick, input.right.stickClick)
         if (clicks.first && !previousClicks.first) timeOffset = 0.0
@@ -477,13 +532,67 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         NativeBridge.nativeSetPassthrough(passthrough)
     }
 
+    /**
+     * Where the dock starts, and where it returns to on recentre: where the wearer last put it, relative to their head (forward,
+     * sideways and up from where they face), else in front of and below the gaze (Dock.placeInFrontOf).
+     */
+    private fun dockStart(): Placement {
+        val saved = app.pref("quest.dock", "").split(",").mapNotNull { it.toFloatOrNull() }
+        if (saved.size != 3) return Dock.placeInFrontOf(input.head, input.forward)
+        val flat = Vec3(input.forward.x, 0f, input.forward.z)
+        val f = if (flat.length() < 1e-3f) Vec3(0f, 0f, -1f) else flat.normalized()
+        val right = Vec3(-f.z, 0f, f.x)  // f x up
+        val centre = Vec3(
+            input.head.x + f.x * saved[0] + right.x * saved[1],
+            input.head.y + saved[2],
+            input.head.z + f.z * saved[0] + right.z * saved[1],
+        )
+        return Placement(centre, yawToward(centre))
+    }
+
+    /** The dock was let go of: remember where it sits relative to the head, so it starts there next time. */
+    private fun saveDockPlacement() {
+        val dock = dockPlacement ?: return
+        val flat = Vec3(input.forward.x, 0f, input.forward.z)
+        if (flat.length() < 1e-3f) return
+        val f = flat.normalized()
+        val right = Vec3(-f.z, 0f, f.x)
+        val rel = Vec3(dock.center.x - input.head.x, dock.center.y - input.head.y, dock.center.z - input.head.z)
+        val forward = rel.x * f.x + rel.z * f.z
+        val side = rel.x * right.x + rel.z * right.z
+        app.setPref("quest.dock", "$forward,$side,${rel.y}")
+        Log.i("QuestDock", "saved dock placement: forward=$forward side=$side up=${rel.y}")
+    }
+
     private fun recentreDock() {
-        dockPlacement = Dock.placeInFrontOf(input.head, input.forward)
+        dockPlacement = dockStart()
     }
 
     private fun noticeSeen() {
         app.setPref("quest.notice", "seen")
         state.noticePending = false
+    }
+
+    /**
+     * The alert is placed where the wearer faces when it appears, which is often not where they end up looking (they were
+     * pointing at the button that caused it). If it has been well off their gaze for a moment, and neither pointer is on it,
+     * it moves to where they now face; while they aim at it, it stays put.
+     */
+    private fun recentreAlert() {
+        val aimed = rightOver?.id == ALERT || leftOver?.id == ALERT
+        val toward = Vec3(alertPlacement.center.x - input.head.x, 0f, alertPlacement.center.z - input.head.z)
+        val gaze = Vec3(input.forward.x, 0f, input.forward.z)
+        if (aimed || toward.length() < 1e-3f || gaze.length() < 1e-3f ||
+            angleBetweenDegrees(toward, gaze) < ALERT_RECENTRE_DEGREES) {
+            alertOffSince = 0L
+            return
+        }
+        val now = System.nanoTime()
+        if (alertOffSince == 0L) alertOffSince = now
+        else if (now - alertOffSince > ALERT_RECENTRE_AFTER_NANOS) {
+            alertPlacement = inFront(ALERT_DISTANCE, ALERT_HEIGHT)
+            alertOffSince = 0L
+        }
     }
 
     private fun inFront(distance: Float, dy: Float): Placement {
@@ -540,19 +649,27 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
     private fun paneId(area: DockArea) = PANE_BASE + area.ordinal
 
     companion object {
+        // The compositor draws quad layers in id order, later ones over earlier: the dock, then the panes, then the object
+        // menu, and the alert (connecting, pairing, a confirmation) over everything. kMaxQuads in quest.cpp is 16.
         private const val DOCK = 0
-        private const val ALERT = 1
-        private const val MENU = 2
-        private const val PANE_BASE = 3
+        private const val PANE_BASE = 1       // one id per DockArea
+        private const val MENU = 12
+        private const val ALERT = 13
         private const val DENSITY_DPI = 240
         private const val ALERT_PW = 1000
         private const val ALERT_PH = 700
         private const val ALERT_W = 0.9f
         private const val ALERT_H = 0.63f
-        private const val MENU_PW = 600
-        private const val MENU_PH = 760
-        private const val MENU_W = 0.55f
-        private const val MENU_H = 0.70f
+        private const val ALERT_DISTANCE = 1.3f
+        private const val ALERT_RECENTRE_DEGREES = 20.0
+        private const val ALERT_RECENTRE_AFTER_NANOS = 700_000_000L
+        private const val ALERT_HEIGHT = 0.10f   // above eye level: the 0.63 m panel's bottom edge then clears the dock
+        private const val SCROLL_DEADZONE = 0.2f
+        private const val SCROLL_NOTCHES_PER_SECOND = 14f
+        private const val MENU_PW = 440
+        private const val MENU_PH = 500
+        private const val MENU_W = 0.40f
+        private const val MENU_H = 0.46f
         private val BRIGHTNESS = floatArrayOf(0.35f, 0.55f, 0.8f, 1.0f)
     }
 }

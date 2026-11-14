@@ -16,6 +16,7 @@
 #include <android_native_app_glue.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
 
 #define XR_USE_PLATFORM_ANDROID
 #define XR_USE_GRAPHICS_API_OPENGL_ES
@@ -23,6 +24,7 @@
 #include <openxr/openxr_platform.h>
 
 #include <algorithm>
+#include <functional>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -32,6 +34,8 @@
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include "music.h"
 
 #define TAG "GalileoQuest"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
@@ -347,6 +351,321 @@ void main() {
 }
 )";
 
+// A pane's content arrives as an Android surface (a SurfaceTexture, sampled as an external texture) and is copied into the
+// pane's OpenXR swapchain each frame. This replaces XR_KHR_android_surface_swapchain, which this runtime refuses.
+const char* kPaneVS = R"(#version 300 es
+out vec2 vUv;
+void main() {
+    vec2 p = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
+    vUv = p;
+    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+const char* kPaneFS = R"(#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : require
+precision mediump float;
+in vec2 vUv;
+uniform samplerExternalOES uTex;
+uniform mat4 uTexMat;
+uniform float uToLinear;
+out vec4 o;
+void main() {
+    vec4 c = texture(uTex, (uTexMat * vec4(vUv, 0.0, 1.0)).xy);
+    if (uToLinear > 0.5) c.rgb = pow(c.rgb, vec3(2.2));
+    o = c;
+}
+)";
+
+// Controllers, drawn the way the atlas spike drew them: the runtime's own controller model when it has one (XR_FB_render_model),
+// else a procedural virtual hand whose fingers follow the trigger, grip and thumb touch.
+const char* kHandVS = R"(#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+out vec3 vN;
+void main() { vN = mat3(uModel) * aNrm; gl_Position = uMVP * vec4(aPos, 1.0); }
+)";
+const char* kHandFS = R"(#version 300 es
+precision mediump float;
+in vec3 vN;
+uniform vec3 uColor;
+out vec4 o;
+void main() {
+    float l = 0.25 + 0.75 * max(dot(normalize(vN), normalize(vec3(0.3, 0.8, 0.5))), 0.0);
+    o = vec4(uColor * l, 1.0);
+}
+)";
+// Controller model: vertex colours come from the glTF materials (the runtime's textures are KTX2 and are not decoded).
+const char* kCtlVS = R"(#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNrm;
+layout(location=2) in vec3 aCol;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+out vec3 vN;
+out vec3 vC;
+void main() { vN = mat3(uModel) * aNrm; vC = aCol; gl_Position = uMVP * vec4(aPos, 1.0); }
+)";
+const char* kCtlFS = R"(#version 300 es
+precision mediump float;
+in vec3 vN;
+in vec3 vC;
+uniform float uNight;
+out vec4 o;
+void main() {
+    vec3 n = normalize(vN);
+    float l = 0.30 + 0.55 * max(dot(n, normalize(vec3(0.3, 0.8, 0.5))), 0.0) + 0.25 * max(dot(n, normalize(vec3(-0.6, 0.2, -0.4))), 0.0);
+    vec3 c = vC * l;
+    if (uNight > 0.5) c = vec3(dot(c, vec3(0.30, 0.59, 0.11)), 0.0, 0.0) * vec3(0.9, 0.0, 0.0);
+    o = vec4(c, 1.0);
+}
+)";
+
+Mat4 rotFromQuat(const XrQuaternionf& q) {
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    Mat4 m = identity();
+    m.m[0] = 1 - 2 * (y * y + z * z); m.m[4] = 2 * (x * y - z * w);     m.m[8] = 2 * (x * z + y * w);
+    m.m[1] = 2 * (x * y + z * w);     m.m[5] = 1 - 2 * (x * x + z * z); m.m[9] = 2 * (y * z - x * w);
+    m.m[2] = 2 * (x * z - y * w);     m.m[6] = 2 * (y * z + x * w);     m.m[10] = 1 - 2 * (x * x + y * y);
+    return m;
+}
+
+
+// -------- controller models (XR_FB_render_model): a GLB per controller, flattened to coloured triangles
+
+struct JV {  // just enough JSON for a glTF
+    enum T { Null, Bool, Num, Str, Arr, Obj } t = Null;
+    double n = 0;
+    std::string s;
+    std::vector<JV> a;
+    std::vector<std::pair<std::string, JV>> o;
+    const JV* get(const char* k) const {
+        for (const auto& kv : o) if (kv.first == k) return &kv.second;
+        return nullptr;
+    }
+    const JV* at(size_t i) const { return i < a.size() ? &a[i] : nullptr; }
+    double num(double d = 0) const { return t == Num ? n : d; }
+};
+
+struct JsonParser {
+    const char* p;
+    const char* e;
+    void ws() { while (p < e && (*p == ' ' || *p == '\n' || *p == '\r' || *p == '\t')) ++p; }
+    bool str(std::string& out) {
+        if (p >= e || *p != '"') return false;
+        ++p;
+        while (p < e && *p != '"') {
+            if (*p == '\\' && p + 1 < e) {
+                ++p;
+                char c = *p;
+                if (c == 'n') out += '\n';
+                else if (c == 't') out += '\t';
+                else if (c == 'u') { out += '?'; p += 4; }
+                else out += c;
+                ++p;
+            } else {
+                out += *p++;
+            }
+        }
+        if (p >= e) return false;
+        ++p;
+        return true;
+    }
+    bool val(JV& v, int depth = 0) {
+        if (depth > 32) return false;
+        ws();
+        if (p >= e) return false;
+        if (*p == '{') {
+            v.t = JV::Obj;
+            ++p;
+            ws();
+            if (p < e && *p == '}') { ++p; return true; }
+            for (;;) {
+                ws();
+                std::string k;
+                if (!str(k)) return false;
+                ws();
+                if (p >= e || *p != ':') return false;
+                ++p;
+                v.o.emplace_back(k, JV{});
+                if (!val(v.o.back().second, depth + 1)) return false;
+                ws();
+                if (p < e && *p == ',') { ++p; continue; }
+                if (p < e && *p == '}') { ++p; return true; }
+                return false;
+            }
+        }
+        if (*p == '[') {
+            v.t = JV::Arr;
+            ++p;
+            ws();
+            if (p < e && *p == ']') { ++p; return true; }
+            for (;;) {
+                v.a.emplace_back();
+                if (!val(v.a.back(), depth + 1)) return false;
+                ws();
+                if (p < e && *p == ',') { ++p; continue; }
+                if (p < e && *p == ']') { ++p; return true; }
+                return false;
+            }
+        }
+        if (*p == '"') { v.t = JV::Str; return str(v.s); }
+        if (e - p >= 4 && !strncmp(p, "true", 4)) { v.t = JV::Bool; v.n = 1; p += 4; return true; }
+        if (e - p >= 5 && !strncmp(p, "false", 5)) { v.t = JV::Bool; p += 5; return true; }
+        if (e - p >= 4 && !strncmp(p, "null", 4)) { p += 4; return true; }
+        char* end = nullptr;
+        v.n = strtod(p, &end);
+        if (end == p) return false;
+        v.t = JV::Num;
+        p = end;
+        return true;
+    }
+};
+
+// Flatten every triangle primitive of a GLB's default scene into pos(3) normal(3) colour(3) vertices in model space.
+// Colour is the material's base colour factor, dimmed when the material relies on a texture we cannot decode.
+bool buildGlbMesh(const std::vector<uint8_t>& glb, std::vector<float>& out) {
+    if (glb.size() < 28 || memcmp(glb.data(), "glTF", 4) != 0) return false;
+    uint32_t jl;
+    memcpy(&jl, glb.data() + 12, 4);
+    if (20 + size_t(jl) + 8 > glb.size()) return false;
+    const char* js = reinterpret_cast<const char*>(glb.data()) + 20;
+    JV root;
+    JsonParser jp{js, js + jl};
+    if (!jp.val(root)) return false;
+    uint32_t bl;
+    memcpy(&bl, glb.data() + 20 + jl, 4);
+    const uint8_t* bin = glb.data() + 20 + jl + 8;
+    const size_t binLen = std::min<size_t>(bl, glb.size() - (20 + jl + 8));
+
+    const JV* accessors = root.get("accessors");
+    const JV* views = root.get("bufferViews");
+    const JV* meshes = root.get("meshes");
+    const JV* nodes = root.get("nodes");
+    const JV* materials = root.get("materials");
+    if (!accessors || !views || !meshes || !nodes) return false;
+
+    struct Acc { const uint8_t* base; size_t count, stride; int ctype; };
+    auto access = [&](double idx, int comps, Acc& a) {
+        const JV* ac = accessors->at(size_t(idx));
+        if (!ac) return false;
+        const JV* bv = views->at(size_t(ac->get("bufferView") ? ac->get("bufferView")->num(-1) : -1));
+        if (!bv) return false;
+        a.count = size_t(ac->get("count") ? ac->get("count")->num() : 0);
+        a.ctype = int(ac->get("componentType") ? ac->get("componentType")->num() : 0);
+        size_t csz = (a.ctype == 5126 || a.ctype == 5125) ? 4 : a.ctype == 5123 ? 2 : 1;
+        size_t off = size_t(bv->get("byteOffset") ? bv->get("byteOffset")->num() : 0) +
+                     size_t(ac->get("byteOffset") ? ac->get("byteOffset")->num() : 0);
+        a.stride = size_t(bv->get("byteStride") ? bv->get("byteStride")->num() : 0);
+        if (!a.stride) a.stride = csz * size_t(comps);
+        if (off + (a.count ? (a.count - 1) * a.stride + csz * size_t(comps) : 0) > binLen) return false;
+        a.base = bin + off;
+        return true;
+    };
+    auto readIndex = [](const Acc& a, size_t i) -> uint32_t {
+        const uint8_t* q = a.base + i * a.stride;
+        if (a.ctype == 5125) { uint32_t v; memcpy(&v, q, 4); return v; }
+        if (a.ctype == 5123) { uint16_t v; memcpy(&v, q, 2); return v; }
+        return *q;
+    };
+    auto readVec3 = [](const Acc& a, size_t i) {
+        float f[3];
+        memcpy(f, a.base + i * a.stride, 12);
+        return Vec3{f[0], f[1], f[2]};
+    };
+
+    bool ok = false;
+    std::function<void(size_t, const Mat4&, int)> walk = [&](size_t ni, const Mat4& parent, int depth) {
+        const JV* nd = nodes->at(ni);
+        if (!nd || depth > 32) return;
+        Mat4 local = identity();
+        if (const JV* m = nd->get("matrix")) {
+            for (int k = 0; k < 16 && size_t(k) < m->a.size(); ++k) local.m[k] = float(m->a[size_t(k)].num());
+        } else {
+            if (const JV* r = nd->get("rotation")) {
+                XrQuaternionf q{float(r->at(0) ? r->at(0)->num() : 0), float(r->at(1) ? r->at(1)->num() : 0),
+                                float(r->at(2) ? r->at(2)->num() : 0), float(r->at(3) ? r->at(3)->num(1) : 1)};
+                local = rotFromQuat(q);
+            }
+            if (const JV* sc = nd->get("scale")) {
+                for (int c = 0; c < 3; ++c) {
+                    float f = float(sc->at(size_t(c)) ? sc->at(size_t(c))->num(1) : 1);
+                    for (int r = 0; r < 3; ++r) local.m[c * 4 + r] *= f;
+                }
+            }
+            if (const JV* tr = nd->get("translation"))
+                for (int c = 0; c < 3; ++c) local.m[12 + c] = float(tr->at(size_t(c)) ? tr->at(size_t(c))->num() : 0);
+        }
+        Mat4 world = mul(parent, local);
+        if (const JV* mi = nd->get("mesh")) {
+            const JV* mesh = meshes->at(size_t(mi->num()));
+            const JV* prims = mesh ? mesh->get("primitives") : nullptr;
+            for (size_t pi = 0; prims && pi < prims->a.size(); ++pi) {
+                const JV& pr = prims->a[pi];
+                if (pr.get("mode") && pr.get("mode")->num(4) != 4) continue;
+                const JV* at = pr.get("attributes");
+                if (!at || !at->get("POSITION")) continue;
+                Acc ap{}, an{}, ai{};
+                bool hasN = at->get("NORMAL") != nullptr;
+                if (!access(at->get("POSITION")->num(), 3, ap) || ap.ctype != 5126) continue;
+                if (hasN && (!access(at->get("NORMAL")->num(), 3, an) || an.ctype != 5126 || an.count < ap.count)) hasN = false;
+                bool indexed = pr.get("indices") != nullptr;
+                if (indexed && !access(pr.get("indices")->num(), 1, ai)) continue;
+                float col[3] = {0.6f, 0.6f, 0.6f};
+                if (materials && pr.get("material")) {
+                    const JV* mat = materials->at(size_t(pr.get("material")->num()));
+                    const JV* pbr = mat ? mat->get("pbrMetallicRoughness") : nullptr;
+                    if (const JV* bc = pbr ? pbr->get("baseColorFactor") : nullptr)
+                        for (int k = 0; k < 3; ++k) col[k] = float(bc->at(size_t(k)) ? bc->at(size_t(k))->num(1) : 1);
+                    else col[0] = col[1] = col[2] = 1.f;
+                    if (pbr && pbr->get("baseColorTexture"))
+                        for (float& c : col) c *= 0.55f;
+                }
+                size_t n = indexed ? ai.count : ap.count;
+                for (size_t k = 0; k + 2 < n; k += 3) {
+                    Vec3 P3[3], N3[3];
+                    bool bad = false;
+                    for (int c = 0; c < 3; ++c) {
+                        size_t vi = indexed ? readIndex(ai, k + size_t(c)) : k + size_t(c);
+                        if (vi >= ap.count) { bad = true; break; }
+                        Vec3 p = readVec3(ap, vi);
+                        P3[c] = {world.m[0] * p.x + world.m[4] * p.y + world.m[8] * p.z + world.m[12],
+                                 world.m[1] * p.x + world.m[5] * p.y + world.m[9] * p.z + world.m[13],
+                                 world.m[2] * p.x + world.m[6] * p.y + world.m[10] * p.z + world.m[14]};
+                        if (hasN) {
+                            Vec3 nn = readVec3(an, vi);
+                            Vec3 t{world.m[0] * nn.x + world.m[4] * nn.y + world.m[8] * nn.z,
+                                   world.m[1] * nn.x + world.m[5] * nn.y + world.m[9] * nn.z,
+                                   world.m[2] * nn.x + world.m[6] * nn.y + world.m[10] * nn.z};
+                            N3[c] = dot(t, t) > 1e-12f ? normalize(t) : Vec3{0, 1, 0};
+                        }
+                    }
+                    if (bad) continue;
+                    if (!hasN) {
+                        Vec3 fn = cross(P3[1] - P3[0], P3[2] - P3[0]);
+                        fn = dot(fn, fn) > 1e-18f ? normalize(fn) : Vec3{0, 1, 0};
+                        N3[0] = N3[1] = N3[2] = fn;
+                    }
+                    for (int c = 0; c < 3; ++c)
+                        out.insert(out.end(), {P3[c].x, P3[c].y, P3[c].z, N3[c].x, N3[c].y, N3[c].z, col[0], col[1], col[2]});
+                    ok = true;
+                }
+            }
+        }
+        if (const JV* ch = nd->get("children"))
+            for (const JV& c : ch->a) walk(size_t(c.num()), world, depth + 1);
+    };
+    const JV* scenes = root.get("scenes");
+    const JV* sc = scenes ? scenes->at(size_t(root.get("scene") ? root.get("scene")->num() : 0)) : nullptr;
+    if (const JV* roots = sc ? sc->get("nodes") : nullptr) {
+        for (const JV& r : roots->a) walk(size_t(r.num()), identity(), 0);
+    } else {
+        for (size_t i = 0; i < nodes->a.size(); ++i) walk(i, identity(), 0);  // no scene: every node (children repeat; rare)
+    }
+    return ok;
+}
+
 // ------------------------------------------------------------------ state
 
 struct SkyState {
@@ -365,18 +684,107 @@ struct QuadSlot {
     bool visible = false;
     int pw = 0, ph = 0;
     XrSwapchain sc = XR_NULL_HANDLE;
-    jobject surface = nullptr;  // global ref
+    jobject surface = nullptr;  // global ref: the android.view.Surface Kotlin draws into
+    jobject stex = nullptr;     // global ref: the SurfaceTexture behind it
+    GLuint oesTex = 0;
+    bool srgb = false;
+    std::vector<XrSwapchainImageOpenGLESKHR> images;
+    std::vector<GLuint> fbos;
     float c[3] = {0, 0, -1}, r[3] = {1, 0, 0}, u[3] = {0, 1, 0};
     float w = 1.f, h = 1.f;
 };
 
 struct Hand {
-    XrSpace aim = XR_NULL_HANDLE;
+    XrSpace aim = XR_NULL_HANDLE, grip = XR_NULL_HANDLE;
     bool ok = false;
     Vec3 pos{0, 0, 0}, dir{0, 0, -1};
-    float trigger = 0, squeeze = 0, sx = 0, sy = 0;
+    Vec3 gripPos{0, 0, 0};
+    XrQuaternionf aimQ{0, 0, 0, 1}, gripQ{0, 0, 0, 1};
+    float trigger = 0, squeeze = 0, sx = 0, sy = 0, thumb = 0;
     bool stickClick = false;
+    std::vector<float> mesh;  // the procedural hand: position and normal triangles in aim space, rebuilt as the fingers move
 };
+
+void pushVert(std::vector<float>& v, Vec3 p, Vec3 n) { v.insert(v.end(), {p.x, p.y, p.z, n.x, n.y, n.z}); }
+
+void addTube(std::vector<float>& v, Vec3 a, Vec3 b, float ra, float rb) {
+    Vec3 ax = b - a;
+    float len = std::sqrt(dot(ax, ax));
+    if (len < 1e-6f) return;
+    ax = ax * (1.f / len);
+    Vec3 t = std::fabs(ax.y) < 0.9f ? Vec3{0, 1, 0} : Vec3{1, 0, 0};
+    Vec3 u = normalize(cross(ax, t)), w = cross(ax, u);
+    const int n = 8;
+    for (int i = 0; i < n; ++i) {
+        float t0 = 2.f * float(kPi) * float(i) / n, t1 = 2.f * float(kPi) * float(i + 1) / n;
+        Vec3 n0 = u * std::cos(t0) + w * std::sin(t0), n1 = u * std::cos(t1) + w * std::sin(t1);
+        Vec3 p00 = a + n0 * ra, p01 = a + n1 * ra, p10 = b + n0 * rb, p11 = b + n1 * rb;
+        pushVert(v, p00, n0); pushVert(v, p10, n0); pushVert(v, p01, n1);
+        pushVert(v, p01, n1); pushVert(v, p10, n0); pushVert(v, p11, n1);
+    }
+}
+
+void addEllipsoid(std::vector<float>& v, Vec3 c, float rx, float ry, float rz) {
+    const int nu = 10, nv = 6;
+    auto at = [&](int i, int j, Vec3& n) {
+        float th = 2.f * float(kPi) * float(i) / nu, ph = float(kPi) * float(j) / nv - float(kPi) / 2.f;
+        float cx = std::cos(ph) * std::cos(th), cy = std::sin(ph), cz = std::cos(ph) * std::sin(th);
+        n = normalize(Vec3{cx / rx, cy / ry, cz / rz});
+        return Vec3{c.x + rx * cx, c.y + ry * cy, c.z + rz * cz};
+    };
+    for (int j = 0; j < nv; ++j)
+        for (int i = 0; i < nu; ++i) {
+            Vec3 n00, n10, n01, n11;
+            Vec3 p00 = at(i, j, n00), p10 = at(i + 1, j, n10), p01 = at(i, j + 1, n01), p11 = at(i + 1, j + 1, n11);
+            pushVert(v, p00, n00); pushVert(v, p10, n10); pushVert(v, p01, n01);
+            pushVert(v, p01, n01); pushVert(v, p10, n10); pushVert(v, p11, n11);
+        }
+}
+
+// Hand space = the aim frame: +X right, +Y up, -Z forward. Thumb up, fingers forward, palm facing the other
+// hand (-X for the right hand, +X for the left), which is how Touch controllers are held.
+void buildHand(Hand& h, int side) {
+    std::vector<float>& v = h.mesh;
+    v.clear();
+    const float s = side == 1 ? -1.f : 1.f;  // curl direction in X: toward the palm
+    addEllipsoid(v, {0, 0, -0.005f}, 0.018f, 0.040f, 0.050f);   // palm
+    addTube(v, {0, 0, 0.035f}, {0, 0, 0.11f}, 0.026f, 0.030f);  // forearm stub
+
+    struct Finger { float y; float len[3]; float r; float curl; };
+    const Finger fingers[4] = {
+        {0.030f, {0.040f, 0.024f, 0.020f}, 0.0085f, std::max(0.2f, h.trigger)},   // index follows the trigger
+        {0.010f, {0.044f, 0.027f, 0.022f}, 0.0090f, std::max(0.4f, h.squeeze)},   // the rest follow the grip
+        {-0.010f, {0.040f, 0.025f, 0.020f}, 0.0085f, std::max(0.4f, h.squeeze)},
+        {-0.028f, {0.032f, 0.019f, 0.016f}, 0.0075f, std::max(0.4f, h.squeeze)}};
+    const float joint[3] = {1.35f, 1.6f, 1.1f};  // radians at full curl: ~232 degrees in total
+    for (const Finger& f : fingers) {
+        Vec3 p{0, f.y, -0.048f};
+        addEllipsoid(v, p, f.r * 1.1f, f.r * 1.1f, f.r * 1.1f);  // knuckle
+        float phi = 0.f;
+        for (int j = 0; j < 3; ++j) {
+            phi += f.curl * joint[j];
+            Vec3 d{s * std::sin(phi), 0.f, -std::cos(phi)};
+            Vec3 q = p + d * f.len[j];
+            float r0 = f.r * (1.f - 0.12f * float(j)), r1 = f.r * (1.f - 0.12f * float(j + 1));
+            addTube(v, p, q, r0, r1);
+            addEllipsoid(v, q, r1 * 1.05f, r1 * 1.05f, r1 * 1.05f);
+            p = q;
+        }
+    }
+
+    const Vec3 ext = normalize(Vec3{s * 0.15f, 0.80f, -0.55f}), tuck = normalize(Vec3{s * 0.75f, 0.15f, -0.55f});
+    const float tlen[2] = {0.036f, 0.030f}, trad[3] = {0.0105f, 0.0095f, 0.0085f};
+    Vec3 p{0, 0.036f, -0.010f};
+    for (int j = 0; j < 2; ++j) {
+        float t = std::min(1.f, h.thumb * (j == 0 ? 0.7f : 1.f));
+        Vec3 q = p + normalize(ext * (1.f - t) + tuck * t) * tlen[j];
+        addTube(v, p, q, trad[j], trad[j + 1]);
+        addEllipsoid(v, q, trad[j + 1] * 1.05f, trad[j + 1] * 1.05f, trad[j + 1] * 1.05f);
+        p = q;
+    }
+}
+
+
 
 struct EyeSwapchain {
     XrSwapchain handle = XR_NULL_HANDLE;
@@ -425,7 +833,14 @@ struct G {
     Vec3 headPos{0, 0, 0}, headFwd{0, 0, -1}, headUp{0, 1, 0};
 
     // GL
-    GLuint starProg = 0, skyLineProg = 0, markProg = 0, overProg = 0, solidProg = 0, labelProg = 0;
+    PFN_xrEnumerateRenderModelPathsFB xrEnumPaths = nullptr;
+    PFN_xrGetRenderModelPropertiesFB xrModelProps = nullptr;
+    PFN_xrLoadRenderModelFB xrLoadModel = nullptr;
+    GLuint handProg = 0, ctlProg = 0, handVao = 0, handVbo = 0, ctlVao[2] = {0, 0}, ctlVbo[2] = {0, 0};
+    int ctlVerts[2] = {0, 0}, ctlTries = 0;
+    double ctlNext = 0;
+    XrAction aGrip = XR_NULL_HANDLE, aThumbA = XR_NULL_HANDLE, aThumbB = XR_NULL_HANDLE;
+    GLuint paneProg = 0, starProg = 0, skyLineProg = 0, markProg = 0, overProg = 0, solidProg = 0, labelProg = 0;
     GLuint starVao = 0, starVbo = 0, lineVao = 0, lineVbo = 0, markVao = 0, markVbo = 0;
     GLuint overVao = 0, overVbo = 0, dynVao = 0, dynVbo = 0, labelTex = 0, groundVao = 0, groundVbo = 0;
     int starCount = 0, lineVerts = 0, markCount = 0, overLineVerts = 0, overTriVerts = 0, labelCount = 0;
@@ -475,6 +890,18 @@ void initGlResources() {
     g.overProg = program(kOverVS, kOverFS);
     g.solidProg = program(kSolidVS, kSolidFS);
     g.labelProg = program(kLabelVS, kLabelFS);
+    g.paneProg = program(kPaneVS, kPaneFS);
+    g.handProg = program(kHandVS, kHandFS);
+    g.ctlProg = program(kCtlVS, kCtlFS);
+    glGenVertexArrays(1, &g.handVao);
+    glGenBuffers(1, &g.handVbo);
+    glBindVertexArray(g.handVao);
+    glBindBuffer(GL_ARRAY_BUFFER, g.handVbo);
+    for (int a = 0; a < 2; ++a) {
+        glEnableVertexAttribArray(GLuint(a));
+        glVertexAttribPointer(GLuint(a), 3, GL_FLOAT, GL_FALSE, 24, (void*)(uintptr_t(a) * 12));
+    }
+    glBindVertexArray(0);
 
     makeBuffer(g.starVao, g.starVbo);
     glBindVertexArray(g.starVao);
@@ -710,8 +1137,9 @@ void renderEye(int e, const XrView& view, GLuint fbo, const SkyState& sky, const
             Vec3 d;
             if (!zoomFwdCpu(sky, normalize({l[0], l[1], l[2]}), d)) continue;
             if (d.y < -0.01f) continue;  // the ground hides it
-            Vec3 right = normalize(cross(Vec3{0, 1, 0}, d));
-            Vec3 up = normalize(cross(d, right));
+            // Seen from inside the dome, looking out along d: right = d x up (not up x d, which mirrors the text).
+            Vec3 right = normalize(cross(d, Vec3{0, 1, 0}));
+            Vec3 up = normalize(cross(right, d));
             float hw = kLabel * l[7] * kPi / 180.f * 0.5f, hh = kLabel * l[8] * kPi / 180.f * 0.5f;
             Vec3 c = d * kLabel;
             Vec3 p00 = c - right * hw + up * hh, p10 = c + right * hw + up * hh;  // top left, top right
@@ -738,6 +1166,55 @@ void renderEye(int e, const XrView& view, GLuint fbo, const SkyState& sky, const
             glEnableVertexAttribArray(1);
             glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 20, (void*)12);
             glDrawArrays(GL_TRIANGLES, 0, GLsizei(q.size() / 5));
+        }
+    }
+
+    // the controllers, opaque and depth-tested, in the real world
+    {
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);
+        glDepthMask(GL_TRUE);
+        glDisable(GL_BLEND);
+        const float skin[3] = {night ? 0.50f : 0.38f, night ? 0.05f : 0.46f, night ? 0.f : 0.58f};
+        for (int i = 0; i < 2; ++i) {
+            const Hand& h = g.hand[i];
+            if (!h.ok) continue;
+            if (g.ctlVerts[i] > 0 && g.ctlVao[i]) {  // the runtime's controller model, in grip space
+                // The model is turned 180 degrees about its pointing (z) axis, then pitched up 90 degrees in the controller's frame:
+                // as loaded its front pointed at the floor with the laser leaving from its top; this brings the front onto the laser.
+                Mat4 base = identity();
+                base.m[0] = -1.f;
+                base.m[5] = -1.f;
+                Mat4 frontToLaser = identity();  // rotation about x by +90 degrees: -y (down) goes to -z (forward)
+                frontToLaser.m[5] = 0.f;  frontToLaser.m[6] = 1.f;
+                frontToLaser.m[9] = -1.f; frontToLaser.m[10] = 0.f;
+                Mat4 model = mul(rotFromQuat(h.gripQ), mul(frontToLaser, base));
+                model.m[12] = h.gripPos.x;
+                model.m[13] = h.gripPos.y;
+                model.m[14] = h.gripPos.z;
+                Mat4 mvp = mul(vpFull, model);
+                glUseProgram(g.ctlProg);
+                glUniformMatrix4fv(glGetUniformLocation(g.ctlProg, "uMVP"), 1, GL_FALSE, mvp.m);
+                glUniformMatrix4fv(glGetUniformLocation(g.ctlProg, "uModel"), 1, GL_FALSE, model.m);
+                glUniform1f(glGetUniformLocation(g.ctlProg, "uNight"), night ? 1.f : 0.f);
+                glBindVertexArray(g.ctlVao[i]);
+                glDrawArrays(GL_TRIANGLES, 0, g.ctlVerts[i]);
+                continue;
+            }
+            if (h.mesh.empty()) continue;
+            Mat4 model = rotFromQuat(h.aimQ);
+            model.m[12] = h.gripPos.x;
+            model.m[13] = h.gripPos.y;
+            model.m[14] = h.gripPos.z;
+            Mat4 mvp = mul(vpFull, model);
+            glUseProgram(g.handProg);
+            glUniform3fv(glGetUniformLocation(g.handProg, "uColor"), 1, skin);
+            glUniformMatrix4fv(glGetUniformLocation(g.handProg, "uMVP"), 1, GL_FALSE, mvp.m);
+            glUniformMatrix4fv(glGetUniformLocation(g.handProg, "uModel"), 1, GL_FALSE, model.m);
+            glBindVertexArray(g.handVao);
+            glBindBuffer(GL_ARRAY_BUFFER, g.handVbo);
+            glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(h.mesh.size() * 4), h.mesh.data(), GL_STREAM_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, GLsizei(h.mesh.size() / 6));
         }
     }
 
@@ -780,6 +1257,9 @@ bool initInput() {
     g.aSqz = makeAction("squeeze", XR_ACTION_TYPE_FLOAT_INPUT, true);
     g.aClick = makeAction("stick_click", XR_ACTION_TYPE_BOOLEAN_INPUT, true);
     g.aAim = makeAction("aim", XR_ACTION_TYPE_POSE_INPUT, true);
+    g.aGrip = makeAction("grip_pose", XR_ACTION_TYPE_POSE_INPUT, true);
+    g.aThumbA = makeAction("thumb_stick_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, true);
+    g.aThumbB = makeAction("thumb_rest_touch", XR_ACTION_TYPE_BOOLEAN_INPUT, true);
     g.aA = makeAction("btn_a", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
     g.aB = makeAction("btn_b", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
     g.aX = makeAction("btn_x", XR_ACTION_TYPE_BOOLEAN_INPUT, false);
@@ -797,6 +1277,9 @@ bool initInput() {
         b.push_back({g.aSqz, path((hp + "/input/squeeze/value").c_str())});
         b.push_back({g.aClick, path((hp + "/input/thumbstick/click").c_str())});
         b.push_back({g.aAim, path((hp + "/input/aim/pose").c_str())});
+        b.push_back({g.aGrip, path((hp + "/input/grip/pose").c_str())});
+        b.push_back({g.aThumbA, path((hp + "/input/thumbstick/touch").c_str())});
+        b.push_back({g.aThumbB, path((hp + "/input/thumbrest/touch").c_str())});
     }
     XrInteractionProfileSuggestedBinding sb{XR_TYPE_INTERACTION_PROFILE_SUGGESTED_BINDING};
     sb.interactionProfile = path("/interaction_profiles/oculus/touch_controller");
@@ -813,6 +1296,8 @@ bool initInput() {
         asi.poseInActionSpace.orientation.w = 1.f;
         asi.action = g.aAim;
         XR_OK(xrCreateActionSpace(g.sess, &asi, &g.hand[i].aim));
+        asi.action = g.aGrip;
+        XR_OK(xrCreateActionSpace(g.sess, &asi, &g.hand[i].grip));
     }
     return true;
 }
@@ -875,9 +1360,17 @@ void pollInput(XrTime t, const XrView views[2]) {
                 if (h.ok) {
                     h.pos = {pose.position.x, pose.position.y, pose.position.z};
                     h.dir = aimDir(pose.orientation);
+                    h.aimQ = pose.orientation;
+                    XrPosef pg;
+                    const bool gripOk = locate(h.grip, t, pg);
+                    h.gripPos = gripOk ? Vec3{pg.position.x, pg.position.y, pg.position.z} : h.pos;
+                    h.gripQ = gripOk ? pg.orientation : h.aimQ;
                 }
                 h.trigger = floatState(g.aTrig, g.handPath[i]);
                 h.squeeze = floatState(g.aSqz, g.handPath[i]);
+                const float thumbTarget = (boolState(g.aThumbA, g.handPath[i]) || boolState(g.aThumbB, g.handPath[i])) ? 1.f : 0.f;
+                h.thumb += (thumbTarget - h.thumb) * 0.2f;
+                if (h.ok && !g.ctlVerts[i]) buildHand(h, i);
                 XrVector2f s = vec2State(g.aStick, g.handPath[i]);
                 h.sx = s.x;
                 h.sy = s.y;
@@ -929,13 +1422,10 @@ bool createInstance() {
         return false;
     };
     std::vector<const char*> exts = {XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME, XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME};
-    if (!has(XR_KHR_ANDROID_SURFACE_SWAPCHAIN_EXTENSION_NAME)) {
-        LOGE("this runtime has no Android surface swapchains: panes cannot be shown");
-    } else {
-        exts.push_back(XR_KHR_ANDROID_SURFACE_SWAPCHAIN_EXTENSION_NAME);
-    }
     const bool refresh = has(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
     if (refresh) exts.push_back(XR_FB_DISPLAY_REFRESH_RATE_EXTENSION_NAME);
+    const bool renderModel = has(XR_FB_RENDER_MODEL_EXTENSION_NAME);
+    if (renderModel) exts.push_back(XR_FB_RENDER_MODEL_EXTENSION_NAME);
     const bool pass = has(XR_FB_PASSTHROUGH_EXTENSION_NAME);
     if (pass) exts.push_back(XR_FB_PASSTHROUGH_EXTENSION_NAME);
 
@@ -962,6 +1452,11 @@ bool createInstance() {
         proc("xrEnumerateDisplayRefreshRatesFB", g.xrEnumRates);
         proc("xrRequestDisplayRefreshRateFB", g.xrRequestRate);
     }
+    if (renderModel) {
+        proc("xrEnumerateRenderModelPathsFB", g.xrEnumPaths);
+        proc("xrGetRenderModelPropertiesFB", g.xrModelProps);
+        proc("xrLoadRenderModelFB", g.xrLoadModel);
+    }
     if (pass) {
         proc("xrCreatePassthroughFB", g.xrCreatePassthrough);
         proc("xrDestroyPassthroughFB", g.xrDestroyPassthrough);
@@ -970,6 +1465,7 @@ bool createInstance() {
         proc("xrCreatePassthroughLayerFB", g.xrCreatePassthroughLayer);
         proc("xrDestroyPassthroughLayerFB", g.xrDestroyPassthroughLayer);
     }
+    LOGI("render model extension: %s", renderModel ? "yes" : "no");
     LOGI("surface swapchain: %s, passthrough: %s", g.xrCreateSurfaceSwapchain ? "yes" : "no", g.xrCreatePassthrough ? "yes" : "no");
     return true;
 }
@@ -1068,49 +1564,161 @@ bool createSession() {
     return true;
 }
 
-// Panes: a surface swapchain per quad. Created on the render thread (it owns the session) when Kotlin has asked for one.
+void destroyQuad(QuadSlot& q) {
+    if (q.sc) xrDestroySwapchain(q.sc);
+    if (!q.fbos.empty()) glDeleteFramebuffers(GLsizei(q.fbos.size()), q.fbos.data());
+    if (q.oesTex) glDeleteTextures(1, &q.oesTex);
+    if (g.env) {
+        if (q.stex) {
+            jmethodID rel = g.env->GetMethodID(g.env->GetObjectClass(q.stex), "release", "()V");
+            if (rel) g.env->CallVoidMethod(q.stex, rel);
+            g.env->ExceptionClear();
+            g.env->DeleteGlobalRef(q.stex);
+        }
+        if (q.surface) g.env->DeleteGlobalRef(q.surface);
+    }
+    q.sc = XR_NULL_HANDLE;
+    q.surface = nullptr;
+    q.stex = nullptr;
+    q.oesTex = 0;
+    q.fbos.clear();
+    q.images.clear();
+    q.created = false;
+    q.visible = false;
+}
+
+// Creates one pane: an OpenXR swapchain the compositor reads, and an Android surface (SurfaceTexture) Kotlin draws into.
+bool createQuad(int i, QuadSlot& q) {
+    if (!g.env) return false;
+    uint32_t nf = 0;
+    xrEnumerateSwapchainFormats(g.sess, 0, &nf, nullptr);
+    std::vector<int64_t> fmts(nf);
+    xrEnumerateSwapchainFormats(g.sess, nf, &nf, fmts.data());
+    // Compose draws sRGB-encoded pixels: a plain RGBA8 target keeps them as they are, an sRGB one needs them made linear first.
+    int64_t fmt = 0;
+    for (int64_t f : fmts) if (f == GL_RGBA8) fmt = f;
+    if (!fmt) for (int64_t f : fmts) if (f == GL_SRGB8_ALPHA8) fmt = f;
+    if (!fmt) { LOGE("pane %d: no usable swapchain format", i); return false; }
+    q.srgb = fmt == GL_SRGB8_ALPHA8;
+
+    XrSwapchainCreateInfo ci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
+    ci.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT | XR_SWAPCHAIN_USAGE_SAMPLED_BIT;
+    ci.format = fmt;
+    ci.sampleCount = 1;
+    ci.width = uint32_t(q.pw);
+    ci.height = uint32_t(q.ph);
+    ci.faceCount = 1;
+    ci.arraySize = 1;
+    ci.mipCount = 1;
+    XrResult r = xrCreateSwapchain(g.sess, &ci, &q.sc);
+    if (XR_FAILED(r)) { LOGE("pane %d: %dx%d swapchain failed (%d)", i, q.pw, q.ph, (int)r); q.sc = XR_NULL_HANDLE; return false; }
+    uint32_t ni = 0;
+    xrEnumerateSwapchainImages(q.sc, 0, &ni, nullptr);
+    q.images.assign(ni, {XR_TYPE_SWAPCHAIN_IMAGE_OPENGL_ES_KHR});
+    xrEnumerateSwapchainImages(q.sc, ni, &ni, (XrSwapchainImageBaseHeader*)q.images.data());
+    q.fbos.resize(ni);
+    glGenFramebuffers(GLsizei(ni), q.fbos.data());
+    for (uint32_t k = 0; k < ni; ++k) {
+        glBindFramebuffer(GL_FRAMEBUFFER, q.fbos[k]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, q.images[k].image, 0);
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glGenTextures(1, &q.oesTex);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, q.oesTex);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    JNIEnv* env = g.env;
+    jclass stc = env->FindClass("android/graphics/SurfaceTexture");
+    jclass sfc = env->FindClass("android/view/Surface");
+    jobject st = nullptr, sf = nullptr;
+    if (stc && sfc) {
+        jmethodID stInit = env->GetMethodID(stc, "<init>", "(I)V");
+        jmethodID setSize = env->GetMethodID(stc, "setDefaultBufferSize", "(II)V");
+        jmethodID sfInit = env->GetMethodID(sfc, "<init>", "(Landroid/graphics/SurfaceTexture;)V");
+        if (stInit && setSize && sfInit) {
+            st = env->NewObject(stc, stInit, jint(q.oesTex));
+            if (st) {
+                env->CallVoidMethod(st, setSize, jint(q.pw), jint(q.ph));
+                sf = env->NewObject(sfc, sfInit, st);
+            }
+        }
+    }
+    if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); st = sf = nullptr; }
+    if (!st || !sf) { LOGE("pane %d: could not create the Android surface", i); destroyQuad(q); return false; }
+    q.stex = env->NewGlobalRef(st);
+    q.surface = env->NewGlobalRef(sf);
+    env->DeleteLocalRef(st);
+    env->DeleteLocalRef(sf);
+    q.created = true;
+    LOGI("pane %d: %dx%d texture pane ready (%s)", i, q.pw, q.ph, q.srgb ? "sRGB" : "RGBA8");
+    return true;
+}
+
+// Panes: a swapchain and an Android surface per quad. Created on the render thread (it owns the session and the GL context).
 void serviceQuads() {
-    if (!g.xrCreateSurfaceSwapchain) return;
     std::lock_guard<std::mutex> lk(g.mu);
     for (int i = 0; i < kMaxQuads; ++i) {
         QuadSlot& q = g.quad[i];
         if (!q.wanted && q.created) {
-            if (q.sc) xrDestroySwapchain(q.sc);
-            if (q.surface && g.env) g.env->DeleteGlobalRef(q.surface);
-            q.sc = XR_NULL_HANDLE;
-            q.surface = nullptr;
-            q.created = false;
-            q.visible = false;
+            destroyQuad(q);
         } else if (q.wanted && !q.created && q.pw > 0 && q.ph > 0) {
-            XrSwapchainCreateInfo ci{XR_TYPE_SWAPCHAIN_CREATE_INFO};
-            ci.usageFlags = XR_SWAPCHAIN_USAGE_COLOR_ATTACHMENT_BIT;
-            ci.sampleCount = 1;
-            ci.width = uint32_t(q.pw);
-            ci.height = uint32_t(q.ph);
-            ci.faceCount = 1;
-            ci.arraySize = 1;
-            ci.mipCount = 1;
-            jobject surface = nullptr;
-            XrResult r = XR_ERROR_RUNTIME_FAILURE;
-            for (int64_t format : {int64_t(0), int64_t(GL_RGBA8), int64_t(GL_SRGB8_ALPHA8)}) {
-                ci.format = format;
-                r = g.xrCreateSurfaceSwapchain(g.sess, &ci, &q.sc, &surface);
-                if (XR_SUCCEEDED(r)) break;
-            }
-            if (XR_FAILED(r) || !surface) {
-                LOGE("pane %d: surface swapchain failed (%d)", i, (int)r);
-                q.wanted = false;
-                continue;
-            }
-            q.surface = g.env ? g.env->NewGlobalRef(surface) : surface;
-            q.created = true;
-            LOGI("pane %d: %dx%d surface ready", i, q.pw, q.ph);
+            if (!createQuad(i, q)) q.wanted = false;
         }
     }
 }
 
+// Copies each visible pane's newest Android frame into its swapchain image, ready for the compositor.
+void updatePanes() {
+    if (!g.env || !g.paneProg) return;
+    std::lock_guard<std::mutex> lk(g.mu);
+    JNIEnv* env = g.env;
+    for (int i = 0; i < kMaxQuads; ++i) {
+        QuadSlot& q = g.quad[i];
+        if (!q.created || !q.visible || !q.stex) continue;
+        jclass stc = env->GetObjectClass(q.stex);
+        jmethodID update = env->GetMethodID(stc, "updateTexImage", "()V");
+        jmethodID getMat = env->GetMethodID(stc, "getTransformMatrix", "([F)V");
+        env->DeleteLocalRef(stc);
+        if (!update || !getMat) continue;
+        env->CallVoidMethod(q.stex, update);
+        if (env->ExceptionCheck()) { env->ExceptionClear(); continue; }  // nothing drawn yet, or the surface is gone
+        jfloatArray arr = env->NewFloatArray(16);
+        env->CallVoidMethod(q.stex, getMat, arr);
+        float tm[16];
+        env->GetFloatArrayRegion(arr, 0, 16, tm);
+        env->DeleteLocalRef(arr);
+
+        uint32_t idx = 0;
+        if (XR_FAILED(xrAcquireSwapchainImage(q.sc, nullptr, &idx))) continue;
+        XrSwapchainImageWaitInfo wi{XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO};
+        wi.timeout = XR_INFINITE_DURATION;
+        xrWaitSwapchainImage(q.sc, &wi);
+        glBindFramebuffer(GL_FRAMEBUFFER, q.fbos[idx]);
+        glViewport(0, 0, q.pw, q.ph);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_BLEND);
+        glDisable(GL_CULL_FACE);
+        glClearColor(0.f, 0.f, 0.f, 0.f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        glUseProgram(g.paneProg);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_EXTERNAL_OES, q.oesTex);
+        glUniform1i(glGetUniformLocation(g.paneProg, "uTex"), 0);
+        glUniformMatrix4fv(glGetUniformLocation(g.paneProg, "uTexMat"), 1, GL_FALSE, tm);
+        glUniform1f(glGetUniformLocation(g.paneProg, "uToLinear"), q.srgb ? 1.f : 0.f);
+        glBindVertexArray(0);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        xrReleaseSwapchainImage(q.sc, nullptr);
+    }
+}
+
 void destroyAll() {
-    for (auto& q : g.quad) if (q.sc) xrDestroySwapchain(q.sc);
+    for (auto& q : g.quad) if (q.created || q.sc) destroyQuad(q);
     for (auto& sc : g.eye) if (sc.handle) xrDestroySwapchain(sc.handle);
     if (g.passthroughLayer && g.xrDestroyPassthroughLayer) g.xrDestroyPassthroughLayer(g.passthroughLayer);
     if (g.passthrough && g.xrDestroyPassthrough) g.xrDestroyPassthrough(g.passthrough);
@@ -1151,12 +1759,75 @@ void handleXrEvents() {
 
 // ------------------------------------------------------------------ the frame
 
+// Retried every few seconds until both controllers are in: the runtime may not have them ready at session start.
+void loadControllerModels() {
+    if (!g.xrLoadModel || !g.xrEnumPaths || !g.xrModelProps || g.ctlTries >= 8) return;
+    if (g.ctlVerts[0] > 0 && g.ctlVerts[1] > 0) return;
+    double now = std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (now < g.ctlNext) return;
+    g.ctlNext = now + 3.0;
+    ++g.ctlTries;
+    uint32_t n = 0;
+    if (XR_FAILED(g.xrEnumPaths(g.sess, 0, &n, nullptr)) || n == 0) {
+        LOGI("render models: none listed (try %d)", g.ctlTries);
+        return;
+    }
+    std::vector<XrRenderModelPathInfoFB> paths(n, {XR_TYPE_RENDER_MODEL_PATH_INFO_FB});
+    if (XR_FAILED(g.xrEnumPaths(g.sess, n, &n, paths.data()))) return;
+    for (uint32_t k = 0; k < n; ++k) {
+        char buf[256];
+        uint32_t len = 0;
+        if (XR_FAILED(xrPathToString(g.inst, paths[k].path, sizeof buf, &len, buf))) continue;
+        std::string name = buf;
+        int side = name.rfind("/model_fb/controller/left", 0) == 0 ? 0 : name.rfind("/model_fb/controller/right", 0) == 0 ? 1 : -1;
+        if (side < 0 || g.ctlVerts[side] > 0) continue;
+        XrRenderModelPropertiesFB pr{XR_TYPE_RENDER_MODEL_PROPERTIES_FB};
+        if (XR_FAILED(g.xrModelProps(g.sess, paths[k].path, &pr)) || pr.modelKey == XR_NULL_RENDER_MODEL_KEY_FB) {
+            LOGI("render model %s: not available yet", buf);
+            continue;
+        }
+        XrRenderModelLoadInfoFB li{XR_TYPE_RENDER_MODEL_LOAD_INFO_FB};
+        li.modelKey = pr.modelKey;
+        XrRenderModelBufferFB rb{XR_TYPE_RENDER_MODEL_BUFFER_FB};
+        if (XR_FAILED(g.xrLoadModel(g.sess, &li, &rb)) || rb.bufferCountOutput == 0) continue;
+        std::vector<uint8_t> glb(rb.bufferCountOutput);
+        rb.bufferCapacityInput = uint32_t(glb.size());
+        rb.buffer = glb.data();
+        if (XR_FAILED(g.xrLoadModel(g.sess, &li, &rb))) continue;
+        std::vector<float> mesh;
+        if (!buildGlbMesh(glb, mesh)) {
+            LOGI("render model %s (%s): GLB not understood, %zu bytes", buf, pr.modelName, glb.size());
+            continue;
+        }
+        float lo[3] = {1e9f, 1e9f, 1e9f}, hi[3] = {-1e9f, -1e9f, -1e9f};
+        for (size_t v = 0; v + 8 < mesh.size(); v += 9)
+            for (int c = 0; c < 3; ++c) { lo[c] = std::min(lo[c], mesh[v + size_t(c)]); hi[c] = std::max(hi[c], mesh[v + size_t(c)]); }
+        if (!g.ctlVao[side]) {
+            glGenVertexArrays(1, &g.ctlVao[side]);
+            glGenBuffers(1, &g.ctlVbo[side]);
+        }
+        glBindVertexArray(g.ctlVao[side]);
+        glBindBuffer(GL_ARRAY_BUFFER, g.ctlVbo[side]);
+        glBufferData(GL_ARRAY_BUFFER, GLsizeiptr(mesh.size() * 4), mesh.data(), GL_STATIC_DRAW);
+        for (int a = 0; a < 3; ++a) {
+            glEnableVertexAttribArray(GLuint(a));
+            glVertexAttribPointer(GLuint(a), 3, GL_FLOAT, GL_FALSE, 36, (void*)(uintptr_t(a) * 12));
+        }
+        glBindVertexArray(0);
+        g.ctlVerts[side] = int(mesh.size() / 9);
+        LOGI("render model %s (%s): %d vertices, %zu-byte GLB, bounds x %.3f..%.3f y %.3f..%.3f z %.3f..%.3f", buf,
+             pr.modelName, g.ctlVerts[side], glb.size(), lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
+    }
+}
+
+
 void frame() {
     XrFrameState fs{XR_TYPE_FRAME_STATE};
     if (XR_FAILED(xrWaitFrame(g.sess, nullptr, &fs))) return;
     if (XR_FAILED(xrBeginFrame(g.sess, nullptr))) return;
 
     serviceQuads();
+    loadControllerModels();
 
     bool passthroughOn;
     {
@@ -1216,6 +1887,8 @@ void frame() {
                 layers.push_back((XrCompositionLayerBaseHeader*)&projLayer);
             }
 
+            updatePanes();
+
             // the dock and the panes, in front of everything, in the world
             std::lock_guard<std::mutex> lk(g.mu);
             int n = 0;
@@ -1250,8 +1923,8 @@ void frame() {
 
 void onCmd(android_app* app, int32_t cmd) {
     (void)app;
-    if (cmd == APP_CMD_RESUME) g.resumed = true;
-    else if (cmd == APP_CMD_PAUSE) g.resumed = false;
+    if (cmd == APP_CMD_RESUME) { g.resumed = true; music::setPaused(false); }
+    else if (cmd == APP_CMD_PAUSE) { g.resumed = false; music::setPaused(true); }
     else if (cmd == APP_CMD_DESTROY) g.quit = true;
 }
 
@@ -1378,6 +2051,7 @@ void android_main(android_app* app) {
     app->onAppCmd = onCmd;
     app->activity->vm->AttachCurrentThread(&g.env, nullptr);
     LOGI("Galileo for Quest starting");
+    music::start(app->activity->assetManager);  // the .mp3/.mp4/.m4a files in assets/music, shuffled, for as long as the app runs
 
     while (!app->destroyRequested) {
         int events;
@@ -1398,6 +2072,7 @@ void android_main(android_app* app) {
         }
         if (g.quit) break;
     }
+    music::stop();
     destroyAll();
     app->activity->vm->DetachCurrentThread();
     LOGI("exiting");
