@@ -31,6 +31,8 @@ import com.galileo.mobileconnect.core.link.PreviewSource
 import com.galileo.mobileconnect.core.link.preview
 import com.galileo.mobileconnect.core.link.tile
 import com.galileo.mobileconnect.core.link.checkPosition
+import com.galileo.mobileconnect.core.link.removeSavedTarget
+import com.galileo.mobileconnect.core.link.savedTargets
 import com.galileo.mobileconnect.core.link.read
 import com.galileo.mobileconnect.core.state.AlertEvent
 import com.galileo.mobileconnect.core.state.LivePhase
@@ -483,6 +485,15 @@ class ObservatorySession(
             ),
         )
     }
+
+    // -- saved targets ---------------------------------------------------------------------------------------------
+
+    /** The Master's saved targets list; null if it can't answer just now. */
+    suspend fun savedTargets() = api.savedTargets()
+
+    /** Null when removed, otherwise why not. Only an Operator may; the Master enforces it too. */
+    suspend fun removeSavedTarget(name: String): String? =
+        if (state.value.role != Role.Operator) "Only an Operator can remove a saved target." else api.removeSavedTarget(name)
 
     // -- images (S-IMG) -------------------------------------------------------------------------------------------
 

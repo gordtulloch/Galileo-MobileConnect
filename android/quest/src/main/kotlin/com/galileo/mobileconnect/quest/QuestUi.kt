@@ -85,6 +85,7 @@ private fun glyph(area: DockArea) = when (area) {
     DockArea.Guiding -> "⊕"
     DockArea.Flip -> "⇄"
     DockArea.Sessions -> "☰"
+    DockArea.Targets -> "★"
     DockArea.Safety -> "⚑"
     DockArea.Settings -> "⚙"
 }
@@ -184,7 +185,7 @@ private fun Lease(modifier: Modifier) {
 
 /** A tablet screen in a floating pane: a title bar with Close, and the screen below it (MAPP-QST-340). */
 @Composable
-fun PaneContent(area: DockArea, onClose: () -> Unit) {
+fun PaneContent(area: DockArea, targets: TargetsSource? = null, onClose: () -> Unit) {
     val theme = LocalTheme.current
     Column(Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(theme.background)) {
         Row(
@@ -208,6 +209,7 @@ fun PaneContent(area: DockArea, onClose: () -> Unit) {
                 DockArea.Guiding -> GuidingScreen()
                 DockArea.Flip -> FlipScreen()
                 DockArea.Sessions -> SessionsScreen()
+                DockArea.Targets -> TargetsPaneContent(targets)
                 DockArea.Safety -> SafetyScreen()
                 DockArea.Settings -> SettingsScreen()
             }

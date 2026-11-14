@@ -17,6 +17,7 @@ A scenario with `extends` replaces the named top-level fields of its parent. Its
 | `permissions` | What `whoami` reports |
 | `handshake`, `capabilities`, `piers`, `alerts` | Those routes' bodies |
 | `state` | Initial state per Pier, as dotted keys. **These keys are the proposal for the plugin's `PierState`** (`docs/SDD.md` 4.1) |
+| `targets` | The saved targets (`SavedTarget` in the contract), newest first; removing one in the in-process player changes the list it serves |
 | `lease_holders` | Pier to holder at the start |
 | `unavailable` | Pier to operation to the reason it is unavailable |
 | `results`, `consequences`, `durations` | Per operation: result value, confirmation wording, running time of a long-running one |

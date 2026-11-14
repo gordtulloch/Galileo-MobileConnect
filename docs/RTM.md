@@ -103,6 +103,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-SKY-090 | The app's sky view shall use the same projection as Galileo's Star Atlas: the same field-of-view definition, precession, sidereal time and limits,… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-090 | U, UI |
 | MAPP-SKY-100 | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-100 | U, UI |
 | MAPP-SKY-110 | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-110 | U, UI |
+| MAPP-SKY-120 | The app shall show the user's saved targets (GET /mobileconnect/v1/targets) as a Targets screen — newest first with name, type, magnitude, size… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-120 | U, UI |
 
 ## 7. MAPP-SOL — Plate Solving and Alignment
 
@@ -295,10 +296,10 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 
 ## 24. Coverage Summary
 
-- Requirements in the SRS: **149** (MVP 114, P2 32, P3 3).
-- Applying to **iOS/iPadOS**: 111; all have a design component in the [iOS SDD](ios/SDD.md).
-- Applying to **Android**: 111; all have a design component in the [Android SDD](android/SDD.md) (a design only — nothing in it is built yet).
-- Applying to **Meta Quest**: 144; 144 have a design component in the [Quest SDD](quest/SDD.md) (a draft for agreement — nothing is built), 0 `GAP`. Requirements for the shared areas reach the headset through the panes (`Q-PANE`).
+- Requirements in the SRS: **150** (MVP 114, P2 33, P3 3).
+- Applying to **iOS/iPadOS**: 112; all have a design component in the [iOS SDD](ios/SDD.md).
+- Applying to **Android**: 112; all have a design component in the [Android SDD](android/SDD.md) (a design only — nothing in it is built yet).
+- Applying to **Meta Quest**: 145; 145 have a design component in the [Quest SDD](quest/SDD.md) (a draft for agreement — nothing is built), 0 `GAP`. Requirements for the shared areas reach the headset through the panes (`Q-PANE`).
 - Requirements with no shared component are platform-only (permissions, packaging, theming, notifications) or Quest-only presentation.
 - No test cases exist yet; the `TC-` identifiers are reserved.
 

@@ -29,6 +29,7 @@ public actor MockMaster: ClientTransport, StreamTransport {
     private var holds: [String: (pier: String, family: String, lastBeat: Date)] = [:]
     private var counter = 0
     private var cachedSkyObjects: [SkyObject]?
+    private var savedTargets: [JSONValue] = []
 
     private var epoch = "mock-epoch-1"
     private var seq = 0
@@ -86,6 +87,7 @@ public actor MockMaster: ClientTransport, StreamTransport {
         for (pier, holder) in scenario["lease_holders"]?.objectValue ?? [:] { leases[pier] = holder.stringValue }
         self.leases = leases
         alerts = scenario["alerts"]?.arrayValue ?? []
+        savedTargets = scenario["targets"]?.arrayValue ?? []
     }
 
     deinit { for task in tasks { task.cancel() } }
@@ -202,6 +204,16 @@ public actor MockMaster: ClientTransport, StreamTransport {
         case ("GET", "/mobileconnect/v1/tile"):
             guard let image = renderedTile(query: query) else { return try reply(404, ["error": "no such tile"]) }
             return (HTTPResponse(status: .ok, headerFields: [.contentType: "image/jpeg"]), HTTPBody(image))
+        case ("GET", "/mobileconnect/v1/targets"):
+            return try reply(200, targetList())
+        case ("DELETE", "/mobileconnect/v1/targets"):
+            // Control is the scenario's `permissions`, as the plugin's is the peer's role.
+            guard scenario["permissions"]?.arrayValue?.contains("control") ?? true else {
+                return try reply(403, ["error": "Only an Operator can remove a saved target."])
+            }
+            guard let name = query["name"], !name.isEmpty else { return try reply(400, ["error": "name is required"]) }
+            savedTargets.removeAll { $0["name"]?.stringValue == name }
+            return try reply(200, ["removed": .string(name)])
         case ("GET", "/mobileconnect/v1/sky/catalog"):
             return skyCatalog(query: query)
         case ("GET", "/mobileconnect/v1/sky/ephemeris"):
@@ -227,6 +239,13 @@ public actor MockMaster: ClientTransport, StreamTransport {
         default:
             return try reply(404, ["error": "no such route"])
         }
+    }
+
+    /// The saved targets with a version that changes with the list, as the plugin's route does.
+    private func targetList() -> JSONValue {
+        let names = savedTargets.compactMap { $0["name"]?.stringValue }.joined(separator: "|")
+        let hash = names.utf8.reduce(UInt64(14_695_981_039_346_656_037)) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
+        return .object(["targets": .array(savedTargets), "version": .string(String(hash, radix: 16))])
     }
 
     private static func parseQuery(_ text: String) -> [String: String] {

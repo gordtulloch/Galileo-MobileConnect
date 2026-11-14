@@ -229,3 +229,54 @@ public struct LeaseAnswer: Sendable, Equatable {
     public var heldByMe: Bool
     public var holder: String?
 }
+
+
+/// One object on the Master's saved targets list (Planning > Targets on the desktop).
+public struct SavedTarget: Sendable, Equatable, Identifiable {
+    public var id: String { name }
+    public var name: String
+    public var designations: [String]
+    public var raDeg: Double
+    public var decDeg: Double
+    public var type: String
+    /// 99 or more means unknown.
+    public var magnitude: Double
+    /// 0 means unknown.
+    public var sizeArcmin: Double
+    public var description: String
+
+    public init(
+        name: String, designations: [String] = [], raDeg: Double, decDeg: Double, type: String = "Other",
+        magnitude: Double = 99, sizeArcmin: Double = 0, description: String = ""
+    ) {
+        self.name = name
+        self.designations = designations
+        self.raDeg = raDeg
+        self.decDeg = decDeg
+        self.type = type
+        self.magnitude = magnitude
+        self.sizeArcmin = sizeArcmin
+        self.description = description
+    }
+
+    /// "mag 3.4  ·  178.0′", leaving out what the catalog doesn't know.
+    public var summary: String {
+        var parts: [String] = []
+        parts.append(magnitude < 90 ? "mag \(String(format: "%.1f", magnitude))" : "mag unknown")
+        if sizeArcmin > 0 { parts.append("\(String(format: "%.1f", sizeArcmin))′") }
+        return parts.joined(separator: "  ·  ")
+    }
+}
+
+/// The list and its version, which changes whenever the list does. `reason` is the Master's, when it has no list.
+public struct SavedTargets: Sendable, Equatable {
+    public var targets: [SavedTarget]
+    public var version: String
+    public var reason: String?
+
+    public init(targets: [SavedTarget] = [], version: String = "", reason: String? = nil) {
+        self.targets = targets
+        self.version = version
+        self.reason = reason
+    }
+}

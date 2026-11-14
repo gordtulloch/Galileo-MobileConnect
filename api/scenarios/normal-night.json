@@ -55,6 +55,10 @@
     }
   ],
   "lease_holders": {},
+  "targets": [
+    {"name": "M42", "designations": ["NGC 1976"], "ra_deg": 83.822, "dec_deg": -5.391, "type": "Nebula", "magnitude": 4.0, "size_arcmin": 65.0, "description": ""},
+    {"name": "M31", "designations": ["NGC 224"], "ra_deg": 10.685, "dec_deg": 41.269, "type": "Galaxy", "magnitude": 3.4, "size_arcmin": 178.0, "description": ""}
+  ],
   "alerts": [
     {
       "id": "a0",

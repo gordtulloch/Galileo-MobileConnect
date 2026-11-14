@@ -9,6 +9,8 @@ import com.galileo.mobileconnect.core.link.checkPosition
 import com.galileo.mobileconnect.core.link.constellations
 import com.galileo.mobileconnect.core.link.ephemeris
 import com.galileo.mobileconnect.core.link.identify
+import com.galileo.mobileconnect.core.link.removeSavedTarget
+import com.galileo.mobileconnect.core.link.savedTargets
 import com.galileo.mobileconnect.core.link.skyCatalogs
 import com.galileo.mobileconnect.core.link.skySite
 import com.galileo.mobileconnect.core.session.ObservatorySession
@@ -62,9 +64,19 @@ class QuestSky(
     private val pier: String,
     private val app: AppViewModel,
     private val scope: CoroutineScope,
-) {
+) : TargetsSource {
     private val api: MasterApi get() = session.masterApi
     private val store = SkyStore(api, scope)
+
+    /** The Targets pane reads the Master's saved targets through the same connection as the sky (read-only, outside the operations ledger). */
+    override suspend fun list(): SavedTargets? = api.savedTargets()?.let { answer ->
+        SavedTargets(
+            answer.targets.map { SavedTarget(it.name, it.type, it.magnitude ?: 99.0, it.sizeArcmin ?: 0.0, it.raDeg, it.decDeg) },
+            answer.version, answer.reason,
+        )
+    }
+
+    override suspend fun remove(name: String): Boolean = api.removeSavedTarget(name) == null // null is success
 
     var site: SkySite? = null; private set
     var siteProblem: String? = null; private set

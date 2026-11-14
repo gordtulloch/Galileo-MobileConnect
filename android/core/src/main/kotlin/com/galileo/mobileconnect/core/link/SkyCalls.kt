@@ -6,6 +6,8 @@ import com.galileo.mobileconnect.core.sky.EphemerisSample
 import com.galileo.mobileconnect.core.sky.IdentifiedObject
 import com.galileo.mobileconnect.core.sky.PositionCheck
 import com.galileo.mobileconnect.core.sky.PreviewImage
+import com.galileo.mobileconnect.core.sky.SavedTarget
+import com.galileo.mobileconnect.core.sky.SavedTargets
 import com.galileo.mobileconnect.core.sky.SiteAnswer
 import com.galileo.mobileconnect.core.sky.SkyConstellations
 import com.galileo.mobileconnect.core.sky.SkyFrameDecoder
@@ -119,6 +121,35 @@ suspend fun MasterApi.identify(index: Int): IdentifiedObject? = quiet {
     skyApi.identifyObject(index).let {
         IdentifiedObject(it.index, it.kind == "deep_sky", it.name, it.type, it.raDeg, it.decDeg, it.magnitude)
     }
+}
+
+/** The saved targets, newest first (`GET /mobileconnect/v1/targets`). Null when the Master can't answer just now. */
+suspend fun MasterApi.savedTargets(): SavedTargets? = quiet {
+    val body = skyApi.listTargets()
+    SavedTargets(
+        targets = body.targets.map {
+            SavedTarget(
+                it.name, it.designations, it.raDeg, it.decDeg, it.type,
+                magnitude = it.magnitude.takeIf { m -> m < 90.0 },
+                sizeArcmin = it.sizeArcmin.takeIf { s -> s > 0.0 },
+                description = it.description,
+            )
+        },
+        version = body.version,
+        reason = body.reason,
+    )
+}
+
+/** Takes one object off the saved list. Null when it worked, otherwise the words to show. Needs control (a Viewer is refused). */
+suspend fun MasterApi.removeSavedTarget(name: String): String? = try {
+    skyApi.removeTarget(name)
+    null
+} catch (e: CancellationException) {
+    throw e
+} catch (e: ClientException) {
+    if (e.statusCode == 403) "Only an Operator can remove a saved target." else "The Master refused (${e.statusCode})."
+} catch (e: Exception) {
+    "The Master couldn't be reached."
 }
 
 /** Which picture to show: the Master renders it (S-IMG). */

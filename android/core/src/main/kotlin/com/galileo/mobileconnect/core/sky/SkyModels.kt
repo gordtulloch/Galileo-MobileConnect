@@ -17,6 +17,31 @@ data class IdentifiedObject(
     val magnitude: Double?,
 )
 
+/** One object on the Master's saved targets list (SKY-130 on the desktop), as the Targets screen shows it. */
+data class SavedTarget(
+    val name: String,
+    val designations: List<String>,
+    val raDeg: Double,
+    val decDeg: Double,
+    val type: String,
+    /** Null when the catalog has none (the wire says 99 or more). */
+    val magnitude: Double?,
+    /** Null when unknown (the wire says 0). */
+    val sizeArcmin: Double?,
+    val description: String,
+) {
+    /** The line under the name: type, brightness and size, leaving out what isn't known. */
+    val summary: String
+        get() = listOfNotNull(
+            type.replace(Regex("([a-z])([A-Z])"), "$1 $2"),
+            magnitude?.let { "mag %.1f".format(it) },
+            sizeArcmin?.let { "%.1f′".format(it) },
+        ).joinToString(" · ")
+}
+
+/** The list and the Master's `version` of it, which changes whenever the list does. [reason] is set when there is no list. */
+data class SavedTargets(val targets: List<SavedTarget>, val version: String, val reason: String? = null)
+
 /** Constellation figures, from the Master: the app ships none. */
 data class SkyConstellations(
     val lines: List<List<Point>> = emptyList(),

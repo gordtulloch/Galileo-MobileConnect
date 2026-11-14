@@ -281,6 +281,19 @@ class MockMaster(
                     ?: return reply(request, 404, j("error" to "no such tile"))
                 build(request, 200, image, "image/jpeg")
             }
+            "GET" to "/mobileconnect/v1/targets" -> reply(request, 200, targetList())
+            "DELETE" to "/mobileconnect/v1/targets" -> {
+                val permitted = scenario["permissions"].array?.any { it.string == "control" } ?: true
+                val name = query("name")
+                when {
+                    !permitted -> reply(request, 403, j("error" to "Only an Operator can remove a saved target."))
+                    name.isNullOrEmpty() -> reply(request, 400, j("error" to "name is required"))
+                    else -> {
+                        synchronized(lock) { targets.removeAll { it["name"].string == name } }
+                        reply(request, 200, j("removed" to name))
+                    }
+                }
+            }
             "GET" to "/mobileconnect/v1/sky/catalog" -> skyCatalog(request)
             "GET" to "/mobileconnect/v1/sky/ephemeris" -> reply(request, 200, skyEphemeris(request))
             "GET" to "/mobileconnect/v1/sky/site" ->
@@ -612,6 +625,29 @@ class MockMaster(
     }
 
     /** By name, as `catalogs_of` in core has it. */
+    /**
+     * The saved targets, newest first: the scenario's own `targets` if it has some, else three the demo shows. Held here so
+     * that a removal sticks for as long as the mock runs, as it does on a Master.
+     */
+    private val targets: MutableList<JsonObject> by lazy {
+        (scenario["targets"].array?.mapNotNull { it as? JsonObject } ?: listOf(
+            demoTarget("M31", "Galaxy", 10.685, 41.269, 3.4, 178.0, "NGC 224"),
+            demoTarget("M42", "Nebula", 83.822, -5.391, 4.0, 65.0, "NGC 1976"),
+            demoTarget("M13", "GlobularCluster", 250.423, 36.460, 5.8, 20.0, "NGC 6205"),
+        )).toMutableList()
+    }
+
+    private fun demoTarget(name: String, type: String, ra: Double, dec: Double, magnitude: Double, size: Double, designation: String) =
+        j(
+            "name" to name, "designations" to listOf(designation), "ra_deg" to ra, "dec_deg" to dec, "type" to type,
+            "magnitude" to magnitude, "size_arcmin" to size, "description" to "",
+        )
+
+    private fun targetList(): JsonElement {
+        val items = synchronized(lock) { targets.toList() }
+        return j("targets" to items, "version" to items.joinToString("|") { it["name"].string ?: "" }.hashCode().toString(16))
+    }
+
     private fun skyCatalogs(): JsonElement {
         val starCount = scenario["sky"]["stars"].double?.toInt() ?: 0
         val objects = scenario["sky"]["objects"].array ?: emptyList()

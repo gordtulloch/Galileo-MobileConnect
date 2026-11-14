@@ -54,6 +54,7 @@ import com.galileo.mobileconnect.ui.screens.SessionsScreen
 import com.galileo.mobileconnect.ui.screens.SettingsScreen
 import com.galileo.mobileconnect.ui.sky.SkyScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
+import com.galileo.mobileconnect.ui.screens.TargetsScreen
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 import kotlinx.serialization.json.JsonArray
 
@@ -61,6 +62,7 @@ enum class Area(val label: String, val glyph: String) {
     Overview("Overview", "▤"),
     Equipment("Equipment", "⌖"),
     Sky("Sky", "✦"),
+    Targets("Targets", "★"),
     Imaging("Imaging", "◉"),
     Focus("Focus", "◎"),
     Solve("Solve", "⌗"),
@@ -128,6 +130,7 @@ private fun Detail(area: Area) {
         Area.Overview -> OverviewScreen()
         Area.Equipment -> EquipmentScreen()
         Area.Sky -> SkyScreen()
+        Area.Targets -> TargetsScreen()
         Area.Imaging -> ImagingScreen()
         Area.Focus -> FocusScreen()
         Area.Solve -> SolveScreen()

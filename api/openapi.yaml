@@ -614,6 +614,66 @@ paths:
               schema:
                 $ref: "#/components/schemas/SimpleError"
 
+  /mobileconnect/v1/targets:
+    get:
+      tags: [sky]
+      operationId: listTargets
+      summary: The saved targets (Planning > Targets on the desktop), newest first.
+      description: |
+        The list the user keeps on the Master with Save from Search or What's Up Tonight, replicated between
+        nodes. `version` changes whenever the list does, so an app can tell whether what it holds is current.
+        To act on an entry use the existing operations: `mount.slew` with its `ra_deg`/`dec_deg`, or
+        `solve.centre` to slew and then plate-solve and centre. A Galileo without the list answers an empty
+        list with a `reason`.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: The saved targets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TargetList"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+    delete:
+      tags: [sky]
+      operationId: removeTarget
+      summary: Take one object off the saved targets.
+      description: Needs control (an Operator); a Viewer is refused with 403. Removing a name that is not there succeeds.
+      x-galileo-status: implemented
+      parameters:
+        - name: name
+          in: query
+          required: true
+          description: The target's `name`.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [removed]
+                properties:
+                  removed:
+                    type: string
+        "400":
+          description: No name was given.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          $ref: "#/components/responses/Unauthorised"
+        "403":
+          description: The app has no control.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
   /mobileconnect/v1/sky/catalog:
     get:
       tags: [sky]
@@ -977,6 +1037,52 @@ components:
             type: string
 
   schemas:
+    TargetList:
+      type: object
+      required: [targets, version]
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: "#/components/schemas/SavedTarget"
+        version:
+          type: string
+          description: Changes whenever the list does; empty when the Master has no list.
+        reason:
+          type: string
+
+    SavedTarget:
+      type: object
+      required: [name, designations, ra_deg, dec_deg, type, magnitude, size_arcmin, description]
+      properties:
+        name:
+          type: string
+          description: The primary name, also the key for removal.
+        designations:
+          type: array
+          items:
+            type: string
+        ra_deg:
+          type: number
+          format: double
+          description: J2000 right ascension.
+        dec_deg:
+          type: number
+          format: double
+        type:
+          type: string
+          description: Galaxy, Nebula, Cluster, OpenCluster, GlobularCluster, PlanetaryNebula, SupernovaRemnant, Star, DoubleStar, Asterism or Other.
+        magnitude:
+          type: number
+          format: double
+          description: 99 or more means unknown.
+        size_arcmin:
+          type: number
+          format: double
+          description: 0 means unknown.
+        description:
+          type: string
+
     SimpleError:
       type: object
       required: [error]

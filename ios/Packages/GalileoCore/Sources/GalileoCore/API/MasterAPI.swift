@@ -300,6 +300,39 @@ public struct MasterAPI: Sendable {
         }
     }
 
+    // MARK: Saved targets
+
+    /// The saved targets, newest first. Throws if the Master can't be reached or answers something unexpected.
+    public func savedTargets() async throws -> SavedTargets {
+        let output = try await calling { try await client.listTargets() }
+        switch output {
+        case .ok(let response):
+            let body = try response.body.json
+            return SavedTargets(
+                targets: body.targets.map {
+                    SavedTarget(
+                        name: $0.name, designations: $0.designations, raDeg: $0.ra_deg, decDeg: $0.dec_deg,
+                        type: $0._type, magnitude: $0.magnitude, sizeArcmin: $0.size_arcmin, description: $0.description)
+                }, version: body.version, reason: body.reason)
+        case .unauthorized: throw LinkError.unpaired
+        case .undocumented(let status, _): throw Self.unexpected(status)
+        }
+    }
+
+    /// Takes one object off the list. Needs control: a Viewer gets `false` and the Master's words.
+    public func removeTarget(name: String) async -> (removed: Bool, reason: String?) {
+        guard let output = try? await calling({ try await client.removeTarget(query: .init(name: name)) }) else {
+            return (false, "The Master can't be reached.")
+        }
+        switch output {
+        case .ok: return (true, nil)
+        case .forbidden: return (false, "Only an Operator can remove a saved target.")
+        case .badRequest: return (false, "The Master did not understand the request.")
+        case .unauthorized: return (false, LinkError.unpaired.message)
+        case .undocumented(let status, _): return (false, Self.unexpected(status).message)
+        }
+    }
+
     // MARK: Errors
 
     func callingForSky<T>(_ call: () async throws -> T) async throws -> T { try await calling(call) }

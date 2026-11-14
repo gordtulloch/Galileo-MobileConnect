@@ -5,6 +5,7 @@ import com.galileo.mobileconnect.core.sky.SkyObject
 import com.galileo.mobileconnect.core.sky.SkySite
 import com.galileo.mobileconnect.core.sky.Vec3
 import java.time.Instant
+import kotlinx.coroutines.runBlocking
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -83,13 +84,14 @@ class DockAndPanesTest {
 
     @Test
     fun `the dock has a button for each operating area and none for the sky`() {
-        assertEquals(10, DockArea.entries.size)
+        assertEquals(11, DockArea.entries.size)
         assertTrue(DockArea.entries.none { it.label == "Sky" })
         assertEquals(DockArea.Overview, Dock.areaAt(Dock.STATUS_PIXELS + 10f, 100f))
         assertEquals(DockArea.Equipment, Dock.areaAt(Dock.STATUS_PIXELS + Dock.CELL_PIXELS + 10f, 100f))
-        assertEquals(DockArea.Settings, Dock.areaAt(Dock.STATUS_PIXELS + 9 * Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Targets, Dock.areaAt(Dock.STATUS_PIXELS + 8 * Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Settings, Dock.areaAt(Dock.STATUS_PIXELS + 10 * Dock.CELL_PIXELS + 10f, 100f))
         assertNull(Dock.areaAt(10f, 100f), "the status cell is not an area")
-        assertNull(Dock.areaAt(Dock.STATUS_PIXELS + 10 * Dock.CELL_PIXELS + 10f, 100f))
+        assertNull(Dock.areaAt(Dock.STATUS_PIXELS + 11 * Dock.CELL_PIXELS + 10f, 100f))
     }
 
     private fun stack(): PaneStack {
@@ -287,3 +289,80 @@ class ZoomTest {
     }
 }
 
+
+class TargetsTest {
+    private val m31 = SavedTarget("M31", "Galaxy", 3.4, 178.0, 10.68, 41.27)
+    private val unknown = SavedTarget("Odd", "", 99.0, 0.0, 1.0, 2.0)
+
+    private class FakeSource(var targets: List<SavedTarget>, var reachable: Boolean = true, var allowRemove: Boolean = true) : TargetsSource {
+        var version = 1
+        override suspend fun list() = if (reachable) SavedTargets(targets, "v$version") else null
+        override suspend fun remove(name: String): Boolean {
+            if (!allowRemove) return false
+            targets = targets.filterNot { it.name == name }
+            version++
+            return true
+        }
+    }
+
+    @Test
+    fun `a tile says type, magnitude and size, leaving out what is unknown`() {
+        assertEquals("Galaxy · mag 3.4 · 178.0′", Targets.subtitle(m31))
+        assertEquals("Globular Cluster", Targets.subtitle(SavedTarget("M13", "GlobularCluster", 99.0, 0.0, 1.0, 2.0)))
+        assertEquals("", Targets.subtitle(unknown))
+        assertEquals(listOf("M31", "Odd"), Targets.tiles(listOf(m31, unknown)).map { it.name }) // the Master's order is kept
+    }
+
+    @Test
+    fun `a Viewer gets no actions and an Operator gets all three`() {
+        assertEquals(emptyList<TargetAction>(), Targets.actions(false))
+        assertEquals(listOf(TargetAction.SlewTo, TargetAction.GotoAndCentre, TargetAction.Remove), Targets.actions(true))
+    }
+
+    @Test
+    fun `actions send the position, and centre also the name`() {
+        assertEquals(setOf("ra_deg", "dec_deg"), Targets.slewArgs(m31).keys)
+        assertEquals(setOf("ra_deg", "dec_deg", "name"), Targets.centreArgs(m31).keys)
+        assertEquals("mount.slew", TargetAction.SlewTo.operation)
+        assertEquals("solve.centre", TargetAction.GotoAndCentre.operation)
+        assertNull(TargetAction.Remove.operation)
+    }
+
+    @Test
+    fun `loading shows the list, an empty list is loaded and empty, and no Master is a failure`() = runBlocking {
+        val source = FakeSource(listOf(m31))
+        val model = TargetsModel(source)
+        assertEquals(TargetsState.Loading, model.state)
+        model.load()
+        assertEquals(1, (model.state as TargetsState.Loaded).tiles.size)
+        source.targets = emptyList()
+        model.load()
+        assertTrue((model.state as TargetsState.Loaded).isEmpty)
+        val down = TargetsModel(FakeSource(emptyList(), reachable = false))
+        down.load()
+        assertTrue(down.state is TargetsState.Failed)
+    }
+
+    @Test
+    fun `a failed refresh keeps what is on show`() = runBlocking {
+        val source = FakeSource(listOf(m31))
+        val model = TargetsModel(source)
+        model.load()
+        source.reachable = false
+        model.load()
+        assertEquals(1, (model.state as TargetsState.Loaded).tiles.size)
+    }
+
+    @Test
+    fun `removing reloads from the Master, and a refusal changes nothing`() = runBlocking {
+        val source = FakeSource(listOf(m31, unknown))
+        val model = TargetsModel(source)
+        model.load()
+        source.allowRemove = false
+        assertFalse(model.remove("M31"))
+        assertEquals(2, (model.state as TargetsState.Loaded).tiles.size)
+        source.allowRemove = true
+        assertTrue(model.remove("M31"))
+        assertEquals(listOf("Odd"), (model.state as TargetsState.Loaded).tiles.map { it.name })
+    }
+}

@@ -461,7 +461,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
 
     private fun openArea(area: DockArea) {
         val pane = stack.press(area)
-        ensure(paneId(area), pane.pixelWidth, pane.pixelHeight, area.label) { QuestRoot(app) { PaneContent(area) { closeArea(area) } } }
+        ensure(paneId(area), pane.pixelWidth, pane.pixelHeight, area.label) { QuestRoot(app) { PaneContent(area, skyState) { closeArea(area) } } }
         state.openAreas = stack.open.map { it.area }.toSet()
     }
 

@@ -374,6 +374,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return current to pier
     }
 
+    /** The Master's saved targets; null with no connection or when it can't answer just now. */
+    suspend fun savedTargets(): com.galileo.mobileconnect.core.sky.SavedTargets? = session?.savedTargets()
+
+    /** Null when removed, otherwise the words to show. */
+    suspend fun removeSavedTarget(name: String): String? = session?.removeSavedTarget(name) ?: "There is no connection."
+
     /** MAPP-SKY-040: asks first, always. Null when the answer needs nothing more from the screen. */
     suspend fun goTo(name: String, raDeg: Double, decDeg: Double): String? {
         val pier = workingPier ?: return null

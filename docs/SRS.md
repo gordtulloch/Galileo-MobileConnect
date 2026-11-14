@@ -176,6 +176,7 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 | MAPP-SKY-090 | All | The app's sky view shall use the same projection as Galileo's Star Atlas: the same field-of-view definition, precession, sidereal time and limits, so that a position is drawn in the same place for the same view. | P2 |
 | MAPP-SKY-100 | All | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add to Session. | P2 |
 | MAPP-SKY-110 | All | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as the Star Atlas does. | P2 |
+| MAPP-SKY-120 | All | The app shall show the user's saved targets (`GET /mobileconnect/v1/targets`) as a Targets screen — newest first with name, type, magnitude, size and position — with Slew To, Goto and Centre, and Remove (only with control), and an empty state that says where to save objects. | P2 |
 
 ### 3.6 `MAPP-SOL` — Plate Solving and Alignment
 

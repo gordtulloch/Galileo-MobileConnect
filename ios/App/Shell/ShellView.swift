@@ -5,6 +5,7 @@ enum Area: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case equipment = "Equipment"
     case sky = "Sky"
+    case targets = "Targets"
     case imaging = "Imaging"
     case focus = "Focus"
     case solve = "Solve"
@@ -21,6 +22,7 @@ enum Area: String, CaseIterable, Identifiable {
         case .overview: "rectangle.3.group"
         case .equipment: "scope"
         case .sky: "sparkles"
+        case .targets: "star"
         case .imaging: "camera.aperture"
         case .focus: "circle.dotted.circle"
         case .solve: "viewfinder"
@@ -98,6 +100,7 @@ struct ShellView: View {
         case .overview: OverviewScreen()
         case .equipment: EquipmentScreen()
         case .sky: SkyScreen()
+        case .targets: TargetsScreen()
         case .imaging: ImagingScreen()
         case .focus: FocusScreen()
         case .solve: SolveScreen()

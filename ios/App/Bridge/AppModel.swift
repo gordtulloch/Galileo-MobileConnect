@@ -299,6 +299,22 @@ final class AppModel {
         return try? await session.tile(pier: pier, level: level, x: x, y: y, stretch: stretch, stack: stack, solve: solve)
     }
 
+    /// The Master's saved targets (nil when no Master is connected); throws what the Master or network says.
+    func loadSavedTargets() async throws -> SavedTargets? {
+        guard let session else { return nil }
+        return try await session.api.savedTargets()
+    }
+
+    /// Nil when removed; otherwise the reason it was not.
+    func removeSavedTarget(_ name: String) async -> String? {
+        guard let session else { return "Not connected to a Master." }
+        let answer = await session.api.removeTarget(name: name)
+        return answer.removed ? nil : (answer.reason ?? "The Master did not remove it.")
+    }
+
+    /// Removing needs control of the app (an Operator), not the lease: it edits a list, not a Pier.
+    var canEditTargets: Bool { snapshot.role == .operator }
+
     func makeSkyModel() -> SkyModel? {
         guard let pier = workingPier, let session else { return nil }
         return SkyModel(session: session, pier: pier)
