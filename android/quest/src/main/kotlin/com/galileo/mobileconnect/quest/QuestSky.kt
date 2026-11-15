@@ -292,16 +292,37 @@ class QuestSky(
 
     fun toWorld(rotation: Mat3, raDeg: Double, decDeg: Double): Vec3 = rotation * SkyGeometry.unitVector(raDeg.toFloat(), decDeg.toFloat())
 
-    /** The horizon profile, altitude rings, the pointing cross, the field frame and the selection ring, for the shown time. */
-    fun overlay(rotation: Mat3, night: Boolean, mount: Pair<Double, Double>?): Pair<FloatArray, FloatArray> {
+    /**
+     * The horizon profile, altitude rings, compass ticks, the telescope marker, the slew path, the field frame and the selection
+     * ring, for the shown time. Returns line vertices and triangle vertices (x, y, z, r, g, b, a each).
+     */
+    fun overlay(rotation: Mat3, night: Boolean, mount: Pair<Double, Double>?, slew: SlewTracker.Status? = null): Pair<FloatArray, FloatArray> {
         val site = site ?: return FloatArray(0) to FloatArray(0)
         val lines = ArrayList<Float>()
+        val tris = ArrayList<Float>()
         fun colour(r: Float, g: Float, b: Float, a: Float) = if (night) floatArrayOf(r.coerceAtLeast(g).coerceAtLeast(b), 0f, 0f, a) else floatArrayOf(r, g, b, a)
         fun seg(a: Vec3, b: Vec3, c: FloatArray) {
             lines += listOf(a.x, a.y, a.z, c[0], c[1], c[2], c[3])
             lines += listOf(b.x, b.y, b.z, c[0], c[1], c[2], c[3])
         }
+        fun tri(a: Vec3, b: Vec3, c: Vec3, k: FloatArray) {
+            for (v in listOf(a, b, c)) tris += listOf(v.x, v.y, v.z, k[0], k[1], k[2], k[3])
+        }
         fun horizonPoint(alt: Double, az: Double) = World.horizonToWorld(horizonDirection(alt, az))
+        /** A circle of [radiusDegrees] about [centre] on the sky, drawn as lines, and optionally filled. */
+        fun ring(centre: Vec3, radiusDegrees: Double, c: FloatArray, fill: FloatArray? = null) {
+            val (east, north) = tangent(centre)
+            val radius = tan(Math.toRadians(radiusDegrees)).toFloat()
+            val n = 32
+            fun at(i: Int): Vec3 {
+                val a = 2 * Math.PI * i / n
+                return (centre + east * (radius * cos(a).toFloat()) + north * (radius * sin(a).toFloat())).normalized()
+            }
+            for (i in 0 until n) {
+                seg(at(i), at(i + 1), c)
+                if (fill != null) tri(centre, at(i), at(i + 1), fill)
+            }
+        }
 
         // the horizon as the site has it
         val horizonColour = colour(0.9f, 0.8f, 0.5f, 0.9f)
@@ -319,42 +340,64 @@ class QuestSky(
                 az += 6.0
             }
         }
-        // north, east, south, west ticks at the horizon
-        for (a in listOf(0.0, 90.0, 180.0, 270.0)) seg(horizonPoint(0.0, a), horizonPoint(4.0, a), horizonColour)
+        // compass ticks at the horizon, under the N E S W letters (longer for the cardinal points)
+        for (a in listOf(0.0, 90.0, 180.0, 270.0)) seg(horizonPoint(0.0, a), horizonPoint(3.0, a), horizonColour)
+        for (a in listOf(45.0, 135.0, 225.0, 315.0)) seg(horizonPoint(0.0, a), horizonPoint(2.0, a), horizonColour)
 
-        // where the telescope points: a cross, and the camera's field around it
+        // the slew: the path from where the mount started to the target (the part already travelled dim, the rest bright), and the target
         val pointColour = colour(0.3f, 1f, 0.5f, 1f)
+        val slewColour = colour(1f, 0.75f, 0.2f, 1f)
+        val slewing = slew != null && !slew.arrived
+        if (slew != null) {
+            val from = toWorld(rotation, slew.fromRaDeg, slew.fromDecDeg).normalized()
+            val to = toWorld(rotation, slew.toRaDeg, slew.toDecDeg).normalized()
+            val done = colour(1f, 0.75f, 0.2f, 0.35f)
+            val steps = 60
+            for (i in 0 until steps) {
+                val t0 = i.toFloat() / steps
+                val t1 = (i + 1).toFloat() / steps
+                val travelled = t1 <= slew.progress
+                if (travelled) seg(slerp(from, to, t0), slerp(from, to, t1), done)
+                else if (i % 2 == 0) seg(slerp(from, to, t0), slerp(from, to, t1), slewColour) // dashed ahead of the mount
+            }
+            ring(to, 2.4, slewColour)
+            ring(to, 1.9, slewColour)
+            val (east, north) = tangent(to)
+            val arm = tan(Math.toRadians(3.6)).toFloat()
+            val inner = tan(Math.toRadians(2.4)).toFloat()
+            for (d in listOf(east, east * -1f, north, north * -1f)) seg((to + d * inner).normalized(), (to + d * arm).normalized(), slewColour)
+        }
+
+        // where the telescope points: a ring and open cross (large enough to find), and the camera's field around it
         mount?.let { (ra, dec) ->
             val centre = toWorld(rotation, ra, dec).normalized()
             val (east, north) = tangent(centre)
-            val arm = 0.012f
-            seg(centre + east * -arm, centre + east * arm, pointColour)
-            seg(centre + north * -arm, centre + north * arm, pointColour)
+            val c = if (slewing) slewColour else pointColour
+            ring(centre, 1.5, c, colour(c[0], c[1], c[2], 0.18f))
+            ring(centre, 1.2, c)
+            val inner = tan(Math.toRadians(0.7)).toFloat()
+            val outer = tan(Math.toRadians(3.0)).toFloat()
+            for (d in listOf(east, east * -1f, north, north * -1f)) seg((centre + d * inner).normalized(), (centre + d * outer).normalized(), c)
             fieldOfView?.let { (w, h) ->
                 val hw = tan(Math.toRadians(w / 2)).toFloat()
                 val hh = tan(Math.toRadians(h / 2)).toFloat()
-                val c = listOf(east * -hw + north * -hh, east * hw + north * -hh, east * hw + north * hh, east * -hw + north * hh)
-                for (i in 0 until 4) seg((centre + c[i]).normalized(), (centre + c[(i + 1) % 4]).normalized(), pointColour)
+                val k = listOf(east * -hw + north * -hh, east * hw + north * -hh, east * hw + north * hh, east * -hw + north * hh)
+                for (i in 0 until 4) seg((centre + k[i]).normalized(), (centre + k[(i + 1) % 4]).normalized(), c)
             }
         }
         // the selection: a ring
         selection?.let { s ->
-            val centre = toWorld(rotation, s.raDeg, s.decDeg).normalized()
-            val (east, north) = tangent(centre)
-            val ringRadius = tan(Math.toRadians(1.6)).toFloat()
-            val ring = colour(1f, 0.9f, 0.3f, 1f)
-            val n = 28
-            for (i in 0 until n) {
-                val a0 = 2 * Math.PI * i / n
-                val a1 = 2 * Math.PI * (i + 1) / n
-                seg(
-                    (centre + east * (ringRadius * cos(a0).toFloat()) + north * (ringRadius * sin(a0).toFloat())).normalized(),
-                    (centre + east * (ringRadius * cos(a1).toFloat()) + north * (ringRadius * sin(a1).toFloat())).normalized(),
-                    ring,
-                )
-            }
+            ring(toWorld(rotation, s.raDeg, s.decDeg).normalized(), 1.6, colour(1f, 0.9f, 0.3f, 1f))
         }
-        return lines.toFloatArray() to FloatArray(0)
+        return lines.toFloatArray() to tris.toFloatArray()
+    }
+
+    /** The point [t] (0..1) along the great circle from [a] to [b] (unit vectors). */
+    private fun slerp(a: Vec3, b: Vec3, t: Float): Vec3 {
+        val omega = kotlin.math.acos(a.dot(b).coerceIn(-1f, 1f))
+        if (omega < 1e-4f || omega > Math.PI.toFloat() - 1e-3f) return a
+        val s = sin(omega)
+        return (a * (sin((1 - t) * omega) / s) + b * (sin(t * omega) / s)).normalized()
     }
 
     private fun tangent(centre: Vec3): Pair<Vec3, Vec3> {

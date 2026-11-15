@@ -11,6 +11,8 @@ import com.galileo.mobileconnect.Route
 import com.galileo.mobileconnect.core.sky.SkyCamera
 import com.galileo.mobileconnect.core.sky.SkyGeometry
 import com.galileo.mobileconnect.core.sky.Vec3
+import com.galileo.mobileconnect.SessionTarget
+import com.galileo.mobileconnect.core.state.bool
 import com.galileo.mobileconnect.core.state.double
 import com.galileo.mobileconnect.ui.theme.ThemeChoice
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +22,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -57,6 +61,15 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
     private var menuPlacement = Placement(Vec3(0f, 1.5f, -0.8f), 0f)
     private var alertShown = false
     private var menuShown = false
+
+    // the description card on the right controller, the head-locked slew status, and the slew being followed
+    private var cardQuad: Quad? = null
+    private var statusQuad: Quad? = null
+    private var statusShown = false
+    private val statusState = StatusState()
+    private val slew = SlewTracker()
+    private var currentSlew: SlewTracker.Status? = null
+    private var messageUntil = 0L
 
     // -- the sky ----------------------------------------------------------------------------------------------------
 
@@ -173,10 +186,99 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         NativeBridge.nativeSetLaser(rightLaser, leftLaser)
         if (input.focused) scrollPane(dt)
         if (input.focused && !modal) controls(dt)
+        updateSlew()
+        updateCard()
+        updateStatus()
         pushSky()
         pushQuads()
         pump()
     }
+
+    // -- the slew, the description card and the status panel ----------------------------------------------------------
+
+    /** Follows the slew started from the menu, using what the Master says about the mount. */
+    private fun updateSlew() {
+        val now = System.currentTimeMillis()
+        // While the Master's confirmation is up the slew has not been allowed yet, so the wait for it does not count.
+        if (app.question != null) slew.waiting(now)
+        currentSlew = slew.update(mountPosition(), app.value("mount.slewing")?.value.bool, now)
+        statusState.slew = currentSlew
+        if (currentSlew == null) statusState.hint = null
+        if (statusState.message != null && now > messageUntil) statusState.message = null
+    }
+
+    /**
+     * The card sits on the right controller as in the spike: its bottom edge runs along the pointer axis, it faces the head, and the
+     * text reads left to right for the wearer, so turning the palm towards you reads it like a wrist display.
+     */
+    private fun updateCard() {
+        val h = input.right
+        if (!menuShown || !h.tracked || !input.focused) {
+            cardQuad = null
+            return
+        }
+        val a = h.direction.normalized()
+        val world = Vec3(0f, 1f, 0f)
+        val toHead = input.head - h.origin
+        var perp = toHead - a * toHead.dot(a)
+        perp = if (perp.length() > 1e-3f) perp.normalized() else a.cross(world).normalized()
+        val headRight = input.forward.cross(world)
+        val hr = if (headRight.length() > 1e-3f) headRight.normalized() else Vec3(1f, 0f, 0f)
+        val r = if (a.dot(hr) >= 0f) a else a * -1f
+        val u = perp.cross(r).normalized()
+        val bottom = h.origin + a * 0.02f + perp * 0.03f
+        cardQuad = Quad(bottom + u * (CARD_H / 2f), r, u, CARD_W, CARD_H, CARD_PW, CARD_PH)
+    }
+
+    /** The slew status rides above the gaze, a little way out, and turns with the head. */
+    private fun updateStatus() {
+        if (!statusShown || !input.focused) {
+            statusQuad = null
+            return
+        }
+        val f = input.forward.normalized()
+        val r = f.cross(input.up).normalized()
+        val u = r.cross(f).normalized()
+        statusQuad = Quad(input.head + f * STATUS_DISTANCE + u * STATUS_ABOVE, r, u, STATUS_W, STATUS_H, STATUS_PW, STATUS_PH)
+    }
+
+    private fun say(text: String) {
+        statusState.message = text
+        messageUntil = System.currentTimeMillis() + MESSAGE_MILLIS
+    }
+
+    /**
+     * A button on the object menu. The menu closes at once; the work (and the Master's confirmation, if it asks) goes on here, not in
+     * the menu, which no longer exists. A slew is then followed by the status panel and the telescope marker on the sky.
+     */
+    private fun menuAction(action: MenuAction, sel: Selection) {
+        skyState?.clearSelection()
+        scope.launch {
+            val args: Map<String, JsonElement> = mapOf("ra_deg" to JsonPrimitive(sel.raDeg), "dec_deg" to JsonPrimitive(sel.decDeg))
+            val problem = when (action) {
+                MenuAction.Goto -> {
+                    beginSlew(sel)
+                    app.goTo(sel.name, sel.raDeg, sel.decDeg)
+                }
+                MenuAction.Centre -> {
+                    beginSlew(sel)
+                    app.perform("solve.centre", args + ("name" to JsonPrimitive(sel.name)))
+                }
+                MenuAction.Sync -> app.perform("mount.sync", args)
+                MenuAction.AddToSession -> {
+                    app.sessionTarget = SessionTarget(sel.name, sel.raDeg, sel.decDeg)
+                    app.requestedArea = "Sessions"
+                    null
+                }
+            }
+            if (problem != null) {
+                slew.cancel()
+                say(problem)
+            }
+        }
+    }
+
+    private fun beginSlew(sel: Selection) = slew.begin(sel.name, sel.raDeg, sel.decDeg, mountPosition(), System.currentTimeMillis())
 
     private fun alertWanted() = app.route != Route.Connected || app.snapshot.stop != null || app.question != null ||
         app.emergencyOpen || app.pierPickerOpen || app.leaseOffer != null || state.noticePending
@@ -224,12 +326,27 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         val selected = sky?.selection != null
         if (selected && !menuShown) {
             menuPlacement = inFront(0.8f, 0.10f)
-            ensure(MENU, MENU_PW, MENU_PH, "object") { QuestRoot(app) { skyState?.let { ObjectMenuContent(it) { it.clearSelection() } } } }
+            ensure(MENU, MENU_PW, MENU_PH, "object") {
+                QuestRoot(app) { skyState?.let { ObjectMenuContent(it, { it.clearSelection() }, ::menuAction) } }
+            }
+            ensure(CARD, CARD_PW, CARD_PH, "card") { QuestRoot(app) { skyState?.let { ObjectCardContent(it) } } }
         } else if (!selected && menuShown) {
             Narration.stop()
             remove(MENU)
+            remove(CARD)
+            cardQuad = null
         }
         menuShown = selected
+
+        // the slew status, while a slew is followed or a message is up
+        val wantStatus = (currentSlew != null || statusState.message != null) && !alertWanted()
+        if (wantStatus && !statusShown) {
+            ensure(STATUS, STATUS_PW, STATUS_PH, "status") { QuestRoot(app) { StatusContent(statusState) } }
+        } else if (!wantStatus && statusShown) {
+            remove(STATUS)
+            statusQuad = null
+        }
+        statusShown = wantStatus
 
         // "Add to Session" and the like ask for an area by name
         app.requestedArea?.let { label ->
@@ -262,14 +379,16 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         val trackingAction = p.hold.tracking(h.tracked)
         if (trackingAction is HoldControl.Action.Stop) cancelTouch(p)
 
+        // The right grip (second trigger) reads the open object's description aloud, or stops it, as in the atlas spike. It does so
+        // wherever the pointer is, except on the dock or a pane, where it still grabs them.
+        val readAloud = p.isRight && menuShown && !modal && (located == null || located.id == MENU)
         // grab: the grip on a surface moves it, at the distance it was grabbed
-        if (gripping && !p.squeezeDown && located != null && located.id != ALERT) p.grab = Grab(located.id, located.hit.distance.coerceIn(0.5f, 3f))
+        if (gripping && !p.squeezeDown && located != null && located.id != ALERT && !readAloud) p.grab = Grab(located.id, located.hit.distance.coerceIn(0.5f, 3f))
         if (!gripping) {
             if (p.grab?.id == DOCK) saveDockPlacement()
             p.grab = null
         }
-        // right grip with an object open and nothing under the pointer to grab: read the description aloud, or stop it
-        if (p.isRight && gripping && !p.squeezeDown && located == null && menuShown) skyState?.selection?.let { Narration.toggle(it.name) }
+        if (readAloud && gripping && !p.squeezeDown) skyState?.selection?.let { Narration.toggle(it.name) }
         p.squeezeDown = gripping
         p.grab?.let { moveSurface(it, ray) }
 
@@ -329,6 +448,15 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
 
     /** Right stick up/down scrolls the panel under the right pointer, like a mouse wheel; harder push, faster scroll. */
     private fun scrollPane(dt: Double) {
+        // the description card on the right controller scrolls with the left stick's Y (its X is time, and the right stick zooms)
+        if (cardQuad != null) {
+            val stick = input.left.stickY
+            if (abs(stick) >= SCROLL_DEADZONE) {
+                val eased = (abs(stick) - SCROLL_DEADZONE) / (1f - SCROLL_DEADZONE)
+                val rate = SCROLL_NOTCHES_PER_SECOND * eased * eased * (if (stick > 0) 1f else -1f)
+                surfaces[CARD]?.window?.scroll(CARD_PW / 2f, CARD_PH / 2f, (rate * dt).toFloat())
+            }
+        }
         val over = rightOver ?: return
         val stick = input.right.stickY
         if (abs(stick) < SCROLL_DEADZONE) return
@@ -359,6 +487,8 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         DOCK -> dockPlacement?.let { Dock.quad(it) }
         ALERT -> Quad(alertPlacement.center, alertPlacement.right, alertPlacement.up, ALERT_W, ALERT_H, ALERT_PW, ALERT_PH)
         MENU -> Quad(menuPlacement.center, menuPlacement.right, menuPlacement.up, MENU_W, MENU_H, MENU_PW, MENU_PH)
+        CARD -> cardQuad
+        STATUS -> statusQuad
         else -> stack.open.firstOrNull { paneId(it.area) == id }?.quad()
     }
 
@@ -444,6 +574,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         )
         sky.ensureSamples(moment)
         val nowMs = System.currentTimeMillis()
+        if (currentSlew != null) statusState.hint = mountPosition()?.let { scopeHint(sky.toWorld(rotation, it.first, it.second).normalized()) }
 
         // ask the Master for what we are looking at once the view has settled
         val site = sky.site
@@ -466,11 +597,25 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         if (nowMs - lastSlow > 250) {
             lastSlow = nowMs
             val mount = mountPosition()
-            val (lines, tris) = sky.overlay(rotation, night, mount)
+            val (lines, tris) = sky.overlay(rotation, night, mount, currentSlew)
             NativeBridge.nativeSetOverlay(lines, lines.size / 7, tris, tris.size / 7)
             bodiesNow = sky.bodies(moment)
             pushLabels(sky, rotation, night)
         }
+    }
+
+    /** Where the telescope is relative to where the wearer faces, in words and an arrow, so a slew off to the side can be found. */
+    private fun scopeHint(scope: Vec3): String {
+        val shown = Zoom.forward(scope, zoomCentre, zoom).normalized()
+        val gaze = input.forward.normalized()
+        val away = angleBetweenDegrees(gaze, shown)
+        if (away < 20.0) return "Telescope is in view"
+        val right = gaze.cross(input.up).normalized()
+        val up = right.cross(gaze).normalized()
+        val angle = Math.toDegrees(atan2(shown.dot(up).toDouble(), shown.dot(right).toDouble()))
+        val arrows = arrayOf("→", "↗", "↑", "↖", "←", "↙", "↓", "↘")
+        val arrow = arrows[(((angle + 360 + 22.5) % 360) / 45).toInt() % 8]
+        return "Telescope is %.0f° from where you look  %s".format(away, arrow)
     }
 
     private fun mountPosition(): Pair<Double, Double>? {
@@ -480,7 +625,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
     }
 
     private fun pushLabels(sky: QuestSky, rotation: com.galileo.mobileconnect.core.sky.Mat3, night: Boolean) {
-        class L(val text: String, val dir: Vec3)
+        class L(val text: String, val dir: Vec3, val scale: Float = 1f)
         val labels = ArrayList<L>()
         fun up(v: Vec3) = Vec3(v.x, v.y + 0.035f, v.z).normalized() // a little above the thing it names
         if (showConstellations) {
@@ -488,7 +633,13 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         }
         for (b in bodiesNow) labels += L(b.name, up(sky.toWorld(rotation, b.raDeg, b.decDeg).normalized()))
         sky.selection?.let { labels += L(it.name, up(sky.toWorld(rotation, it.raDeg, it.decDeg).normalized())) }
-        for ((text, az) in listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "W" to 270.0)) labels += L(text, World.horizonToWorld(horizonDirection(4.0, az)))
+        // The compass: large letters standing on the horizon, so north is found at a glance; the in-between points are half the size.
+        for ((text, az) in listOf("N" to 0.0, "E" to 90.0, "S" to 180.0, "W" to 270.0)) {
+            labels += L(text, World.horizonToWorld(horizonDirection(CARDINAL_ALTITUDE, az)), CARDINAL_SCALE)
+        }
+        for ((text, az) in listOf("NE" to 45.0, "SE" to 135.0, "SW" to 225.0, "NW" to 315.0)) {
+            labels += L(text, World.horizonToWorld(horizonDirection(INTERCARDINAL_ALTITUDE, az)), INTERCARDINAL_SCALE)
+        }
 
         val key = labels.map { it.text }.distinct().sorted().joinToString("|")
         var bitmap: android.graphics.Bitmap? = null
@@ -502,7 +653,7 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         var count = 0
         for (l in labels) {
             val place = a.place(l.text) ?: continue
-            entries += listOf(l.dir.x, l.dir.y, l.dir.z, place.u0, place.v0, place.u1, place.v1, place.widthDegrees, place.heightDegrees)
+            entries += listOf(l.dir.x, l.dir.y, l.dir.z, place.u0, place.v0, place.u1, place.v1, place.widthDegrees * l.scale, place.heightDegrees * l.scale)
             count += 1
         }
         NativeBridge.nativeSetLabels(bitmap, entries.toFloatArray(), count)
@@ -655,6 +806,23 @@ class QuestHost(private val activity: Activity, private val app: AppViewModel) {
         private const val PANE_BASE = 1       // one id per DockArea
         private const val MENU = 12
         private const val ALERT = 13
+        private const val CARD = 14           // the object's description on the right controller
+        private const val STATUS = 15         // slew progress; the last quad (kMaxQuads is 16)
+        private const val CARD_PW = 440
+        private const val CARD_PH = 560
+        private const val CARD_W = 0.12f
+        private const val CARD_H = 0.153f
+        private const val STATUS_PW = 640
+        private const val STATUS_PH = 150
+        private const val STATUS_W = 0.40f
+        private const val STATUS_H = 0.094f
+        private const val STATUS_DISTANCE = 0.8f
+        private const val STATUS_ABOVE = 0.20f
+        private const val MESSAGE_MILLIS = 8_000L
+        private const val CARDINAL_SCALE = 4f
+        private const val CARDINAL_ALTITUDE = 8.0
+        private const val INTERCARDINAL_SCALE = 2f
+        private const val INTERCARDINAL_ALTITUDE = 5.0
         private const val DENSITY_DPI = 240
         private const val ALERT_PW = 1000
         private const val ALERT_PH = 700

@@ -1,9 +1,12 @@
 package com.galileo.mobileconnect.quest
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.rememberScrollState
@@ -17,14 +20,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlinx.coroutines.delay
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -33,7 +39,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.galileo.mobileconnect.AppViewModel
 import com.galileo.mobileconnect.Route
-import com.galileo.mobileconnect.SessionTarget
 import com.galileo.mobileconnect.core.api.Role as ObserverRole
 import com.galileo.mobileconnect.core.link.ConnectionState
 import com.galileo.mobileconnect.core.session.SessionSnapshot
@@ -46,8 +51,6 @@ import com.galileo.mobileconnect.ui.DialogLayer
 import com.galileo.mobileconnect.ui.EmergencyPanel
 import com.galileo.mobileconnect.ui.LocalApp
 import com.galileo.mobileconnect.ui.Note
-import com.galileo.mobileconnect.ui.OperationButton
-import com.galileo.mobileconnect.ui.OutcomeNote
 import com.galileo.mobileconnect.ui.PairingView
 import com.galileo.mobileconnect.ui.SessionStoppedView
 import com.galileo.mobileconnect.ui.Txt
@@ -64,9 +67,6 @@ import com.galileo.mobileconnect.ui.screens.SettingsScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 import com.galileo.mobileconnect.ui.theme.ThemeRoot
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
 
 /** What the dock shows that only the host knows. Plain state: the dock recomposes when the host changes it. */
 class DockState {
@@ -219,12 +219,18 @@ fun PaneContent(area: DockArea, targets: TargetsSource? = null, onClose: () -> U
     }
 }
 
-/** What the Star Atlas offers on an object, in the same order and under the same rules (MAPP-QST-310, MAPP-SKY-100): a Viewer gets the name and the altitude. */
+/** What the object menu can ask for. The host does the work, so closing the menu cannot cancel it. */
+enum class MenuAction { Goto, Centre, Sync, AddToSession }
+
+/**
+ * What the Star Atlas offers on an object, in the same order and under the same rules (MAPP-QST-310, MAPP-SKY-100): a Viewer
+ * gets the name and the altitude. Pressing any action closes the menu at once (the slew is then followed by the status panel and
+ * the telescope marker on the sky). The description is not here: it is the card on the right controller ([ObjectCardContent]).
+ */
 @Composable
-fun ObjectMenuContent(sky: QuestSky, onClose: () -> Unit) {
+fun ObjectMenuContent(sky: QuestSky, onClose: () -> Unit, onAct: (MenuAction, Selection) -> Unit) {
     val app = LocalApp.current
     val theme = LocalTheme.current
-    val scope = rememberCoroutineScope()
     val selection = sky.selection
     Column(Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)).background(theme.background)) {
         Row(
@@ -239,40 +245,108 @@ fun ObjectMenuContent(sky: QuestSky, onClose: () -> Unit) {
             ) { Txt("✕ Close", size = 14.sp) }
         }
         if (selection == null) return@Column
-        var goToMessage by remember(selection.name) { mutableStateOf<String?>(null) }
-        val args: Map<String, JsonElement> = mapOf("ra_deg" to JsonPrimitive(selection.raDeg), "dec_deg" to JsonPrimitive(selection.decDeg))
         Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Card(selection.name) {
-                if (selection.details.isNotEmpty()) Note(selection.details.joinToString(" · "))
                 selection.check?.let { check ->
                     Txt("Altitude now: %.1f°".format(check.altitude), size = 14.sp, weight = FontWeight.SemiBold)
                     check.reason?.let { Note(it) }
                 }
-                if (Narration.has(selection.name)) {
-                    var speaking by remember { mutableStateOf(Narration.speaking) }
-                    ActionButton(if (speaking) "■ Stop reading" else "🔊 Read aloud", tag = "object.speak") {
-                        Narration.toggle(selection.name)
-                        speaking = Narration.speaking
-                    }
-                }
                 if (app.canOperate) {
-                    ActionButton("Goto", kind = ActionKind.Prominent, tag = "object.goto") {
-                        scope.launch { goToMessage = app.goTo(selection.name, selection.raDeg, selection.decDeg) }
-                    }
-                    val record = app.record("mount.slew")
-                    when {
-                        goToMessage != null -> Note(goToMessage!!)
-                        record != null -> OutcomeNote(record)
-                    }
-                    OperationButton("Goto and Centre", "solve.centre", args + ("name" to JsonPrimitive(selection.name)))
-                    OperationButton("Sync", "mount.sync", args)
-                    ActionButton("Add to Session", tag = "object.addsession") {
-                        app.sessionTarget = SessionTarget(selection.name, selection.raDeg, selection.decDeg)
-                        app.requestedArea = "Sessions"
-                    }
+                    MenuOperation("Goto", "mount.slew", ActionKind.Prominent, "object.goto") { onAct(MenuAction.Goto, selection) }
+                    MenuOperation("Goto and Centre", "solve.centre", ActionKind.Normal, "solve.centre") { onAct(MenuAction.Centre, selection) }
+                    MenuOperation("Sync", "mount.sync", ActionKind.Normal, "mount.sync") { onAct(MenuAction.Sync, selection) }
+                    ActionButton("Add to Session", tag = "object.addsession") { onAct(MenuAction.AddToSession, selection) }
                 }
             }
         }
+    }
+}
+
+/** An operation button gated the way [OperationButton] gates it, but whose work is done by the host (see [MenuAction]). */
+@Composable
+private fun MenuOperation(title: String, operation: String, kind: ActionKind, tag: String, onClick: () -> Unit) {
+    val app = LocalApp.current
+    val info = app.operation(operation)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        ActionButton(title, kind = kind, enabled = info != null && info.available, tag = tag, onClick = onClick)
+        when {
+            info == null -> Note("This Master doesn't offer this yet.")
+            !info.available && info.unavailableBecause != null -> Note(info.unavailableBecause!!)
+        }
+    }
+}
+
+/**
+ * The description card that rides on the right controller (as in the atlas spike): name, type, magnitude, size, rise and set,
+ * and the description. The left stick scrolls it; the right grip reads it aloud. It is a surface in front of the sky, placed by
+ * the host from the controller's pose each frame.
+ */
+@Composable
+fun ObjectCardContent(sky: QuestSky) {
+    val theme = LocalTheme.current
+    val selection = sky.selection ?: return
+    var speaking by remember { mutableStateOf(Narration.speaking) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            speaking = Narration.speaking
+            delay(250)
+        }
+    }
+    val scroll = rememberScrollState()
+    val shape = RoundedCornerShape(10.dp)
+    BoxWithConstraints(Modifier.fillMaxSize().clip(shape).background(theme.background).border(2.dp, theme.accent, shape)) {
+        Column(
+            Modifier.verticalScroll(scroll).padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Txt(selection.name, size = 18.sp, weight = FontWeight.SemiBold)
+            if (Narration.has(selection.name)) {
+                Txt(
+                    if (speaking) "■ Reading aloud. Right grip stops." else "🔊 Right grip (second trigger) reads this aloud.",
+                    size = 12.sp, color = theme.accent,
+                )
+            }
+            if (selection.details.isEmpty()) Txt("Fetching details…", size = 13.sp, color = theme.textSecondary)
+            for (line in selection.details) Txt(line, size = 14.sp)
+        }
+        if (scroll.maxValue > 0) {
+            val view = constraints.maxHeight.toFloat()
+            val thumb = view * view / (view + scroll.maxValue)
+            val top = (view - thumb) * scroll.value / scroll.maxValue
+            Box(
+                Modifier.align(Alignment.TopEnd).offset { IntOffset(0, top.toInt()) }.padding(end = 4.dp).width(4.dp)
+                    .height(with(LocalDensity.current) { thumb.toDp() }).clip(RoundedCornerShape(2.dp)).background(theme.accent),
+            )
+        }
+    }
+}
+
+/** What the head-locked status panel shows: a slew in progress, and the last message from a menu action. */
+class StatusState {
+    var slew by mutableStateOf<SlewTracker.Status?>(null)
+    var hint by mutableStateOf<String?>(null)
+    var message by mutableStateOf<String?>(null)
+}
+
+/** Where the telescope is on its way, as a bar: the same numbers as the marker on the sky, in view without turning to the dock. */
+@Composable
+fun StatusContent(state: StatusState) {
+    val theme = LocalTheme.current
+    Column(
+        Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)).background(theme.background).padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+    ) {
+        state.slew?.let { s ->
+            Txt(
+                if (s.arrived) "On target: ${s.name}" else "Slewing to ${s.name}  ·  %.1f° to go".format(s.remainingDegrees),
+                size = 16.sp, weight = FontWeight.SemiBold, maxLines = 1,
+            )
+            Box(Modifier.fillMaxWidth().height(9.dp).clip(RoundedCornerShape(5.dp)).background(theme.raised)) {
+                Box(Modifier.fillMaxWidth(s.progress.coerceIn(0.02f, 1f)).fillMaxHeight().background(theme.accent))
+            }
+            state.hint?.let { Txt(it, size = 12.sp, color = theme.textSecondary, maxLines = 1) }
+        }
+        state.message?.let { Txt(it, size = 13.sp, maxLines = 2) }
     }
 }
 
