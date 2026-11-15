@@ -84,14 +84,15 @@ class DockAndPanesTest {
 
     @Test
     fun `the dock has a button for each operating area and none for the sky`() {
-        assertEquals(11, DockArea.entries.size)
+        assertEquals(12, DockArea.entries.size)
         assertTrue(DockArea.entries.none { it.label == "Sky" })
         assertEquals(DockArea.Overview, Dock.areaAt(Dock.STATUS_PIXELS + 10f, 100f))
-        assertEquals(DockArea.Equipment, Dock.areaAt(Dock.STATUS_PIXELS + Dock.CELL_PIXELS + 10f, 100f))
-        assertEquals(DockArea.Targets, Dock.areaAt(Dock.STATUS_PIXELS + 8 * Dock.CELL_PIXELS + 10f, 100f))
-        assertEquals(DockArea.Settings, Dock.areaAt(Dock.STATUS_PIXELS + 10 * Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Focus, Dock.areaAt(Dock.STATUS_PIXELS + Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Targets, Dock.areaAt(Dock.STATUS_PIXELS + 3 * Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Equipment, Dock.areaAt(Dock.STATUS_PIXELS + 10 * Dock.CELL_PIXELS + 10f, 100f))
+        assertEquals(DockArea.Settings, Dock.areaAt(Dock.STATUS_PIXELS + 11 * Dock.CELL_PIXELS + 10f, 100f))
         assertNull(Dock.areaAt(10f, 100f), "the status cell is not an area")
-        assertNull(Dock.areaAt(Dock.STATUS_PIXELS + 11 * Dock.CELL_PIXELS + 10f, 100f))
+        assertNull(Dock.areaAt(Dock.STATUS_PIXELS + 12 * Dock.CELL_PIXELS + 10f, 100f))
     }
 
     private fun stack(): PaneStack {

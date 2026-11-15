@@ -3,16 +3,17 @@ import SwiftUI
 
 enum Area: String, CaseIterable, Identifiable {
     case overview = "Overview"
-    case equipment = "Equipment"
     case sky = "Sky"
-    case targets = "Targets"
-    case imaging = "Imaging"
     case focus = "Focus"
-    case solve = "Solve"
     case polarAlignment = "Polar Alignment"
+    case targets = "Targets"
+    case mountControl = "Mount Control"
+    case imaging = "Imaging"
+    case solve = "Solve"
     case guiding = "Guiding"
     case sessions = "Sessions"
     case safety = "Safety"
+    case equipment = "Equipment"
     case settings = "Settings"
 
     var id: String { rawValue }
@@ -21,6 +22,7 @@ enum Area: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "rectangle.3.group"
         case .equipment: "scope"
+        case .mountControl: "arrow.up.and.down.and.arrow.left.and.right"
         case .sky: "sparkles"
         case .targets: "star"
         case .imaging: "camera.aperture"
@@ -99,6 +101,7 @@ struct ShellView: View {
         switch area {
         case .overview: OverviewScreen()
         case .equipment: EquipmentScreen()
+        case .mountControl: MountControlScreen()
         case .sky: SkyScreen()
         case .targets: TargetsScreen()
         case .imaging: ImagingScreen()
@@ -272,13 +275,13 @@ struct TopBar: View {
         Button {
             model.pierPickerOpen = true
         } label: {
-            Label(model.pier?.name ?? "No Pier", systemImage: "chevron.up.chevron.down")
+            Label(model.pier.map { model.label($0) } ?? "No Pier", systemImage: "chevron.up.chevron.down")
                 .font(.headline)
                 .foregroundStyle(theme.text)
                 .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Working Pier: \(model.pier?.name ?? "none")")
+        .accessibilityLabel("Working Pier: \(model.pier.map { model.label($0) } ?? "none")")
         .accessibilityIdentifier("pier.picker")
     }
 
@@ -423,7 +426,7 @@ struct DialogLayer: View {
         } else if model.pierPickerOpen {
             Dialog(title: "Working Pier") {
                 ForEach(model.snapshot.piers) { pier in
-                    Button("\(pier.name) — \(pier.node)") {
+                    Button("\(model.label(pier)) — \(pier.node)") {
                         model.workingPier = pier.id
                         model.pierPickerOpen = false
                     }

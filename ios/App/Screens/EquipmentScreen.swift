@@ -8,7 +8,6 @@ struct EquipmentScreen: View {
     var body: some View {
         ScreenScroll("Equipment") {
             ReadOnlyHint()
-            JogPad()
             Columns {
                 mount
                 MeridianFlipCards()
@@ -112,12 +111,26 @@ private struct FilterChoice: View {
     }
 }
 
-/// The mount's manual movement, at the top of Equipment and as large as the screen allows (on an iPhone, one full
-/// screen) so it can be used in the dark: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
+/// Mount Control: the mount's manual movement on a screen of its own, as large as the screen allows (on an iPhone, one
+/// full screen) so it can be used in the dark, and apart from Equipment so that screen can still be scrolled: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
 /// the mount only while it is held (`MAPP-DEV-*`, `CSURF-330`); the diagonals move both axes.
+struct MountControlScreen: View {
+    var body: some View {
+        ScreenScroll("Mount Control") {
+            ReadOnlyHint()
+            JogPad()
+        }
+    }
+}
+
 private struct JogPad: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
+    /// The jog speed, the Mount page's levels 1 to 9, kept on the device.
+    @AppStorage("mount.jogLevel") private var level = 7
+
+    /// deg/s for each level, as Galileo's Mount page (`JOG_RATE_LEVELS`), for the label.
+    private static let rates: [Int: String] = [1: "0.002", 2: "0.004", 3: "0.008", 4: "0.017", 5: "0.033", 6: "0.084", 7: "0.2", 8: "1", 9: "10"]
 
     private static let rows: [[(String, String, String)]] = [
         [("North West", "arrow.up.left", "northwest"), ("North", "arrow.up", "north"), ("North East", "arrow.up.right", "northeast")],
@@ -139,14 +152,17 @@ private struct JogPad: View {
                                     stop
                                 } else {
                                     HoldButton(title: cell.0, icon: cell.1, family: "mount",
-                                               args: ["direction": .string(direction(cell))], large: true)
+                                               args: args(direction(cell), info), large: true)
                                 }
                             }
                         }
                     }
                 }
                 // One full screen on a phone: the visible height less the screen's own padding.
-                .containerRelativeFrame(.vertical) { length, _ in max(320, length - 2 * (Layout.spacing + 4)) }
+                .containerRelativeFrame(.vertical) { length, _ in max(280, length - 2 * (Layout.spacing + 4) - 96) }
+                if info.arguments.contains(where: { $0.name == "level" }) {
+                    speed
+                }
                 if let choices = info.arguments.first(where: { $0.name == "direction" })?.choices, !choices.contains("northeast") {
                     Note("This Master doesn't offer diagonal moves yet: update Galileo on the Master.")
                 }
@@ -154,6 +170,47 @@ private struct JogPad: View {
             } else {
                 Note("Jog: this Master doesn't offer held mount movement yet.")
             }
+        }
+    }
+
+    /// The direction, and the speed when this Master takes one.
+    private func args(_ direction: String, _ info: OperationInfo) -> [String: JSONValue] {
+        var args: [String: JSONValue] = ["direction": .string(direction)]
+        if info.arguments.contains(where: { $0.name == "level" }) { args["level"] = .number(Double(level)) }
+        return args
+    }
+
+    /// The speed slider, under the pad: a stepped track drawn here (the system slider can't be held to Night).
+    private var speed: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Speed \(level) · \(Self.rates[level] ?? "")°/s").font(.subheadline.weight(.semibold)).foregroundStyle(theme.text)
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                ZStack(alignment: .leading) {
+                    Capsule().fill(theme.raised).frame(height: 14)
+                    Capsule().fill(theme.accent).frame(width: 18 + (width - 36) * CGFloat(level - 1) / 8, height: 14)
+                    Circle().fill(theme.text).frame(width: 36, height: 36)
+                        .offset(x: (width - 36) * CGFloat(level - 1) / 8)
+                }
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 0).onChanged { value in
+                    let fraction = min(1, max(0, (value.location.x - 18) / max(1, width - 36)))
+                    level = 1 + Int((fraction * 8).rounded())
+                })
+            }
+            .frame(height: 44)
+            .accessibilityElement()
+            .accessibilityLabel("Jog speed")
+            .accessibilityValue("\(level) of 9")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: level = min(9, level + 1)
+                case .decrement: level = max(1, level - 1)
+                @unknown default: break
+                }
+            }
+            .accessibilityIdentifier("mount.speed")
         }
     }
 

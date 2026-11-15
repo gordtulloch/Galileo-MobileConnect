@@ -68,13 +68,13 @@ fun OverviewScreen() {
         }
         Columns(
             left = {
-                SessionCard()
                 ActivityCard()
                 AlertsCard()
             },
             right = {
                 PiersCard()
                 NodeHealthCard()
+                SessionCard()
             },
         )
     }
@@ -95,13 +95,15 @@ private fun PiersCard() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Txt(pier.name, size = 18.sp, weight = FontWeight.SemiBold)
+                    Txt(app.label(pier), size = 18.sp, weight = FontWeight.SemiBold)
                     Txt(pier.node, size = 13.sp)
                     Txt(statusLine(app.snapshot, pier), size = 13.sp)
                 }
                 if (selected) Txt("✓", modifier = Modifier.semantics { contentDescription = "Working Pier" })
             }
         }
+        // For the working Pier (the one picked above).
+        OperationButton("Connect All Devices", "device.connect_all", kind = ActionKind.Prominent)
     }
 }
 

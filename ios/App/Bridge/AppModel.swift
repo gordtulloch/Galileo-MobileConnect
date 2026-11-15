@@ -388,6 +388,13 @@ final class AppModel {
 
     var pier: PierInfo? { snapshot.piers.first { $0.id == workingPier } }
 
+    /// How a Pier is named in a list: "Observatory - Pier" when the Master has more than one Observatory, else its name.
+    func label(_ pier: PierInfo) -> String {
+        let observatories = Set(snapshot.piers.compactMap { $0.observatory }.filter { !$0.isEmpty })
+        guard observatories.count > 1, let observatory = pier.observatory, !observatory.isEmpty else { return pier.name }
+        return "\(observatory) - \(pier.name)"
+    }
+
     func value(_ key: String) -> ValueView? {
         guard let workingPier else { return nil }
         return snapshot.value(key, pier: workingPier, now: now)

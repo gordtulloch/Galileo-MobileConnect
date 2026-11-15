@@ -63,7 +63,7 @@ final class DemoUITests: XCTestCase {
         waitForShell()
         XCTAssertTrue(element("demo.banner").exists, "a demo must say so")
         sleep(2)  // let the first deltas arrive
-        for area in ["Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings"] {
+        for area in ["Overview", "Equipment", "Mount Control", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings"] {
             open(area)
             sleep(1)
             XCTAssertTrue(element("emergency").exists, "emergency must be on \(area)")

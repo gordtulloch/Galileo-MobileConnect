@@ -36,7 +36,7 @@ class DemoUiTest {
     val compose = createEmptyComposeRule()
 
     private var scenario: ActivityScenario<MainActivity>? = null
-    private val areas = listOf("Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings")
+    private val areas = listOf("Overview", "Equipment", "Mount Control", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings")
 
     @Before
     fun launch() {

@@ -432,6 +432,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     val pier: PierInfo? get() = snapshot.piers.firstOrNull { it.id == workingPier }
 
+    /** How a Pier is named in a list: "Observatory - Pier" when the Master has more than one Observatory, else its name. */
+    fun label(pier: PierInfo): String {
+        val observatories = snapshot.piers.mapNotNull { it.observatory?.takeIf { name -> name.isNotEmpty() } }.toSet()
+        val observatory = pier.observatory
+        return if (observatories.size > 1 && !observatory.isNullOrEmpty()) "$observatory - ${pier.name}" else pier.name
+    }
+
     fun value(key: String): ValueView? = workingPier?.let { snapshot.value(key, it, now) }
 
     /** Child keys under a prefix, for example the safety inputs. */

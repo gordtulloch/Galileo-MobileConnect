@@ -85,7 +85,7 @@ fun DialogLayer() {
         app.pierPickerOpen -> Dialog("Working Pier") {
             app.snapshot.piers.forEach { pier ->
                 ActionButton(
-                    "${pier.name} — ${pier.node}", kind = if (pier.id == app.workingPier) ActionKind.Prominent else ActionKind.Normal,
+                    "${app.label(pier)} — ${pier.node}", kind = if (pier.id == app.workingPier) ActionKind.Prominent else ActionKind.Normal,
                     tag = "pier.choose.${pier.id}",
                 ) {
                     app.workingPier = pier.id

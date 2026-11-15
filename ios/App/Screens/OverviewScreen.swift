@@ -17,12 +17,12 @@ struct OverviewScreen: View {
                 }
             }
             Columns {
-                session
                 ActivityCard()
                 alerts
             } right: {
                 piers
                 NodeHealthCard()
+                session
             }
         }
     }
@@ -36,7 +36,7 @@ struct OverviewScreen: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(pier.name).font(.headline)
+                            Text(model.label(pier)).font(.headline)
                             Text(pier.node).font(.footnote)
                             Text(statusLine(pier)).font(.footnote)
                         }
@@ -54,6 +54,8 @@ struct OverviewScreen: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("pier.\(pier.id)")
             }
+            // For the working Pier (the one picked above).
+            OperationButton(title: "Connect All Devices", operation: "device.connect_all", icon: "power", kind: .prominent)
         }
     }
 

@@ -52,6 +52,7 @@ import com.galileo.mobileconnect.ui.screens.SafetyScreen
 import com.galileo.mobileconnect.ui.screens.SessionsScreen
 import com.galileo.mobileconnect.ui.screens.SettingsScreen
 import com.galileo.mobileconnect.ui.sky.SkyScreen
+import com.galileo.mobileconnect.ui.screens.MountControlScreen
 import com.galileo.mobileconnect.ui.screens.PolarAlignmentScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
 import com.galileo.mobileconnect.ui.screens.TargetsScreen
@@ -60,16 +61,17 @@ import kotlinx.serialization.json.JsonArray
 
 enum class Area(val label: String, val glyph: String) {
     Overview("Overview", "▤"),
-    Equipment("Equipment", "⌖"),
     Sky("Sky", "✦"),
-    Targets("Targets", "★"),
-    Imaging("Imaging", "◉"),
     Focus("Focus", "◎"),
-    Solve("Solve", "⌗"),
     PolarAlignment("Polar Alignment", "⌖"),
+    Targets("Targets", "★"),
+    MountControl("Mount Control", "✥"),
+    Imaging("Imaging", "◉"),
+    Solve("Solve", "⌗"),
     Guiding("Guiding", "⊕"),
     Sessions("Sessions", "☰"),
     Safety("Safety", "⚑"),
+    Equipment("Equipment", "⌖"),
     Settings("Settings", "⚙");
 
     companion object {
@@ -129,6 +131,7 @@ private fun Detail(area: Area) {
     when (area) {
         Area.Overview -> OverviewScreen()
         Area.Equipment -> EquipmentScreen()
+        Area.MountControl -> MountControlScreen()
         Area.Sky -> SkyScreen()
         Area.Targets -> TargetsScreen()
         Area.Imaging -> ImagingScreen()
@@ -271,11 +274,11 @@ private fun PierPicker() {
     // A dialog rather than a menu: a system menu can't be held to Night.
     Row(
         Modifier.heightIn(min = 44.dp).clickable(role = Role.Button) { app.pierPickerOpen = true }.testTag("pier.picker")
-            .semantics { contentDescription = "Working Pier: ${app.pier?.name ?: "none"}" },
+            .semantics { contentDescription = "Working Pier: ${app.pier?.let { app.label(it) } ?: "none"}" },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Txt(app.pier?.name ?: "No Pier", size = 18.sp, weight = FontWeight.SemiBold)
+        Txt(app.pier?.let { app.label(it) } ?: "No Pier", size = 18.sp, weight = FontWeight.SemiBold)
         Txt("⇅", size = 14.sp)
     }
 }

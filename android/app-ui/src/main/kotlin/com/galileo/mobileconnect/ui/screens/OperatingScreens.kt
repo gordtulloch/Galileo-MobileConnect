@@ -1,6 +1,14 @@
 package com.galileo.mobileconnect.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import kotlin.math.roundToInt
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -75,7 +83,6 @@ fun ReadOnlyHint() {
 fun EquipmentScreen() {
     ScreenScroll("Equipment") {
         ReadOnlyHint()
-        JogPad()
         Columns(
             left = {
                 MountCard()
@@ -176,9 +183,18 @@ private fun DomeCard() {
     }
 }
 
+/** Mount Control: the mount's manual movement on a screen of its own, so Equipment can still be scrolled. */
+@Composable
+fun MountControlScreen() {
+    ScreenScroll("Mount Control") {
+        ReadOnlyHint()
+        JogPad()
+    }
+}
+
 /**
- * The mount's manual movement, at the top of Equipment and as large as the screen allows (about one full screen on a
- * phone) so it can be used in the dark: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
+ * The mount's manual movement, as large as the screen allows (about one full screen on a phone) so it can be used in
+ * the dark: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
  * the mount only while it is held (CSURF-330); the diagonals move both axes.
  */
 @Composable
@@ -192,9 +208,12 @@ private fun JogPad() {
         Note("Jog: this Master doesn't offer held mount movement yet.")
         return
     }
-    fun direction(name: String) = mapOf("direction" to JsonPrimitive(name))
+    var level by remember { mutableStateOf(app.pref("mount.jogLevel", "7").toIntOrNull()?.coerceIn(1, 9) ?: 7) }
+    val takesLevel = info.arguments.any { it.name == "level" }
+    fun direction(name: String): Map<String, kotlinx.serialization.json.JsonElement> =
+        buildMap { put("direction", JsonPrimitive(name)); if (takesLevel) put("level", JsonPrimitive(level)) }
     // The screen less the top bar, the area strip and the screen's padding.
-    val height = (LocalConfiguration.current.screenHeightDp - 200).coerceAtLeast(320).dp
+    val height = (LocalConfiguration.current.screenHeightDp - 200 - (if (takesLevel) 96 else 0)).coerceAtLeast(280).dp
     val rows = listOf(
         listOf(Triple("North West", "↖", "northwest"), Triple("North", "↑", "north"), Triple("North East", "↗", "northeast")),
         listOf(Triple("West", "←", "west"), null, Triple("East", "→", "east")),
@@ -218,6 +237,7 @@ private fun JogPad() {
             }
         }
     }
+    if (takesLevel) JogSpeed(level) { level = it; app.setPref("mount.jogLevel", it.toString()) }
     val diagonals = info.arguments.firstOrNull { it.name == "direction" }?.choices
     if (diagonals != null && "northeast" !in diagonals) Note("This Master doesn't offer diagonal moves yet: update Galileo on the Master.")
     app.snapshot.hold.explanation?.let { Note(it) }
@@ -543,4 +563,44 @@ private fun jobDetail(job: kotlinx.serialization.json.JsonElement): String {
     val total = job["total_required"].int
     if (done != null && total != null && total > 0) parts += "$done of $total frames"
     return parts.joinToString(", ")
+}
+
+/** deg/s for each jog level, as Galileo's Mount page (`JOG_RATE_LEVELS`), for the label. */
+private val JOG_RATES = listOf("0.002", "0.004", "0.008", "0.017", "0.033", "0.084", "0.2", "1", "10")
+
+/** The jog speed slider, under the pad: a stepped track drawn here (a system slider can't be held to Night). */
+@Composable
+private fun JogSpeed(level: Int, onLevel: (Int) -> Unit) {
+    val theme = LocalTheme.current
+    val thumb = 36.dp
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Txt("Speed $level · ${JOG_RATES[level - 1]}°/s", weight = FontWeight.SemiBold)
+        androidx.compose.foundation.layout.BoxWithConstraints(
+            Modifier.fillMaxWidth().height(44.dp)
+                .testTag("mount.speed")
+                .semantics { contentDescription = "Jog speed"; stateDescription = "$level of 9" }
+                .pointerInput(Unit) {
+                    detectDragGestures(onDragStart = {}, onDrag = { change, _ ->
+                        change.consume()
+                        val width = size.width.toFloat()
+                        val fraction = ((change.position.x - thumb.toPx() / 2) / (width - thumb.toPx())).coerceIn(0f, 1f)
+                        onLevel(1 + (fraction * 8).roundToInt())
+                    })
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures { offset ->
+                        val width = size.width.toFloat()
+                        val fraction = ((offset.x - thumb.toPx() / 2) / (width - thumb.toPx())).coerceIn(0f, 1f)
+                        onLevel(1 + (fraction * 8).roundToInt())
+                    }
+                },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            val travel = maxWidth - thumb
+            val position = travel * ((level - 1) / 8f)
+            Box(Modifier.fillMaxWidth().height(14.dp).clip(RoundedCornerShape(7.dp)).background(theme.raised))
+            Box(Modifier.width(position + thumb / 2).height(14.dp).clip(RoundedCornerShape(7.dp)).background(theme.accent))
+            Box(Modifier.padding(start = position).size(thumb).clip(androidx.compose.foundation.shape.CircleShape).background(theme.text))
+        }
+    }
 }

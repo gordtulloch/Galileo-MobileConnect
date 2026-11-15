@@ -63,6 +63,7 @@ import com.galileo.mobileconnect.ui.screens.OverviewScreen
 import com.galileo.mobileconnect.ui.screens.SafetyScreen
 import com.galileo.mobileconnect.ui.screens.SessionsScreen
 import com.galileo.mobileconnect.ui.screens.SettingsScreen
+import com.galileo.mobileconnect.ui.screens.MountControlScreen
 import com.galileo.mobileconnect.ui.screens.PolarAlignmentScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
 import com.galileo.mobileconnect.ui.theme.LocalTheme
@@ -81,6 +82,7 @@ class DockState {
 private fun glyph(area: DockArea) = when (area) {
     DockArea.Overview -> "▤"
     DockArea.Equipment -> "⌖"
+    DockArea.MountControl -> "✥"
     DockArea.Imaging -> "◉"
     DockArea.Focus -> "◎"
     DockArea.Solve -> "⌗"
@@ -205,6 +207,7 @@ fun PaneContent(area: DockArea, targets: TargetsSource? = null, onClose: () -> U
             when (area) {
                 DockArea.Overview -> OverviewScreen()
                 DockArea.Equipment -> EquipmentScreen()
+                DockArea.MountControl -> MountControlScreen()
                 DockArea.Imaging -> ImagingScreen()
                 DockArea.Focus -> FocusScreen()
                 DockArea.Solve -> SolveScreen()
