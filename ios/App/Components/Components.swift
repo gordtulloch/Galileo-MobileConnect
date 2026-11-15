@@ -484,14 +484,24 @@ struct HoldButton: View {
     let icon: String
     let family: String
     let args: [String: JSONValue]
+    /// Fills the space it is given, with a big arrow and no text: for the jog pad, used in the dark.
+    var large = false
+    /// Taller than the usual target, for the controls used in the dark (focus's Hold in and Hold out).
+    var minHeight: CGFloat?
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @State private var pressed = false
 
     var body: some View {
-        Label(title, systemImage: icon)
-            .font(.body.weight(.semibold))
-            .frame(maxWidth: .infinity, minHeight: Layout.minimumTarget)
+        Group {
+            if large {
+                Image(systemName: icon).font(.system(size: 56, weight: .bold)).accessibilityHidden(true)
+            } else {
+                Label(title, systemImage: icon).font(minHeight == nil ? .body.weight(.semibold) : .title3.weight(.bold))
+            }
+        }
+            .frame(maxWidth: .infinity, maxHeight: large ? .infinity : nil)
+            .frame(minHeight: minHeight ?? Layout.minimumTarget)
             .background(pressed ? theme.accent : theme.raised, in: RoundedRectangle(cornerRadius: 10))
             .foregroundStyle(pressed ? theme.onAccent : theme.text)
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(theme.border))

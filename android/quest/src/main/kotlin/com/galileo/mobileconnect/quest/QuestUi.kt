@@ -56,7 +56,6 @@ import com.galileo.mobileconnect.ui.SessionStoppedView
 import com.galileo.mobileconnect.ui.Txt
 import com.galileo.mobileconnect.ui.WelcomeView
 import com.galileo.mobileconnect.ui.screens.EquipmentScreen
-import com.galileo.mobileconnect.ui.screens.FlipScreen
 import com.galileo.mobileconnect.ui.screens.FocusScreen
 import com.galileo.mobileconnect.ui.screens.GuidingScreen
 import com.galileo.mobileconnect.ui.screens.ImagingScreen
@@ -64,6 +63,7 @@ import com.galileo.mobileconnect.ui.screens.OverviewScreen
 import com.galileo.mobileconnect.ui.screens.SafetyScreen
 import com.galileo.mobileconnect.ui.screens.SessionsScreen
 import com.galileo.mobileconnect.ui.screens.SettingsScreen
+import com.galileo.mobileconnect.ui.screens.PolarAlignmentScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 import com.galileo.mobileconnect.ui.theme.ThemeRoot
@@ -84,8 +84,8 @@ private fun glyph(area: DockArea) = when (area) {
     DockArea.Imaging -> "◉"
     DockArea.Focus -> "◎"
     DockArea.Solve -> "⌗"
+    DockArea.PolarAlignment -> "⌖"
     DockArea.Guiding -> "⊕"
-    DockArea.Flip -> "⇄"
     DockArea.Sessions -> "☰"
     DockArea.Targets -> "★"
     DockArea.Safety -> "⚑"
@@ -208,8 +208,8 @@ fun PaneContent(area: DockArea, targets: TargetsSource? = null, onClose: () -> U
                 DockArea.Imaging -> ImagingScreen()
                 DockArea.Focus -> FocusScreen()
                 DockArea.Solve -> SolveScreen()
+                DockArea.PolarAlignment -> PolarAlignmentScreen()
                 DockArea.Guiding -> GuidingScreen()
-                DockArea.Flip -> FlipScreen()
                 DockArea.Sessions -> SessionsScreen()
                 DockArea.Targets -> TargetsPaneContent(targets)
                 DockArea.Safety -> SafetyScreen()

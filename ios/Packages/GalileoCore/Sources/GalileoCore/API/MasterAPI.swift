@@ -319,6 +319,17 @@ public struct MasterAPI: Sendable {
         }
     }
 
+    /// The survey picture of one saved target (JPEG), or nil when there is none (not saved, or the Master is offline).
+    public func targetThumbnail(name: String, size: Int = 200) async throws -> Data? {
+        let output = try await calling { try await client.getTargetThumbnail(query: .init(name: name, size: size)) }
+        switch output {
+        case .ok(let response): return try await Data(collecting: response.body.jpeg, upTo: 4 * 1024 * 1024)
+        case .notFound: return nil
+        case .unauthorized: throw LinkError.unpaired
+        case .undocumented(let status, _): throw Self.unexpected(status)
+        }
+    }
+
     /// Takes one object off the list. Needs control: a Viewer gets `false` and the Master's words.
     public func removeTarget(name: String) async -> (removed: Bool, reason: String?) {
         guard let output = try? await calling({ try await client.removeTarget(query: .init(name: name)) }) else {

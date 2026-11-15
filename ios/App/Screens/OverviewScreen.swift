@@ -17,11 +17,11 @@ struct OverviewScreen: View {
                 }
             }
             Columns {
-                piers
-                ActivityCard()
-            } right: {
                 session
+                ActivityCard()
                 alerts
+            } right: {
+                piers
                 NodeHealthCard()
             }
         }

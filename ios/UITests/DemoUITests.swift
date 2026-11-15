@@ -63,7 +63,7 @@ final class DemoUITests: XCTestCase {
         waitForShell()
         XCTAssertTrue(element("demo.banner").exists, "a demo must say so")
         sleep(2)  // let the first deltas arrive
-        for area in ["Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Guiding", "Flip", "Sessions", "Safety", "Settings"] {
+        for area in ["Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings"] {
             open(area)
             sleep(1)
             XCTAssertTrue(element("emergency").exists, "emergency must be on \(area)")
@@ -310,7 +310,7 @@ final class DemoUITests: XCTestCase {
         waitForShell()
         element("lease.take").tap()
         XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
-        open("Flip")
+        open("Equipment")
         XCTAssertTrue(app.staticTexts["Scheduled"].waitForExistence(timeout: 5))
         let flip = element("flip.now")
         XCTAssertTrue(flip.waitForExistence(timeout: 5))

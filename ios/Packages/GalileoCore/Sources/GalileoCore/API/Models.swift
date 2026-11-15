@@ -127,7 +127,7 @@ public struct OperationInfo: Sendable, Equatable, Identifiable {
 public enum CatalogueFilter {
     static let allowedAreas: Set<String> = [
         "camera", "device", "dome", "filter", "flatpanel", "flip", "focus", "guiding", "history", "imaging", "mount",
-        "pier", "rotator", "safety", "scheduler", "session", "sky", "solve", "system", "weather",
+        "pier", "polar", "rotator", "safety", "scheduler", "session", "sky", "solve", "system", "weather",
     ]
 
     /// nil when the entry must not reach the app: an unknown class (`config` included) or a name outside the areas.

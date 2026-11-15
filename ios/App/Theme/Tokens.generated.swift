@@ -79,7 +79,7 @@ extension ThemeTokens {
 }
 
 enum Layout {
-    static let minimumTarget: CGFloat = 56
+    static let minimumTarget: CGFloat = 48
     static let compactTarget: CGFloat = 36
     static let spacing: CGFloat = 12
     static let cornerRadius: CGFloat = 12

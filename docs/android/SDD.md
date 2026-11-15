@@ -156,7 +156,7 @@ One Compose screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 - **Jog pad and held controls.** `pointerInput` with `awaitEachGesture { awaitFirstDown(); … }` calls `HoldSession.start` on touch-down and `.stop` on release, cancellation (a lost pointer, a system gesture taking the touch), or when the composable leaves the composition (`DisposableEffect`). It also stops when the activity stops (Section 3.7) and when the window loses focus (`onWindowFocusChanged`; a notification shade or a multi-window switch). Multitouch: a second finger does not extend a hold; only the pointer that started it counts (`MAPP-DEV-030`).
 - **Charts.** There is no Compose chart library the app can adopt without Material or Play Services dependencies it doesn't want. The guide trace, V-curve and history charts are drawn with `Canvas` by one small `Chart` component in `:app` (lines, points, axes, the tokens' colours), fed by `S-STATE`/`S-API`. Its tick and label layout is unit-tested on the JVM.
-- **Controls sized for gloves.** 56 dp minimum target (Section 3.8); `minimumInteractiveComponentSize` is not relied on, since the components are the app's own.
+- **Controls sized for gloves.** 48 dp minimum target (Section 3.8, Android's own minimum; it was 56 dp until phone users found the buttons too large); `minimumInteractiveComponentSize` is not relied on, since the components are the app's own.
 - **Satisfies:** `MAPP-DEV-*`, `MAPP-IMG-010`, `020`, `050`, `060`, `MAPP-SOL-*`, `MAPP-FOC-*`, `MAPP-GUI-*`, `MAPP-FLP-*`, `MAPP-CAL-*`, `MAPP-SAF-030`.
 
 ### 3.5 `A-SKY` — Sky view

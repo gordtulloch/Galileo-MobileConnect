@@ -19,7 +19,7 @@ How the iPadOS/iOS app puts a native SwiftUI interface on the core specified in 
 
 ### 1.2 Status
 
-Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding, Flip and Safety screens; `I-SKY` without the P2 framing and target lists; and of `I-SES` the run view and job queue. Polar alignment is on the Solve screen (2026-11-08, `MAPP-SOL-030`; against the mock only). Not built, all P2: session authoring, Library, calibration, notifications. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
+Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC`, `S-MOCK`), `I-CONN`, `I-TRUST`, `I-SHELL`, `I-SAFE`, `I-THEME`, `I-BRIDGE`, `I-LIFE` without notifications; of `I-OPS`/`I-IMG` the Equipment, Imaging, Focus, Solve, Guiding and Safety screens (the meridian flip, `MAPP-FLP-*`, is a card on Equipment under the Mount); `I-SKY` without the P2 framing and target lists; and of `I-SES` the run view and job queue. Polar alignment is on the Solve screen (2026-11-08, `MAPP-SOL-030`; against the mock only). Not built, all P2: session authoring, Library, calibration, notifications. `docs/CHECKLIST.md` section 5a has the detail. Choices that depend on a spike or a device measurement are marked **proposed** and listed in Section 5.
 
 ---
 
@@ -87,8 +87,8 @@ Built (2026-11-06): `GalileoCore` (`S-LINK`, `S-API`, `S-STATE`, `S-CTL`, `S-SEC
 
 ### 3.1 `I-SHELL` — App shell and navigation
 
-- **Structure.** On iPad, a menu of areas exactly as wide as its longest label, which slides over the screen from a button in the top bar and hides itself once used, so that screens keep their width; *Keep open* pins it beside the content instead, and is remembered. Content is in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas. Neither uses the system's split view or navigation bar: their controls can't be held to Night. Areas built so far: Overview, Equipment, Sky, Imaging, Focus, Solve, Guiding, Flip, Sessions, Safety, Settings; an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
-- **Overview** (`MAPP-OVR-010`–`070`): Pier list with node, state and grant; per-Pier activity timeline drawn from the Dashboard lanes (`S-STATE`); alert list with severity and time; a banner for a new alert while connected.
+- **Structure.** On iPad, a menu of areas exactly as wide as its longest label, which slides over the screen from a button in the top bar and hides itself once used, so that screens keep their width; *Keep open* pins it beside the content instead, and is remembered. Content is in two columns (`MAPP-LAY-010`). On iPhone, a themed strip of areas. Neither uses the system's split view or navigation bar: their controls can't be held to Night. Areas built so far: Overview, Equipment, Sky, Imaging, Focus, Solve, Polar Alignment, Guiding, Sessions, Safety, Settings (the meridian flip is a card on Equipment, under the Mount); an area appears when it works, not before. A persistent top bar shows: the **working Pier** with a switcher (`MAPP-OVR-030`), the **connection state** (connected / reconnecting / unreachable, with the age of the oldest value on screen), the **role** (Viewer/Operator) and **lease** holder, the **safety indicator** (`MAPP-SAF-010`), and the **emergency** button (`MAPP-EMG-010`). They are in the shell so they appear on every screen.
+- **Overview** (`MAPP-OVR-010`–`070`): session status; per-Pier activity timeline drawn from the Dashboard lanes (`S-STATE`); alert list with severity and time, under the status; then the Pier list with node, state and grant (lower, as it is used less); a banner for a new alert while connected.
 - **No configuration.** There is no Settings screen for the observatory. The app's own **Settings** screen contains only app preferences (theme, data saver, units display) and the list of paired Masters with *Unpair* (`MAPP-CFG-010`); read-only Pier and optical-train information appears as detail views (`MAPP-CFG-020`).
 - **Satisfies:** `MAPP-OVR-*`, `MAPP-CFG-010`, `020`, `MAPP-LAY-010`, `020`.
 
@@ -118,7 +118,8 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 |---|---|---|
 | Equipment | Per-device cards with connect/disconnect, state, and the device's controls: mount (slew, sync, tracking, park/unpark, home, pulse, **jog pad**), camera (cooling, parameters), filter wheel, rotator, dome, flat panel, switches, weather | `DEV-*` |
 | Imaging | The frame fills the screen (pinch, pan, tiles). Exposure, count, frame type, gain and offset sit in a compact panel that slides down from the top, with stretch, single exposure, abort and live loop one tap further; exposure, series and live-stack progress are bars along the bottom edge, with a Show stack checkbox for which picture and statistics a small caption, with no panels | `IMG-010`, `020`, `050`, `060` |
-| Solve | Latest frame on the left; on the right, stacked panes (solver control with the bullseye, exposure, Capture & Solve, Load & Slew, Stop and the Solver Action; latest result with Solution Coordinates (JNow); centre; polar alignment; polar error) that the user can hide, so polar alignment's prompts can have the column | `SOL-*` |
+| Solve | One column: Capture & Solve, Load & Slew and Stop; the bullseye; dRA, dDec and total deviation; exposure; camera choice (`solve.cameras`, sent as `camera_slot`); the Solver Action; latest result with Solution Coordinates (JNow); and last the latest frame, small, to show the imaging works | `SOL-*` |
+| Polar Alignment | Its own area (`MAPP-SOL-030`), one scrolling column: the polar error at the top as numbers (total with its quality band, north-south altitude and east-west azimuth deviation each with a direction, and the correction in words), then Start/Stop, then the latest frame small at the bottom. No plot or trend graph | `SOL-030` |
 | Focus | Manual focus (focus-module operations only: step in/out, absolute move, halt, position and temperature) and autofocus (progress, V-curve chart, result, temperature compensation) | `FOC-*` |
 | Guiding | Connect, start/stop, dither, recalibrate, error trace, star cut-out | `GUI-*` |
 | Flip | State, time remaining, trigger/defer with confirmation | `FLP-*` |
@@ -126,7 +127,7 @@ One SwiftUI screen per area, each built from the catalogue (Shared SDD ADR-APP-0
 
 - **Jog pad and held controls.** Implemented as a `DragGesture(minimumDistance: 0)` control that calls `HoldSession.start` on touch-down and `.stop` on touch-up, cancellation, or when the view disappears; it also stops when the scene leaves the active phase (Section 3.7) (`MAPP-DEV-030`).
 - **Charts.** Swift Charts for the guide trace, V-curve and history; data from `S-STATE`/`S-API`.
-- **Controls sized for gloves.** Minimum target 56 pt on iPad (Section 3.8).
+- **Controls sized for gloves.** Minimum target 48 pt (Section 3.8), above Apple's 44 pt; it was 56 pt until phone users found the buttons too large.
 - **Satisfies:** `MAPP-DEV-*`, `MAPP-IMG-010`, `020`, `050`, `060`, `MAPP-SOL-*`, `MAPP-FOC-*`, `MAPP-GUI-*`, `MAPP-FLP-*`, `MAPP-CAL-*`, `MAPP-SAF-030`.
 
 ### 3.5 `I-SKY` — Sky view

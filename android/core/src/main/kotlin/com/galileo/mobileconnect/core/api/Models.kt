@@ -96,7 +96,7 @@ data class OperationInfo(
 object CatalogueFilter {
     private val allowedAreas = setOf(
         "camera", "device", "dome", "filter", "flatpanel", "flip", "focus", "guiding", "history", "imaging", "mount",
-        "pier", "rotator", "safety", "scheduler", "session", "sky", "solve", "system", "weather",
+        "pier", "polar", "rotator", "safety", "scheduler", "session", "sky", "solve", "system", "weather",
     )
 
     /** Null when the entry must not reach the app: an unknown class (`config` included) or a name outside the areas. */

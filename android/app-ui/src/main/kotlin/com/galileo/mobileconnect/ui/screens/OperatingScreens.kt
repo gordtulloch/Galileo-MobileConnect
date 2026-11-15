@@ -1,6 +1,17 @@
 package com.galileo.mobileconnect.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -42,6 +53,7 @@ import com.galileo.mobileconnect.ui.ThemedProgress
 import com.galileo.mobileconnect.ui.Txt
 import com.galileo.mobileconnect.ui.ValueRow
 import com.galileo.mobileconnect.ui.explanation
+import com.galileo.mobileconnect.ui.minimumTarget
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 import com.galileo.mobileconnect.ui.theme.ThemeChoice
 import kotlinx.coroutines.launch
@@ -63,8 +75,12 @@ fun ReadOnlyHint() {
 fun EquipmentScreen() {
     ScreenScroll("Equipment") {
         ReadOnlyHint()
+        JogPad()
         Columns(
-            left = { MountCard() },
+            left = {
+                MountCard()
+                MeridianFlipCard()
+            },
             right = {
                 CameraCard()
                 FilterCard()
@@ -106,7 +122,6 @@ private fun MountCard() {
             { OperationButton("Park", "mount.park") },
             { OperationButton("Unpark", "mount.unpark") },
         )
-        JogPad()
         OperationForm("Slew", "mount.slew", kind = ActionKind.Prominent)
         OperationForm("Sync", "mount.sync")
     }
@@ -161,25 +176,51 @@ private fun DomeCard() {
     }
 }
 
-/** Held north, south, east, west, when the Master offers it. A real Master doesn't yet (docs/SDD.md 4.2). */
+/**
+ * The mount's manual movement, at the top of Equipment and as large as the screen allows (about one full screen on a
+ * phone) so it can be used in the dark: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
+ * the mount only while it is held (CSURF-330); the diagonals move both axes.
+ */
 @Composable
 private fun JogPad() {
     val app = LocalApp.current
+    val theme = LocalTheme.current
+    val scope = rememberCoroutineScope()
     if (!app.canOperate) return
-    if (app.operation("mount.hold_start") == null) {
+    val info = app.operation("mount.hold_start")
+    if (info == null) {
         Note("Jog: this Master doesn't offer held mount movement yet.")
         return
     }
     fun direction(name: String) = mapOf("direction" to JsonPrimitive(name))
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HoldButton("North", "↑", "mount", direction("north"))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f)) { HoldButton("West", "←", "mount", direction("west")) }
-            Column(Modifier.weight(1f)) { HoldButton("East", "→", "mount", direction("east")) }
+    // The screen less the top bar, the area strip and the screen's padding.
+    val height = (LocalConfiguration.current.screenHeightDp - 200).coerceAtLeast(320).dp
+    val rows = listOf(
+        listOf(Triple("North West", "↖", "northwest"), Triple("North", "↑", "north"), Triple("North East", "↗", "northeast")),
+        listOf(Triple("West", "←", "west"), null, Triple("East", "→", "east")),
+        listOf(Triple("South West", "↙", "southwest"), Triple("South", "↓", "south"), Triple("South East", "↘", "southeast")),
+    )
+    Column(Modifier.fillMaxWidth().height(height), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { cell ->
+                    if (cell == null) {
+                        Box(
+                            Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(10.dp)).background(theme.danger)
+                                .clickable(role = androidx.compose.ui.semantics.Role.Button) { scope.launch { app.perform("mount.abort_slew") } }
+                                .testTag("mount.abort_slew").semantics { contentDescription = "Stop" },
+                            contentAlignment = Alignment.Center,
+                        ) { Txt("■", size = 40.sp, weight = FontWeight.Bold, color = theme.onDanger) }
+                    } else {
+                        HoldButton(cell.first, cell.second, "mount", direction(cell.third), Modifier.weight(1f).fillMaxHeight(), large = true)
+                    }
+                }
+            }
         }
-        HoldButton("South", "↓", "mount", direction("south"))
-        app.snapshot.hold.explanation?.let { Note(it) }
     }
+    val diagonals = info.arguments.firstOrNull { it.name == "direction" }?.choices
+    if (diagonals != null && "northeast" !in diagonals) Note("This Master doesn't offer diagonal moves yet: update Galileo on the Master.")
+    app.snapshot.hold.explanation?.let { Note(it) }
 }
 
 /** Manual focus and autofocus, only through the focus module's operations (MAPP-FOC-*). */
@@ -191,7 +232,31 @@ fun FocusScreen() {
         ReadOnlyHint()
         Columns(
             left = {
+                Card("Autofocus") {
+                    LiveRow("State", "focus.state")
+                    LiveRow("Last result", "focus.last_result")
+                    LiveRow("Temperature compensation", "focus.compensation")
+                    ButtonRow(
+                        { OperationButton("Run autofocus", "focus.autofocus", kind = ActionKind.Prominent) },
+                        { OperationButton("Cancel", "focus.autofocus_cancel") },
+                    )
+                    VCurve()
+                }
+            },
+            right = {
                 Card("Manual focus") {
+                    // Double-sized and first, so they can be found and held in the dark.
+                    if (app.canOperate && app.operation("focus.hold_start") != null) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Column(Modifier.weight(1f)) {
+                                HoldButton("Hold in", "−", "focus", mapOf("direction" to JsonPrimitive(-1)), minHeight = minimumTarget * 2)
+                            }
+                            Column(Modifier.weight(1f)) {
+                                HoldButton("Hold out", "+", "focus", mapOf("direction" to JsonPrimitive(1)), minHeight = minimumTarget * 2)
+                            }
+                        }
+                        app.snapshot.hold.explanation?.let { Note(it) }
+                    }
                     LiveRow("Position", "focus.position")
                     LiveRow("Temperature", "focus.temperature", "°C", 1)
                     LiveRow("Moving", "focus.moving")
@@ -203,28 +268,9 @@ fun FocusScreen() {
                             )
                         }
                         app.record("focus.move_by")?.let { OutcomeNote(it) }
-                        if (app.operation("focus.hold_start") != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Column(Modifier.weight(1f)) { HoldButton("Hold in", "−", "focus", mapOf("direction" to JsonPrimitive(-1))) }
-                                Column(Modifier.weight(1f)) { HoldButton("Hold out", "+", "focus", mapOf("direction" to JsonPrimitive(1))) }
-                            }
-                            app.snapshot.hold.explanation?.let { Note(it) }
-                        }
                     }
                     OperationButton("Halt", "focus.halt", kind = ActionKind.Destructive)
                     OperationForm("Move to position", "focus.move_to")
-                }
-            },
-            right = {
-                Card("Autofocus") {
-                    LiveRow("State", "focus.state")
-                    LiveRow("Last result", "focus.last_result")
-                    LiveRow("Temperature compensation", "focus.compensation")
-                    ButtonRow(
-                        { OperationButton("Run autofocus", "focus.autofocus", kind = ActionKind.Prominent) },
-                        { OperationButton("Cancel", "focus.autofocus_cancel") },
-                    )
-                    VCurve()
                 }
             },
         )
@@ -257,30 +303,19 @@ private fun VCurve() {
     }
 }
 
-/** The meridian flip: its state and time remaining, and running one when the Master allows it (MAPP-FLP-*). */
+/** The meridian flip, shown with the Mount on the Equipment screen: its state and time remaining, and running one when the Master allows it (MAPP-FLP-*). */
 @Composable
-fun FlipScreen() {
+private fun MeridianFlipCard() {
     val app = LocalApp.current
-    ScreenScroll("Flip") {
-        ReadOnlyHint()
-        Columns(
-            left = {
-                Card("Meridian flip") {
-                    LiveRow("State", "flip.state")
-                    LiveRow("Minutes to the flip", "flip.minutes", digits = 1)
-                    LiveRow("Automatic flips", "flip.enabled")
-                    LiveRow("Pointing", "flip.pointing")
-                    app.value("flip.last.outcome")?.value.string?.let { Note("Last flip: $it.") }
-                }
-            },
-            right = {
-                Card("Flip now") {
-                    app.value("flip.why_not")?.value.string?.takeIf { it.isNotEmpty() }?.let { Note(it) }
-                    OperationButton("Flip now", "flip.now", kind = ActionKind.Prominent)
-                    OperationButton("Defer the flip", "flip.defer")
-                }
-            },
-        )
+    Card("Meridian flip") {
+        LiveRow("State", "flip.state")
+        LiveRow("Minutes to the flip", "flip.minutes", digits = 1)
+        LiveRow("Automatic flips", "flip.enabled")
+        LiveRow("Pointing", "flip.pointing")
+        app.value("flip.last.outcome")?.value.string?.let { Note("Last flip: $it.") }
+        app.value("flip.why_not")?.value.string?.takeIf { it.isNotEmpty() }?.let { Note(it) }
+        OperationButton("Flip now", "flip.now", kind = ActionKind.Prominent)
+        OperationButton("Defer the flip", "flip.defer")
     }
 }
 

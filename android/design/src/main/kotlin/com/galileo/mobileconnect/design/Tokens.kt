@@ -80,7 +80,7 @@ data class ThemeTokens(
 }
 
 object Layout {
-    const val minimumTarget: Float = 56f
+    const val minimumTarget: Float = 48f
     const val compactTarget: Float = 36f
     const val spacing: Float = 12f
     const val cornerRadius: Float = 12f

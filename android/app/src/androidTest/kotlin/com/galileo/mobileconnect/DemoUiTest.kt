@@ -36,7 +36,7 @@ class DemoUiTest {
     val compose = createEmptyComposeRule()
 
     private var scenario: ActivityScenario<MainActivity>? = null
-    private val areas = listOf("Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Guiding", "Flip", "Sessions", "Safety", "Settings")
+    private val areas = listOf("Overview", "Equipment", "Sky", "Imaging", "Focus", "Solve", "Polar Alignment", "Guiding", "Sessions", "Safety", "Settings")
 
     @Before
     fun launch() {
@@ -157,7 +157,7 @@ class DemoUiTest {
 
     @Test
     fun flipShowsItsStateAndTheFlipNowControl() {
-        goTo("Flip")
+        goTo("Equipment")
         compose.onNodeWithText("Meridian flip").assertExists()
         compose.onNodeWithText("Minutes to the flip").assertExists()
         compose.waitUntil(5_000) { exists("flip.now") }

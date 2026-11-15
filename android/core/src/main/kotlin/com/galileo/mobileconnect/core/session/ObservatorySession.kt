@@ -495,6 +495,9 @@ class ObservatorySession(
     /** The Master's saved targets list; null if it can't answer just now. */
     suspend fun savedTargets() = api.savedTargets()
 
+    /** The survey picture of a saved target; null if the Master has none or can't be reached. */
+    suspend fun targetThumbnail(name: String): ByteArray? = try { api.targetThumbnail(name) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { null }
+
     /** Null when removed, otherwise why not. Only an Operator may; the Master enforces it too. */
     suspend fun removeSavedTarget(name: String): String? =
         if (state.value.role != Role.Operator) "Only an Operator can remove a saved target." else api.removeSavedTarget(name)

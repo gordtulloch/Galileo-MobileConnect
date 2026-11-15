@@ -44,7 +44,6 @@ import com.galileo.mobileconnect.core.state.get
 import com.galileo.mobileconnect.core.state.string
 import com.galileo.mobileconnect.core.session.SessionSnapshot
 import com.galileo.mobileconnect.ui.screens.EquipmentScreen
-import com.galileo.mobileconnect.ui.screens.FlipScreen
 import com.galileo.mobileconnect.ui.screens.FocusScreen
 import com.galileo.mobileconnect.ui.screens.GuidingScreen
 import com.galileo.mobileconnect.ui.screens.ImagingScreen
@@ -53,6 +52,7 @@ import com.galileo.mobileconnect.ui.screens.SafetyScreen
 import com.galileo.mobileconnect.ui.screens.SessionsScreen
 import com.galileo.mobileconnect.ui.screens.SettingsScreen
 import com.galileo.mobileconnect.ui.sky.SkyScreen
+import com.galileo.mobileconnect.ui.screens.PolarAlignmentScreen
 import com.galileo.mobileconnect.ui.screens.SolveScreen
 import com.galileo.mobileconnect.ui.screens.TargetsScreen
 import com.galileo.mobileconnect.ui.theme.LocalTheme
@@ -66,8 +66,8 @@ enum class Area(val label: String, val glyph: String) {
     Imaging("Imaging", "◉"),
     Focus("Focus", "◎"),
     Solve("Solve", "⌗"),
+    PolarAlignment("Polar Alignment", "⌖"),
     Guiding("Guiding", "⊕"),
-    Flip("Flip", "⇄"),
     Sessions("Sessions", "☰"),
     Safety("Safety", "⚑"),
     Settings("Settings", "⚙");
@@ -134,8 +134,8 @@ private fun Detail(area: Area) {
         Area.Imaging -> ImagingScreen()
         Area.Focus -> FocusScreen()
         Area.Solve -> SolveScreen()
+        Area.PolarAlignment -> PolarAlignmentScreen()
         Area.Guiding -> GuidingScreen()
-        Area.Flip -> FlipScreen()
         Area.Sessions -> SessionsScreen()
         Area.Safety -> SafetyScreen()
         Area.Settings -> SettingsScreen()

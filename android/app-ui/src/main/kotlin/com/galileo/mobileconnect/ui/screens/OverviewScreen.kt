@@ -68,12 +68,12 @@ fun OverviewScreen() {
         }
         Columns(
             left = {
-                PiersCard()
+                SessionCard()
                 ActivityCard()
+                AlertsCard()
             },
             right = {
-                SessionCard()
-                AlertsCard()
+                PiersCard()
                 NodeHealthCard()
             },
         )

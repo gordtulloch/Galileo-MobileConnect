@@ -666,7 +666,11 @@
       "north",
       "south",
       "east",
-      "west"
+      "west",
+      "northeast",
+      "northwest",
+      "southeast",
+      "southwest"
      ]
     }
    ],
@@ -1066,6 +1070,14 @@
    "description": "The saved session templates that can be run"
   },
   {
+   "name": "sky.catalogues",
+   "area": "sky",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The catalogues the Master supports; pass one or several (comma-separated) to sky.search"
+  },
+  {
    "name": "sky.framing",
    "area": "sky",
    "class": "read",
@@ -1156,9 +1168,23 @@
      "default": 20,
      "min": 1,
      "max": 50
+    },
+    {
+     "name": "catalog",
+     "type": "str",
+     "required": false,
+     "default": ""
     }
    ],
-   "description": "Find catalogue objects by name or designation"
+   "description": "Find catalogue objects by name or designation (Messier, Caldwell, NGC, IC); an unknown name is looked up online and added to the catalogue"
+  },
+  {
+   "name": "solve.cameras",
+   "area": "solve",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The Pier's cameras: slot, name and whether each is connected"
   },
   {
    "name": "solve.capture",
@@ -1212,6 +1238,12 @@
      "name": "filter",
      "type": "str",
      "required": false
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false,
+     "description": "Which of the Pier's cameras to use, from solve.cameras; the primary camera by default"
     },
     {
      "name": "action",
@@ -1302,6 +1334,12 @@
      "name": "filter",
      "type": "str",
      "required": false
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false,
+     "description": "Which of the Pier's cameras to use, from solve.cameras; the primary camera by default"
     }
    ],
    "description": "Slew to a J2000 position and correct with solved frames until within the accuracy",
@@ -1399,6 +1437,12 @@
      "name": "filter",
      "type": "str",
      "required": false
+    },
+    {
+     "name": "camera_slot",
+     "type": "str",
+     "required": false,
+     "description": "Which of the Pier's cameras to use, from solve.cameras; the primary camera by default"
     }
    ],
    "description": "Take a frame, solve it and tell the mount where it is really pointing",

@@ -43,7 +43,7 @@ class TokensTest {
     }
 
     @Test
-    fun `targets are gloved-hand sized`() {
-        assertTrue(Layout.minimumTarget >= 56f)
+    fun `targets meet the Android and Apple minimums`() {
+        assertTrue(Layout.minimumTarget >= 48f)
     }
 }

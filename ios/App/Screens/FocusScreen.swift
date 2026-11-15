@@ -11,15 +11,23 @@ struct FocusScreen: View {
         ScreenScroll("Focus") {
             ReadOnlyHint()
             Columns {
-                manual
-            } right: {
                 autofocus
+            } right: {
+                manual
             }
         }
     }
 
     private var manual: some View {
         Card("Manual focus") {
+            // Double-sized and first, so they can be found and held in the dark.
+            if model.canOperate, model.operation("focus.hold_start") != nil {
+                HStack(spacing: 8) {
+                    HoldButton(title: "Hold in", icon: "minus.circle", family: "focus", args: ["direction": -1], minHeight: 2 * Layout.minimumTarget)
+                    HoldButton(title: "Hold out", icon: "plus.circle", family: "focus", args: ["direction": 1], minHeight: 2 * Layout.minimumTarget)
+                }
+                if let explanation = model.snapshot.hold.explanation { Note(explanation) }
+            }
             LiveRow(label: "Position", key: "focus.position")
             LiveRow(label: "Temperature", key: "focus.temperature", unit: "°C", digits: 1)
             LiveRow(label: "Moving", key: "focus.moving")
@@ -31,13 +39,6 @@ struct FocusScreen: View {
                     }
                 }
                 if let record = model.record(of: "focus.move_by") { OutcomeNote(record: record) }
-                if model.operation("focus.hold_start") != nil {
-                    HStack(spacing: 8) {
-                        HoldButton(title: "Hold in", icon: "minus.circle", family: "focus", args: ["direction": -1])
-                        HoldButton(title: "Hold out", icon: "plus.circle", family: "focus", args: ["direction": 1])
-                    }
-                    if let explanation = model.snapshot.hold.explanation { Note(explanation) }
-                }
             }
             OperationButton(title: "Halt", operation: "focus.halt", icon: "stop", kind: .destructive)
             OperationForm(title: "Move to position", operation: "focus.move_to", icon: "arrow.right.to.line")

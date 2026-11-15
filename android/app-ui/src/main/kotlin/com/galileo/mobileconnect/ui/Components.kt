@@ -524,7 +524,13 @@ fun Choices(options: List<String>, selected: String, minWidth: Int = 88, onSelec
 
 /** Moves only while pressed (MAPP-DEV-030). The core does the timing and the stopping. */
 @Composable
-fun HoldButton(title: String, glyph: String, family: String, args: Map<String, JsonElement>, modifier: Modifier = Modifier) {
+fun HoldButton(
+    title: String, glyph: String, family: String, args: Map<String, JsonElement>, modifier: Modifier = Modifier,
+    /** A big arrow and no text, for the jog pad, whose size comes from [modifier]. */
+    large: Boolean = false,
+    /** Taller than the usual target, for the controls used in the dark (focus's Hold in and Hold out). */
+    minHeight: androidx.compose.ui.unit.Dp? = null,
+) {
     val app = LocalApp.current
     val theme = LocalTheme.current
     var pressed by remember { mutableStateOf(false) }
@@ -541,7 +547,7 @@ fun HoldButton(title: String, glyph: String, family: String, args: Map<String, J
     androidx.compose.runtime.DisposableEffect(Unit) { onDispose { release() } }
     val shape = RoundedCornerShape(10.dp)
     Row(
-        modifier.fillMaxWidth().heightIn(min = minimumTarget).clip(shape)
+        modifier.fillMaxWidth().heightIn(min = minHeight ?: minimumTarget).clip(shape)
             .background(if (pressed) theme.accent else theme.raised).border(1.dp, theme.border, shape)
             .pointerInput(Unit) {
                 detectTapGestures(onPress = {
@@ -562,7 +568,14 @@ fun HoldButton(title: String, glyph: String, family: String, args: Map<String, J
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Txt("$glyph $title", weight = FontWeight.SemiBold, color = if (pressed) theme.onAccent else theme.text)
+        if (large) {
+            Txt(glyph, size = 56.sp, weight = FontWeight.Bold, color = if (pressed) theme.onAccent else theme.text)
+        } else {
+            Txt(
+                "$glyph $title", size = if (minHeight == null) 16.sp else 22.sp,
+                weight = if (minHeight == null) FontWeight.SemiBold else FontWeight.Bold, color = if (pressed) theme.onAccent else theme.text,
+            )
+        }
     }
 }
 

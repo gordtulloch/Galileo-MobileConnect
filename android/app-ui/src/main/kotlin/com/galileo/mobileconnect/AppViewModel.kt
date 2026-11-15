@@ -377,6 +377,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The Master's saved targets; null with no connection or when it can't answer just now. */
     suspend fun savedTargets(): com.galileo.mobileconnect.core.sky.SavedTargets? = session?.savedTargets()
 
+    /** The survey picture of a saved target (JPEG bytes); null if there is none. */
+    suspend fun targetThumbnail(name: String): ByteArray? = session?.targetThumbnail(name)
+
     /** Null when removed, otherwise the words to show. */
     suspend fun removeSavedTarget(name: String): String? = session?.removeSavedTarget(name) ?: "There is no connection."
 
@@ -450,7 +453,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val overallSafety: String? get() = value("safety.overall")?.value.string
 
     companion object {
-        const val APP_VERSION = "0.1.0"
+        const val APP_VERSION = "0.1.1"
     }
 }
 

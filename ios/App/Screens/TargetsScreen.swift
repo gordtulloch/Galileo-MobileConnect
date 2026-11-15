@@ -32,14 +32,18 @@ struct TargetsScreen: View {
 
     private func tile(_ target: SavedTarget) -> some View {
         Card {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("\(target.name) · \(target.type)").font(.headline).accessibilityIdentifier("target.name")
-                Text(target.summary).font(.subheadline).foregroundStyle(theme.textSecondary)
-                Text(String(format: "RA %.3f°  Dec %.3f°", target.raDeg, target.decDeg))
-                    .font(.footnote).foregroundStyle(theme.textSecondary)
+            // The object's picture runs the full height of the tile, on the right.
+            HStack(alignment: .center, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(target.name) · \(target.type)").font(.headline).accessibilityIdentifier("target.name")
+                    Text(target.summary).font(.subheadline).foregroundStyle(theme.textSecondary)
+                    Text(String(format: "RA %.3f°  Dec %.3f°", target.raDeg, target.decDeg))
+                        .font(.footnote).foregroundStyle(theme.textSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                TargetThumbnail(name: target.name)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
             HStack(spacing: 8) {
                 OperationButton(
                     title: "Slew To", operation: "mount.slew", icon: "scope",
@@ -81,5 +85,29 @@ struct TargetsScreen: View {
     private func remove(_ target: SavedTarget) async {
         message = await model.removeSavedTarget(target.name)
         await load()
+    }
+}
+
+/// The survey picture of a saved target, square, loaded from the Master; nothing is drawn where there is none.
+private struct TargetThumbnail: View {
+    let name: String
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+    @State private var image: UIImage?
+
+    var body: some View {
+        // The text beside it sets the tile's height; the picture fills that, never makes it taller.
+        Color.clear
+            .frame(width: 110)
+            .frame(minHeight: 90)
+            .overlay {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFill().accessibilityHidden(true)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: name) {
+            if let data = await model.loadTargetThumbnail(name) { image = UIImage(data: data) }
+        }
     }
 }

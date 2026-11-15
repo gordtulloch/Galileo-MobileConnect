@@ -305,6 +305,12 @@ final class AppModel {
         return try await session.api.savedTargets()
     }
 
+    /// The survey picture of a saved target; nil if the Master has none (or can't be reached).
+    func loadTargetThumbnail(_ name: String) async -> Data? {
+        guard let session else { return nil }
+        return try? await session.api.targetThumbnail(name: name)
+    }
+
     /// Nil when removed; otherwise the reason it was not.
     func removeSavedTarget(_ name: String) async -> String? {
         guard let session else { return "Not connected to a Master." }

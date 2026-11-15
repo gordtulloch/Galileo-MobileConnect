@@ -1,8 +1,19 @@
 package com.galileo.mobileconnect.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -87,9 +98,15 @@ private fun TargetTile(target: SavedTarget, onRemove: (String) -> Unit) {
     var goToMessage by remember(target.name) { mutableStateOf<String?>(null) }
     val args: Map<String, JsonElement> = mapOf("ra_deg" to JsonPrimitive(target.raDeg), "dec_deg" to JsonPrimitive(target.decDeg))
     Card(target.name, Modifier.testTag("target.${target.name}")) {
-        Txt(target.summary, size = 13.sp, weight = FontWeight.SemiBold)
-        Note(coordinates(target))
-        if (target.designations.isNotEmpty()) Note(target.designations.joinToString(", "))
+        // The object's picture runs the full height of this block, on the right; the text sets the height.
+        Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Txt(target.summary, size = 13.sp, weight = FontWeight.SemiBold)
+                Note(coordinates(target))
+                if (target.designations.isNotEmpty()) Note(target.designations.joinToString(", "))
+            }
+            TargetThumbnail(target.name)
+        }
         if (app.canOperate) {
             Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 ActionButton("Slew To", kind = ActionKind.Prominent, tag = "target.slew") {
@@ -102,5 +119,20 @@ private fun TargetTile(target: SavedTarget, onRemove: (String) -> Unit) {
         Row(Modifier.fillMaxWidth()) {
             ActionButton("Remove", kind = ActionKind.Destructive, enabled = app.canOperate, tag = "target.remove") { onRemove(target.name) }
         }
+    }
+}
+
+/** The survey picture of a saved target, loaded from the Master; empty space where there is none. */
+@Composable
+private fun TargetThumbnail(name: String) {
+    val app = LocalApp.current
+    var picture by remember(name) { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
+    LaunchedEffect(name) {
+        picture = app.targetThumbnail(name)?.let {
+            android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap()
+        }
+    }
+    Box(Modifier.width(110.dp).fillMaxHeight().clip(RoundedCornerShape(8.dp))) {
+        picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }

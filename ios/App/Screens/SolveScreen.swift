@@ -1,40 +1,15 @@
 import GalileoCore
 import SwiftUI
 
-/// The panes beside the preview on the Solve screen, in the order they stack.
-enum SolvePane: String, CaseIterable, Identifiable {
-    case control, result, polar, error
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .control: "Solver Control"
-        case .result: "Latest result"
-        case .polar: "Polar alignment"
-        case .error: "Polar error"
-        }
-    }
-}
-
-/// Plate solving: solve where the mount is or sync it (`MAPP-SOL-010`, `MAPP-SOL-020`); centring on a position is the Sky screen's Goto and Centre, and
-/// polar alignment (`MAPP-SOL-030`). The latest frame is on the left and the panes are stacked on the right, which
-/// can be hidden as a whole, so that the picture can have the screen to itself. The menu button stays on the
-/// picture while the menu is hidden.
+/// Plate solving: solve where the mount is or sync it (`MAPP-SOL-010`, `MAPP-SOL-020`); centring on a position is the Sky
+/// screen's Goto and Centre. One column, in the order the work goes: the buttons, the bullseye, how far each solution
+/// landed from centre, the exposure, the camera, the result, and last the latest frame, which is only there so the person
+/// can tell the imaging is working. Polar alignment is its own screen (`PolarAlignmentScreen`).
 struct SolveScreen: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.theme) private var theme
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Whether the menu (the panes beside the picture) is hidden, kept on the device.
-    @AppStorage("solve.menuHidden") private var menuHidden = false
-    private var shown: [SolvePane] { menuHidden ? [] : SolvePane.allCases }
 
     /// The frame polar alignment last solved. Each refresh is a new frame, so each is a new picture.
     private var polarVersion: Int? { model.value("polar.state.frame.version")?.value.doubleValue.map(Int.init) }
-    private var polarAdjusting: Bool {
-        model.value("polar.state.running")?.value.boolValue == true && model.value("polar.state.phase")?.value.stringValue == "adjusting"
-    }
     /// The frame a solve has just captured, announced as it arrives, so it is on screen while it is being solved.
     private var solveFrameVersion: Int? { model.value("solve.frame.version")?.value.doubleValue.map(Int.init) }
     private var solvedCount: Int { model.value("solve.last.solutions")?.value.arrayValue?.count ?? 0 }
@@ -47,209 +22,19 @@ struct SolveScreen: View {
         "\(model.value("solve.running")?.value.displayText ?? "")/\(solvedCount)/\(polarVersion ?? 0)/\(solveFrameVersion ?? 0)"
     }
 
-    /// The circle, cross and vector for the latest polar-alignment frame, only while adjusting is live.
-    private var marks: PolarMarks? {
-        guard polarAdjusting, polarVersion != nil,
-            let width = model.value("polar.state.frame.width")?.value.doubleValue,
-            let height = model.value("polar.state.frame.height")?.value.doubleValue,
-            let axis = model.value("polar.state.frame.axis_px")?.value.arrayValue?.compactMap(\.doubleValue), axis.count == 2,
-            let pole = model.value("polar.state.frame.pole_px")?.value.arrayValue?.compactMap(\.doubleValue), pole.count == 2,
-            let scale = model.value("polar.state.frame.arcmin_per_px")?.value.doubleValue
-        else { return nil }
-        return PolarMarks(
-            refresh: refresh, frame: CGSize(width: width, height: height), axis: CGPoint(x: axis[0], y: axis[1]),
-            pole: CGPoint(x: pole[0], y: pole[1]), arcminPerPixel: scale)
-    }
-
     var body: some View {
-        VStack(spacing: 0) {
-            if let reason = model.workingPier.flatMap({ model.snapshot.unavailableReason(pier: $0) }) {
-                Banner(icon: "exclamationmark.triangle", text: "\(model.pier?.name ?? "This Pier"): \(reason)").padding(8)
+        ScreenScroll("Solve") {
+            ReadOnlyHint()
+            SolverControl()
+            SolutionCoordinates()
+            Card("Latest frame") {
+                FramePicture(stretch: 50, stack: false, stackFrames: 0, refresh: refresh, solve: showsSolveFrame)
+                    .frame(height: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
             }
-            if sizeClass == .regular {
-                HStack(spacing: 0) {
-                    picture
-                    if !shown.isEmpty {
-                        Rectangle().fill(theme.border).frame(width: 1)
-                        column.frame(width: 400)
-                    }
-                }
-            } else {
-                VStack(spacing: 0) {
-                    picture.frame(maxHeight: shown.isEmpty ? .infinity : 260)
-                    if !shown.isEmpty { column }
-                }
-            }
-        }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: menuHidden)
-        .background(theme.background)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Solve").font(.headline).foregroundStyle(theme.text).accessibilityAddTraits(.isHeader)
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(theme.surface, for: .navigationBar)
-    }
-
-    /// The latest frame, as large as the space allows, with the button that hides or shows the menu in its corner.
-    private var picture: some View {
-        FramePicture(stretch: 50, stack: false, stackFrames: 0, refresh: refresh, solve: showsSolveFrame, marks: marks)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-            .overlay(alignment: .topTrailing) {
-                Button { menuHidden.toggle() } label: {
-                    Image(systemName: menuHidden ? "sidebar.right" : "rectangle.righthalf.inset.filled.arrow.right")
-                        .frame(minWidth: Layout.minimumTarget, minHeight: Layout.minimumTarget)
-                }
-                .buttonStyle(ActionStyle())
-                .fixedSize()
-                .padding(8)
-                .accessibilityLabel(menuHidden ? "Show menu" : "Hide menu")
-                .accessibilityIdentifier("solve.menu")
-            }
-    }
-
-    /// The panes, stacked.
-    private var column: some View {
-        ScrollView {
-            VStack(spacing: Layout.spacing) {
-                ReadOnlyHint()
-                ForEach(shown) { pane in content(of: pane) }
-            }
-            .padding(Layout.spacing)
-        }
-        .background(theme.background)
-    }
-
-    @ViewBuilder private func content(of pane: SolvePane) -> some View {
-        switch pane {
-        case .control: SolverControl()
-        case .result: SolutionCoordinates()
-        case .polar: PolarAlignmentControls()
-        case .error: PolarAlignmentReadout()
         }
     }
 }
-
-/// Starting and stopping polar alignment (`MAPP-SOL-030`, `CSURF-145`). The routine measures with three solves and then
-/// keeps solving while the altitude and azimuth knobs are turned, so it runs until it is stopped.
-struct PolarAlignmentControls: View {
-    var body: some View {
-        Card("Polar alignment") {
-            Note("Turns the mount to three positions and solves a frame at each, then follows your adjustments live until you stop it.")
-            OperationForm(title: "Start polar alignment", operation: "polar.start", icon: "scope",
-                          fields: ["exposure_s", "step_deg", "direction", "refraction", "slew_from_zenith"], kind: .prominent)
-            OperationButton(title: "Stop polar alignment", operation: "polar.stop", icon: "stop")
-        }
-    }
-}
-
-/// The live adjustment display: the error as large figures with a trend, in words what to turn, and where the pole lies
-/// against the axis in the latest frame. All of it is the Master's `polar.state`, refreshed on every solve.
-struct PolarAlignmentReadout: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.theme) private var theme
-
-    private func number(_ key: String) -> Double? { model.value(key)?.value.doubleValue }
-    private func text(_ key: String) -> String? {
-        let shown = model.value(key)?.value.stringValue
-        return (shown?.isEmpty ?? true) ? nil : shown
-    }
-
-    private var bandColour: Color {
-        switch text("polar.state.error.quality") {
-        case "good": theme.good
-        case "fair": theme.warning
-        default: theme.danger
-        }
-    }
-
-    var body: some View {
-        Card("Polar error") {
-            if text("polar.state.phase") != nil {
-                LiveRow(label: "Phase", key: "polar.state.phase")
-                if let message = text("polar.state.message") { Note(message) }
-            } else {
-                Note("Polar alignment hasn't been run.")
-            }
-            if let total = number("polar.state.error.total_arcsec") {
-                Text(Self.angle(total))
-                    .font(.system(size: 44, weight: .bold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(bandColour)
-                    .accessibilityIdentifier("polar.total")
-                    .accessibilityLabel("Polar error \(Self.angle(total))")
-                if let advice = text("polar.state.error.altitude_advice") { Text(advice).font(.body) }
-                if let advice = text("polar.state.error.azimuth_advice") { Text(advice).font(.body) }
-                PolarTargetPlot(offset: model.value("polar.state.target_offset_arcmin")?.value.arrayValue?.compactMap(\.doubleValue))
-                    .frame(height: 220)
-                    .accessibilityHidden(true)
-                if let trend = model.value("polar.state.error.trend")?.value.arrayValue?.compactMap(\.doubleValue), trend.count > 1 {
-                    PolarTrend(values: trend, colour: bandColour).frame(height: 60).accessibilityHidden(true)
-                    Note(trend.last! < trend.first! ? "The error is falling." : "The error is not falling yet.")
-                }
-            }
-        }
-    }
-
-    /// An angle as a polar-alignment screen reads it: 45″, 3′12″ or 1°02′05″.
-    static func angle(_ arcsec: Double) -> String {
-        let total = Int(abs(arcsec).rounded())
-        let (degrees, minutes, seconds) = (total / 3600, total % 3600 / 60, total % 60)
-        if degrees > 0 { return String(format: "%d°%02d′%02d″", degrees, minutes, seconds) }
-        if minutes > 0 { return String(format: "%d′%02d″", minutes, seconds) }
-        return "\(seconds)″"
-    }
-}
-
-/// The pole (a cross) against the point the axis aims at (the circle at the centre): bring the cross into the circle.
-struct PolarTargetPlot: View {
-    let offset: [Double]?
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Canvas { context, size in
-            let centre = CGPoint(x: size.width / 2, y: size.height / 2)
-            let half = min(size.width, size.height) / 2 - 12
-            var axes = Path()
-            axes.move(to: CGPoint(x: 0, y: centre.y)); axes.addLine(to: CGPoint(x: size.width, y: centre.y))
-            axes.move(to: CGPoint(x: centre.x, y: 0)); axes.addLine(to: CGPoint(x: centre.x, y: size.height))
-            context.stroke(axes, with: .color(theme.border), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-            context.stroke(Path(ellipseIn: CGRect(x: centre.x - 14, y: centre.y - 14, width: 28, height: 28)),
-                           with: .color(theme.accent), lineWidth: 2)
-            guard let offset, offset.count == 2 else { return }
-            let range = max(5.0, abs(offset[0]) * 1.2, abs(offset[1]) * 1.2)       // never zoomed in tighter than 5′
-            let at = CGPoint(x: centre.x + offset[0] / range * half, y: centre.y + offset[1] / range * half)
-            var cross = Path()
-            cross.move(to: CGPoint(x: at.x - 9, y: at.y - 9)); cross.addLine(to: CGPoint(x: at.x + 9, y: at.y + 9))
-            cross.move(to: CGPoint(x: at.x - 9, y: at.y + 9)); cross.addLine(to: CGPoint(x: at.x + 9, y: at.y - 9))
-            context.stroke(cross, with: .color(theme.danger), style: StrokeStyle(lineWidth: 3, lineCap: .round))
-        }
-        .background(theme.raised, in: RoundedRectangle(cornerRadius: 10))
-    }
-}
-
-/// The recent totals as a line, so the person can see whether turning the knob is helping.
-struct PolarTrend: View {
-    let values: [Double]
-    let colour: Color
-    @Environment(\.theme) private var theme
-
-    var body: some View {
-        Canvas { context, size in
-            guard let high = values.max(), high > 0 else { return }
-            var line = Path()
-            for (index, value) in values.enumerated() {
-                let point = CGPoint(x: size.width * CGFloat(index) / CGFloat(values.count - 1),
-                                    y: size.height - (size.height - 8) * CGFloat(value / high) - 4)
-                if index == 0 { line.move(to: point) } else { line.addLine(to: point) }
-            }
-            context.stroke(line, with: .color(colour), lineWidth: 2)
-        }
-        .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
-    }
-}
-
 
 /// What to do with the answer, as the desktop's Solver Action: raw values are what `solve.capture` takes.
 enum SolverAction: String, CaseIterable, Identifiable {
@@ -274,6 +59,13 @@ enum SolverAction: String, CaseIterable, Identifiable {
     }
 }
 
+/// One of the Pier's cameras, as `solve.cameras` lists it.
+struct SolveCamera: Equatable {
+    var slot: String
+    var name: String
+    var connected: Bool
+}
+
 /// The desktop's Solver Control and Solver Action (`MAPP-SOL-010`, `MAPP-SOL-020`): the bullseye of where each solution
 /// landed against its target, the exposure, Capture & Solve, Load & Slew and Stop, and what to do with the answer.
 struct SolverControl: View {
@@ -285,6 +77,9 @@ struct SolverControl: View {
     @State private var choosing = false
     @State private var frames: [JSONValue]?
     @State private var message: String?
+    /// The Pier's cameras (`solve.cameras`) and which one the person chose; empty means the Master's own choice.
+    @State private var cameras: [SolveCamera] = []
+    @AppStorage("solve.camera") private var cameraSlot = ""
 
     private var action: SolverAction { SolverAction(rawValue: actionRaw) ?? .slew }
 
@@ -294,13 +89,31 @@ struct SolverControl: View {
                 guard let pair = point.arrayValue?.compactMap(\.doubleValue), pair.count == 2 else { return nil }
                 return CGPoint(x: pair[0], y: pair[1])
             }
+            if model.canOperate {
+                OperationButton(
+                    title: "Capture & Solve", operation: "solve.capture", icon: "camera.viewfinder",
+                    args: captureArgs, kind: .prominent)
+                Button {
+                    choosing.toggle()
+                    if choosing { Task { await loadFrames() } }
+                } label: {
+                    Label("Load & Slew…", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(ActionStyle())
+                .disabled(model.operation("solve.load")?.available != true)
+                .accessibilityIdentifier("solve.load.choose")
+                if model.operation("solve.load") == nil { Note("This Master doesn't offer Load & Slew yet.") }
+                if choosing { frameList }
+                OperationButton(title: "Stop", operation: "solve.stop", icon: "stop")
+            }
+            // Not while a solve is running: the Master's reason is then "a plate solve is already running", which is this one.
+            if model.value("solve.running")?.value.boolValue != true,
+               let why = model.value("solve.why_not")?.value.stringValue, !why.isEmpty { Note(why) }
             SolveBullseye(points: points, ring: model.value("solve.accuracy_arcsec")?.value.doubleValue ?? 30)
                 .frame(height: 220)
                 .accessibilityLabel("Where each solution landed against its target, \(points.count) shown")
                 .accessibilityIdentifier("solve.bullseye")
-            // Not while a solve is running: the Master's reason is then "a plate solve is already running", which is this one.
-            if model.value("solve.running")?.value.boolValue != true,
-               let why = model.value("solve.why_not")?.value.stringValue, !why.isEmpty { Note(why) }
+            deviation(points.last)
             if model.canOperate {
                 HStack {
                     Text("Exposure (s)").foregroundStyle(theme.textSecondary)
@@ -314,21 +127,7 @@ struct SolverControl: View {
                 .frame(minHeight: Layout.minimumTarget)
                 .padding(.horizontal, 10)
                 .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
-                OperationButton(
-                    title: "Capture & Solve", operation: "solve.capture", icon: "camera.viewfinder",
-                    args: ["exposure_s": exposureValue, "action": .string(action.rawValue)], kind: .prominent)
-                Button {
-                    choosing.toggle()
-                    if choosing { Task { await loadFrames() } }
-                } label: {
-                    Label("Load & Slew…", systemImage: "square.and.arrow.down").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(ActionStyle())
-                .disabled(model.operation("solve.load")?.available != true)
-                .accessibilityIdentifier("solve.load.choose")
-                if model.operation("solve.load") == nil { Note("This Master doesn't offer Load & Slew yet.") }
-                if choosing { frameList }
-                OperationButton(title: "Stop", operation: "solve.stop", icon: "stop")
+                cameraChoice
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Solver Action").font(.subheadline.weight(.semibold)).foregroundStyle(theme.text)
                         .accessibilityAddTraits(.isHeader)
@@ -336,6 +135,70 @@ struct SolverControl: View {
                     Note(action.detail)
                 }
             }
+        }
+        .task { await loadCameras() }
+    }
+
+    /// What `solve.capture` is sent: the exposure, the Solver Action and the chosen camera (the Master's own when none).
+    private var captureArgs: [String: JSONValue] {
+        var args: [String: JSONValue] = ["exposure_s": exposureValue, "action": .string(action.rawValue)]
+        if !cameraSlot.isEmpty, cameras.contains(where: { $0.slot == cameraSlot }) { args["camera_slot"] = .string(cameraSlot) }
+        return args
+    }
+
+    /// How far the latest solution landed from where it was aimed: dRA, dDec and the total, in arcseconds.
+    private func deviation(_ latest: CGPoint?) -> some View {
+        let values: [(String, String)] = latest.map { point in
+            [("dRA", Self.arcsec(point.x)), ("dDec", Self.arcsec(point.y)), ("Total", Self.arcsec(hypot(point.x, point.y)))]
+        } ?? [("dRA", "—"), ("dDec", "—"), ("Total", "—")]
+        return HStack(spacing: 8) {
+            ForEach(values, id: \.0) { label, value in
+                VStack(spacing: 2) {
+                    Text(label).font(.caption).foregroundStyle(theme.textSecondary)
+                    Text(value).font(.title3.weight(.bold).monospacedDigit()).foregroundStyle(theme.text)
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("solve.dev.\(label)")
+            }
+        }
+        .padding(.vertical, 6)
+        .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private static func arcsec(_ value: Double) -> String { String(format: "%.1f″", value) }
+
+    /// The Pier's cameras, one tap to choose which takes the frame. Shown once the Master has listed them.
+    @ViewBuilder private var cameraChoice: some View {
+        if !cameras.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Camera").font(.subheadline.weight(.semibold)).foregroundStyle(theme.text).accessibilityAddTraits(.isHeader)
+                ForEach(cameras, id: \.slot) { camera in
+                    let on = (cameraSlot.isEmpty ? cameras.first?.slot : cameraSlot) == camera.slot
+                    Button { cameraSlot = camera.slot } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: on ? "largecircle.fill.circle" : "circle").accessibilityHidden(true)
+                            Text(camera.connected ? camera.name : "\(camera.name) (not connected)").frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(theme.text)
+                        .frame(minHeight: Layout.minimumTarget)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityValue(on ? "selected" : "not selected")
+                    .accessibilityIdentifier("solve.camera.\(camera.slot)")
+                }
+            }
+        }
+    }
+
+    private func loadCameras() async {
+        guard let list = (await model.read("solve.cameras"))?["cameras"]?.arrayValue else { return }
+        cameras = list.compactMap { entry in
+            guard let slot = entry["slot"]?.stringValue else { return nil }
+            return SolveCamera(slot: slot, name: entry["name"]?.stringValue ?? slot, connected: entry["connected"]?.boolValue ?? true)
         }
     }
 

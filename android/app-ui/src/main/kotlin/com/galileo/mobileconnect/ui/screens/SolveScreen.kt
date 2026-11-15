@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +60,7 @@ import com.galileo.mobileconnect.ui.LocalApp
 import com.galileo.mobileconnect.ui.Note
 import com.galileo.mobileconnect.ui.OperationButton
 import com.galileo.mobileconnect.ui.OperationForm
+import com.galileo.mobileconnect.ui.ScreenScroll
 import com.galileo.mobileconnect.ui.Spinner
 import com.galileo.mobileconnect.ui.TextBox
 import com.galileo.mobileconnect.ui.Txt
@@ -73,24 +75,17 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.abs
 import kotlin.math.max
 
-/** The panes beside the preview on the Solve screen, in the order they stack. */
-private enum class SolvePane { Control, Result, Polar, Error }
-
 /**
  * Plate solving: solve where the mount is or sync it (MAPP-SOL-010, 020); centring on a position is the Sky screen's Goto
- * and Centre, and polar alignment (MAPP-SOL-030). The latest frame is on the left and the panes are stacked on the right,
- * which can be hidden as a whole, so that the picture can have the screen to itself.
+ * and Centre. One column, in the order the work goes: the buttons, the bullseye, how far each solution landed from centre,
+ * the exposure, the camera, the result, and last the latest frame, which is only there so the person can tell the imaging
+ * is working. Polar alignment is its own screen (PolarAlignmentScreen).
  */
 @Composable
 fun SolveScreen() {
     val app = LocalApp.current
-    val theme = LocalTheme.current
-    var menuHidden by remember { mutableStateOf(app.pref("solve.menuHidden", "false") == "true") }
-    val shown = if (menuHidden) emptyList() else SolvePane.entries
-
     /** The frame polar alignment last solved. Each refresh is a new frame, so each is a new picture. */
     val polarVersion = app.value("polar.state.frame.version")?.value.double?.toInt()
-    val polarAdjusting = app.value("polar.state.running")?.value.bool == true && app.value("polar.state.phase")?.value.string == "adjusting"
     /** The frame a solve has just captured, announced as it arrives, so it is on screen while it is being solved. */
     val solveFrameVersion = app.value("solve.frame.version")?.value.double?.toInt()
     val solvedCount = (app.value("solve.last.solutions")?.value as? JsonArray)?.size ?: 0
@@ -99,157 +94,15 @@ fun SolveScreen() {
     /** A new solve or a new polar-alignment refresh means a new picture, fetched at once: the loop is the point. */
     val refresh = "${app.value("solve.running")?.value?.displayText() ?: ""}/$solvedCount/${polarVersion ?: 0}/${solveFrameVersion ?: 0}"
 
-    fun list(key: String) = (app.value(key)?.value as? JsonArray)?.mapNotNull { it.double }
-    val marks: PolarMarks? = run {
-        if (!polarAdjusting || polarVersion == null) return@run null
-        val width = app.value("polar.state.frame.width")?.value.double ?: return@run null
-        val height = app.value("polar.state.frame.height")?.value.double ?: return@run null
-        val axis = list("polar.state.frame.axis_px")?.takeIf { it.size == 2 } ?: return@run null
-        val pole = list("polar.state.frame.pole_px")?.takeIf { it.size == 2 } ?: return@run null
-        val scale = app.value("polar.state.frame.arcmin_per_px")?.value.double ?: return@run null
-        PolarMarks(refresh, width, height, Offset(axis[0].toFloat(), axis[1].toFloat()), Offset(pole[0].toFloat(), pole[1].toFloat()), scale)
-    }
-
-    val picture: @Composable () -> Unit = {
-        Box(Modifier.fillMaxSize()) {
-            FramePicture(50.0, false, 0, refresh, showsSolveFrame, marks)
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp).width(minimumTarget)) {
-                ActionButton(
-                    if (menuHidden) "◧" else "◨", tag = "solve.menu", description = if (menuHidden) "Show menu" else "Hide menu",
-                ) {
-                    menuHidden = !menuHidden
-                    app.setPref("solve.menuHidden", menuHidden.toString())
-                }
+    ScreenScroll("Solve") {
+        ReadOnlyHint()
+        SolverControl()
+        SolutionCoordinates()
+        Card("Latest frame") {
+            Box(Modifier.fillMaxWidth().height(240.dp).clip(RoundedCornerShape(10.dp))) {
+                FramePicture(50.0, false, 0, refresh, showsSolveFrame)
             }
         }
-    }
-    val column: @Composable () -> Unit = {
-        Column(
-            Modifier.fillMaxSize().background(theme.background).verticalScroll(rememberScrollState()).padding(spacing),
-            verticalArrangement = Arrangement.spacedBy(spacing),
-        ) {
-            ReadOnlyHint()
-            shown.forEach { pane ->
-                when (pane) {
-                    SolvePane.Control -> SolverControl()
-                    SolvePane.Result -> SolutionCoordinates()
-                    SolvePane.Polar -> PolarAlignmentControls()
-                    SolvePane.Error -> PolarAlignmentReadout()
-                }
-            }
-        }
-    }
-
-    Column(Modifier.fillMaxSize().background(theme.background)) {
-        app.workingPier?.let { app.snapshot.unavailableReason(it) }?.let { Banner("⚠", "${app.pier?.name ?: "This Pier"}: $it", Modifier.padding(8.dp)) }
-        if (isWide()) {
-            Row(Modifier.fillMaxSize()) {
-                Box(Modifier.weight(1f).fillMaxHeight()) { picture() }
-                if (shown.isNotEmpty()) {
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(theme.border))
-                    Box(Modifier.width(400.dp).fillMaxHeight()) { column() }
-                }
-            }
-        } else {
-            Column(Modifier.fillMaxSize()) {
-                Box(if (shown.isEmpty()) Modifier.weight(1f).fillMaxWidth() else Modifier.height(260.dp).fillMaxWidth()) { picture() }
-                if (shown.isNotEmpty()) Box(Modifier.weight(1f).fillMaxWidth()) { column() }
-            }
-        }
-    }
-}
-
-/**
- * Starting and stopping polar alignment (MAPP-SOL-030, CSURF-145). The routine measures with three solves and then keeps
- * solving while the altitude and azimuth knobs are turned, so it runs until it is stopped.
- */
-@Composable
-private fun PolarAlignmentControls() {
-    Card("Polar alignment") {
-        Note("Turns the mount to three positions and solves a frame at each, then follows your adjustments live until you stop it.")
-        OperationForm(
-            "Start polar alignment", "polar.start",
-            fields = listOf("exposure_s", "step_deg", "direction", "refraction", "slew_from_zenith"), kind = ActionKind.Prominent,
-        )
-        OperationButton("Stop polar alignment", "polar.stop")
-    }
-}
-
-/**
- * The live adjustment display: the error as large figures with a trend, in words what to turn, and where the pole lies
- * against the axis in the latest frame. All of it is the Master's `polar.state`, refreshed on every solve.
- */
-@Composable
-private fun PolarAlignmentReadout() {
-    val app = LocalApp.current
-    val theme = LocalTheme.current
-    fun number(key: String) = app.value(key)?.value.double
-    fun text(key: String) = app.value(key)?.value.string?.takeIf { it.isNotEmpty() }
-    val band = when (text("polar.state.error.quality")) {
-        "good" -> theme.good
-        "fair" -> theme.warning
-        else -> theme.danger
-    }
-    Card("Polar error") {
-        if (text("polar.state.phase") != null) {
-            LiveRow("Phase", "polar.state.phase")
-            text("polar.state.message")?.let { Note(it) }
-        } else {
-            Note("Polar alignment hasn't been run.")
-        }
-        val total = number("polar.state.error.total_arcsec")
-        if (total != null) {
-            Txt(
-                polarAngle(total), size = 44.sp, weight = FontWeight.Bold, color = band,
-                modifier = Modifier.testTag("polar.total").semantics { contentDescription = "Polar error ${polarAngle(total)}" },
-            )
-            text("polar.state.error.altitude_advice")?.let { Txt(it) }
-            text("polar.state.error.azimuth_advice")?.let { Txt(it) }
-            val offset = (app.value("polar.state.target_offset_arcmin")?.value as? JsonArray)?.mapNotNull { it.double }
-            PolarTargetPlot(offset, Modifier.fillMaxWidth().height(220.dp))
-            val trend = (app.value("polar.state.error.trend")?.value as? JsonArray)?.mapNotNull { it.double }
-            if (trend != null && trend.size > 1) {
-                PolarTrend(trend, band, Modifier.fillMaxWidth().height(60.dp))
-                Note(if (trend.last() < trend.first()) "The error is falling." else "The error is not falling yet.")
-            }
-        }
-    }
-}
-
-/** The pole (a cross) against the point the axis aims at (the circle at the centre): bring the cross into the circle. */
-@Composable
-private fun PolarTargetPlot(offset: List<Double>?, modifier: Modifier) {
-    val theme = LocalTheme.current
-    Canvas(modifier.clip(RoundedCornerShape(10.dp)).background(theme.raised)) {
-        val centre = Offset(size.width / 2, size.height / 2)
-        val half = minOf(size.width, size.height) / 2 - 12.dp.toPx()
-        val dash = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 4.dp.toPx()))
-        drawLine(theme.border, Offset(0f, centre.y), Offset(size.width, centre.y), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-        drawLine(theme.border, Offset(centre.x, 0f), Offset(centre.x, size.height), strokeWidth = 1.dp.toPx(), pathEffect = dash)
-        drawCircle(theme.accent, radius = 14.dp.toPx(), center = centre, style = Stroke(2.dp.toPx()))
-        if (offset == null || offset.size != 2) return@Canvas
-        val range = max(5.0, max(abs(offset[0]) * 1.2, abs(offset[1]) * 1.2)) // never zoomed in tighter than 5′
-        val at = Offset(centre.x + (offset[0] / range * half).toFloat(), centre.y + (offset[1] / range * half).toFloat())
-        val arm = 9.dp.toPx()
-        drawLine(theme.danger, Offset(at.x - arm, at.y - arm), Offset(at.x + arm, at.y + arm), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-        drawLine(theme.danger, Offset(at.x - arm, at.y + arm), Offset(at.x + arm, at.y - arm), strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
-    }
-}
-
-/** The recent totals as a line, so the person can see whether turning the knob is helping. */
-@Composable
-private fun PolarTrend(values: List<Double>, colour: Color, modifier: Modifier) {
-    val theme = LocalTheme.current
-    Canvas(modifier.clip(RoundedCornerShape(8.dp)).background(theme.raised)) {
-        val high = values.max()
-        if (high <= 0) return@Canvas
-        val line = Path()
-        values.forEachIndexed { index, value ->
-            val x = size.width * index / (values.size - 1)
-            val y = size.height - (size.height - 8.dp.toPx()) * (value / high).toFloat() - 4.dp.toPx()
-            if (index == 0) line.moveTo(x, y) else line.lineTo(x, y)
-        }
-        drawPath(line, colour, style = Stroke(2.dp.toPx()))
     }
 }
 
@@ -276,31 +129,31 @@ private fun SolverControl() {
     var frames by remember { mutableStateOf<List<JsonElement>?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
+    var cameras by remember { mutableStateOf<List<SolveCamera>>(emptyList()) }
+    var cameraSlot by remember { mutableStateOf(app.pref("solve.camera", "")) }
+    LaunchedEffect(app.workingPier) {
+        val list = app.read("solve.cameras")?.get("cameras") as? JsonArray ?: return@LaunchedEffect
+        cameras = list.mapNotNull { entry ->
+            val slot = entry["slot"].string ?: return@mapNotNull null
+            SolveCamera(slot, entry["name"].string ?: slot, entry["connected"].bool ?: true)
+        }
+    }
+
     Card("Solver Control") {
         val points = (app.value("solve.points")?.value as? JsonArray)?.mapNotNull { point ->
             val pair = (point as? JsonArray)?.mapNotNull { it.double }
             if (pair != null && pair.size == 2) pair[0] to pair[1] else null
         } ?: emptyList()
         val ring = app.value("solve.accuracy_arcsec")?.value.double ?: 30.0
-        SolveBullseye(points, ring, Modifier.fillMaxWidth().height(220.dp).testTag("solve.bullseye").semantics { contentDescription = "Where each solution landed against its target, ${points.size} shown" })
-        // Not while a solve is running: the Master's reason is then "a plate solve is already running", which is this one.
-        if (app.value("solve.running")?.value.bool != true) app.value("solve.why_not")?.value.string?.takeIf { it.isNotEmpty() }?.let { Note(it) }
+        // Whatever was typed, else the default; the Master's range check names a bad value.
+        val exposureValue: JsonElement = exposure.trim().toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(exposure)
         if (app.canOperate) {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = minimumTarget).clip(RoundedCornerShape(8.dp)).background(theme.raised).padding(horizontal = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Txt("Exposure (s)", color = theme.textSecondary)
-                TextBox(
-                    exposure, { exposure = it; app.setPref("solve.exposure", it) }, "5", keyboard = KeyboardType.Decimal,
-                    label = "Exposure in seconds", tag = "solve.exposure", align = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
-                )
+            val captureArgs = buildMap<String, JsonElement> {
+                put("exposure_s", exposureValue)
+                put("action", JsonPrimitive(action.raw))
+                if (cameras.any { it.slot == cameraSlot }) put("camera_slot", JsonPrimitive(cameraSlot))
             }
-            // Whatever was typed, else the default; the Master's range check names a bad value.
-            val exposureValue: JsonElement = exposure.trim().toDoubleOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(exposure)
-            OperationButton(
-                "Capture & Solve", "solve.capture", mapOf("exposure_s" to exposureValue, "action" to JsonPrimitive(action.raw)), ActionKind.Prominent,
-            )
+            OperationButton("Capture & Solve", "solve.capture", captureArgs, ActionKind.Prominent)
             ActionButton("Load & Slew…", enabled = app.operation("solve.load")?.available == true, tag = "solve.load.choose") {
                 choosing = !choosing
                 if (choosing) {
@@ -314,10 +167,70 @@ private fun SolverControl() {
                 scope.launch { message = app.perform("solve.load", mapOf("frame_id" to JsonPrimitive(id))) }
             })
             OperationButton("Stop", "solve.stop")
+        }
+        // Not while a solve is running: the Master's reason is then "a plate solve is already running", which is this one.
+        if (app.value("solve.running")?.value.bool != true) app.value("solve.why_not")?.value.string?.takeIf { it.isNotEmpty() }?.let { Note(it) }
+        SolveBullseye(points, ring, Modifier.fillMaxWidth().height(220.dp).testTag("solve.bullseye").semantics { contentDescription = "Where each solution landed against its target, ${points.size} shown" })
+        Deviation(points.lastOrNull())
+        if (app.canOperate) {
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = minimumTarget).clip(RoundedCornerShape(8.dp)).background(theme.raised).padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Txt("Exposure (s)", color = theme.textSecondary)
+                TextBox(
+                    exposure, { exposure = it; app.setPref("solve.exposure", it) }, "5", keyboard = KeyboardType.Decimal,
+                    label = "Exposure in seconds", tag = "solve.exposure", align = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+            }
+            if (cameras.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Heading("Camera")
+                    val chosen = cameras.firstOrNull { it.slot == cameraSlot } ?: cameras.first()
+                    cameras.forEach { camera ->
+                        Row(
+                            Modifier.fillMaxWidth().heightIn(min = minimumTarget)
+                                .clickable(role = Role.RadioButton) { cameraSlot = camera.slot; app.setPref("solve.camera", camera.slot) }
+                                .testTag("solve.camera.${camera.slot}")
+                                .semantics { stateDescription = if (camera == chosen) "selected" else "not selected" },
+                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Txt(if (camera == chosen) "◉" else "○")
+                            Txt(if (camera.connected) camera.name else "${camera.name} (not connected)", weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Heading("Solver Action")
                 SolverAction.entries.forEach { choice -> Radio(choice, choice == action) { action = choice; app.setPref("solve.action", choice.raw) } }
                 Note(action.detail)
+            }
+        }
+    }
+}
+
+/** One of the Pier's cameras, as `solve.cameras` lists it. */
+private data class SolveCamera(val slot: String, val name: String, val connected: Boolean)
+
+/** How far the latest solution landed from where it was aimed: dRA, dDec and the total, in arcseconds. */
+@Composable
+private fun Deviation(latest: Pair<Double, Double>?) {
+    val theme = LocalTheme.current
+    fun arcsec(value: Double) = "%.1f″".format(value)
+    val values = listOf(
+        "dRA" to (latest?.let { arcsec(it.first) } ?: "—"),
+        "dDec" to (latest?.let { arcsec(it.second) } ?: "—"),
+        "Total" to (latest?.let { arcsec(kotlin.math.hypot(it.first, it.second)) } ?: "—"),
+    )
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(theme.raised).padding(vertical = 6.dp)) {
+        values.forEach { (label, value) ->
+            Column(
+                Modifier.weight(1f).testTag("solve.dev.$label").semantics(mergeDescendants = true) { contentDescription = "$label $value" },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Txt(label, size = 12.sp, color = theme.textSecondary)
+                Txt(value, size = 20.sp, weight = FontWeight.Bold)
             }
         }
     }

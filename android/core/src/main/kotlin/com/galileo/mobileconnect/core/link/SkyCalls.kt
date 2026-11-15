@@ -140,6 +140,17 @@ suspend fun MasterApi.savedTargets(): SavedTargets? = quiet {
     )
 }
 
+/** The survey picture of one saved target (JPEG bytes), or null when there is none (not saved, or the Master is offline). */
+suspend fun MasterApi.targetThumbnail(name: String, size: Int = 200): ByteArray? {
+    val answer = binaryGet("/mobileconnect/v1/targets/thumbnail", mapOf("name" to name, "size" to size), 4 shl 20)
+    return when (answer.status) {
+        200 -> answer.bytes
+        404 -> null
+        401 -> throw LinkError.Unpaired
+        else -> throw LinkError.Unexpected("The Master gave an unexpected answer (${answer.status}).")
+    }
+}
+
 /** Takes one object off the saved list. Null when it worked, otherwise the words to show. Needs control (a Viewer is refused). */
 suspend fun MasterApi.removeSavedTarget(name: String): String? = try {
     skyApi.removeTarget(name)

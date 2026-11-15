@@ -8,8 +8,10 @@ struct EquipmentScreen: View {
     var body: some View {
         ScreenScroll("Equipment") {
             ReadOnlyHint()
+            JogPad()
             Columns {
                 mount
+                MeridianFlipCards()
             } right: {
                 camera
                 filter
@@ -46,7 +48,6 @@ struct EquipmentScreen: View {
                 OperationButton(title: "Park", operation: "mount.park", icon: "parkingsign")
                 OperationButton(title: "Unpark", operation: "mount.unpark")
             }
-            JogPad()
             OperationForm(title: "Slew", operation: "mount.slew", icon: "location", kind: .prominent)
             OperationForm(title: "Sync", operation: "mount.sync")
         }
@@ -111,26 +112,64 @@ private struct FilterChoice: View {
     }
 }
 
-/// Held north, south, east, west, when the Master offers it. A real Master doesn't yet (`docs/SDD.md` 4.2).
+/// The mount's manual movement, at the top of Equipment and as large as the screen allows (on an iPhone, one full
+/// screen) so it can be used in the dark: a 3 x 3 pad of the eight directions with a Stop in the middle. Each arrow moves
+/// the mount only while it is held (`MAPP-DEV-*`, `CSURF-330`); the diagonals move both axes.
 private struct JogPad: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    private static let rows: [[(String, String, String)]] = [
+        [("North West", "arrow.up.left", "northwest"), ("North", "arrow.up", "north"), ("North East", "arrow.up.right", "northeast")],
+        [("West", "arrow.left", ""), ("", "", ""), ("East", "arrow.right", "")],
+        [("South West", "arrow.down.left", "southwest"), ("South", "arrow.down", "south"), ("South East", "arrow.down.right", "southeast")],
+    ]
+
+    private func direction(_ cell: (String, String, String)) -> String { cell.2.isEmpty ? cell.0.lowercased() : cell.2 }
 
     var body: some View {
         if model.canOperate {
-            if model.operation("mount.hold_start") == nil {
-                Note("Jog: this Master doesn't offer held mount movement yet.")
-            } else {
+            if let info = model.operation("mount.hold_start") {
                 VStack(spacing: 8) {
-                    HoldButton(title: "North", icon: "arrow.up", family: "mount", args: ["direction": "north"])
-                    HStack(spacing: 8) {
-                        HoldButton(title: "West", icon: "arrow.left", family: "mount", args: ["direction": "west"])
-                        HoldButton(title: "East", icon: "arrow.right", family: "mount", args: ["direction": "east"])
+                    ForEach(Self.rows.indices, id: \.self) { row in
+                        HStack(spacing: 8) {
+                            ForEach(Self.rows[row].indices, id: \.self) { column in
+                                let cell = Self.rows[row][column]
+                                if cell.0.isEmpty {
+                                    stop
+                                } else {
+                                    HoldButton(title: cell.0, icon: cell.1, family: "mount",
+                                               args: ["direction": .string(direction(cell))], large: true)
+                                }
+                            }
+                        }
                     }
-                    HoldButton(title: "South", icon: "arrow.down", family: "mount", args: ["direction": "south"])
-                    if let explanation = model.snapshot.hold.explanation { Note(explanation) }
                 }
+                // One full screen on a phone: the visible height less the screen's own padding.
+                .containerRelativeFrame(.vertical) { length, _ in max(320, length - 2 * (Layout.spacing + 4)) }
+                if let choices = info.arguments.first(where: { $0.name == "direction" })?.choices, !choices.contains("northeast") {
+                    Note("This Master doesn't offer diagonal moves yet: update Galileo on the Master.")
+                }
+                if let explanation = model.snapshot.hold.explanation { Note(explanation) }
+            } else {
+                Note("Jog: this Master doesn't offer held mount movement yet.")
             }
         }
+    }
+
+    /// The middle of the pad: stop whatever the mount is doing.
+    private var stop: some View {
+        Button {
+            Task { _ = await model.perform("mount.abort_slew") }
+        } label: {
+            Image(systemName: "stop.fill").font(.system(size: 40, weight: .bold))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(theme.danger, in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(theme.onDanger)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop")
+        .accessibilityIdentifier("mount.abort_slew")
     }
 }
 
