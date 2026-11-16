@@ -11,6 +11,7 @@ import com.galileo.mobileconnect.core.sky.SavedTargets
 import com.galileo.mobileconnect.core.sky.SiteAnswer
 import com.galileo.mobileconnect.core.sky.SkyConstellations
 import com.galileo.mobileconnect.core.sky.SkyFrameDecoder
+import com.galileo.mobileconnect.core.sky.SkyLabel
 import com.galileo.mobileconnect.core.sky.SkyPage
 import com.galileo.mobileconnect.core.sky.SkySite
 import com.galileo.mobileconnect.core.sky.SkyTile
@@ -103,6 +104,11 @@ suspend fun MasterApi.surveyTile(tile: SkyTile): SkyTileImage? = quiet {
 /** Which deep-sky objects are in which catalog, by the Master's index. Empty if this Master can't say. */
 suspend fun MasterApi.skyCatalogs(): Map<String, Set<Int>> = quiet {
     skyApi.getSkyCatalogs().catalogs.associate { it.name to it.indexes.toSet() }
+} ?: emptyMap()
+
+/** Names, types and sizes by the Master's index, for labels and icons. Empty if this Master can't say (a plugin from before labels). */
+suspend fun MasterApi.skyLabels(): Map<Int, SkyLabel> = quiet {
+    skyApi.getSkyLabels().labels.associate { it.index to SkyLabel(it.name, it.type, it.sizeArcmin?.toDouble() ?: 0.0) }
 } ?: emptyMap()
 
 suspend fun MasterApi.constellations(): SkyConstellations? = quiet {

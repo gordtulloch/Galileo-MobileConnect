@@ -976,6 +976,41 @@ paths:
                             type: integer
         "401":
           $ref: "#/components/responses/Unauthorised"
+  /mobileconnect/v1/sky/labels:
+    get:
+      tags: [sky]
+      operationId: getSkyLabels
+      summary: Name, type and size of the objects the Star Atlas labels.
+      description: >-
+        Every deep-sky object and every star with a proper name, so a client can label them and draw the icon for
+        their type. Fixed for a given Master, so a client needs this once. Indexes are those of the sky catalog stream.
+      x-galileo-status: implemented
+      responses:
+        "200":
+          description: The labels.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [labels]
+                properties:
+                  labels:
+                    type: array
+                    items:
+                      type: object
+                      required: [index, name, type]
+                      properties:
+                        index:
+                          type: integer
+                        name:
+                          type: string
+                        type:
+                          type: string
+                          description: Galaxy, Nebula, Cluster, OpenCluster, GlobularCluster, PlanetaryNebula, SupernovaRemnant, DoubleStar, Asterism, Star or Other.
+                        size_arcmin:
+                          type: number
+        "401":
+          $ref: "#/components/responses/Unauthorised"
   /mobileconnect/v1/sky/check:
     get:
       tags: [sky]

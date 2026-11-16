@@ -290,6 +290,18 @@ private struct SkyCanvas: View {
             }
             return best?.0
         }
+        // What was asked for first: a saved target or a Find match, wherever it is.
+        var pickedMarked: (SkyModel.Found, CGFloat)?
+        for (object, _) in sky.marked {
+            guard let at = place(ra: object.raDeg, dec: object.decDeg, site: site, size: size, moment: moment) else { continue }
+            let distance = hypot(at.x - location.x, at.y - location.y)
+            if distance < 32, distance < (pickedMarked?.1 ?? .infinity) { pickedMarked = (object, distance) }
+        }
+        if let (object, _) = pickedMarked {
+            onTap(location)
+            Task { await sky.pick(object, now: now) }
+            return
+        }
         if let hit = nearest(sky.shownDeepSky, within: 32) ?? nearest(sky.bright, within: 28) {
             onTap(location)
             Task { await sky.tapped(hit, now: now) }
@@ -306,8 +318,11 @@ private struct SkyCanvas: View {
         let dim = theme.textSecondary
         let live = model.snapshot.isConnected && sky.timeOffset == 0
         let bodies = EphemerisInterpolator.bodies(at: moment, in: sky.samples)
-        let pointing = live ? pointingPosition : nil
-        let frame = sky.fieldOfView
+        let telescopes = live ? pointedTelescopes : []
+        let labels = sky.labels
+        let marked = sky.marked
+        let accent = theme.accent
+        let bright = sky.bright
         let selection = sky.selection
         let deepSky = sky.shownDeepSky
         let figures = sky.showConstellations ? sky.constellations : SkyConstellations()
@@ -366,10 +381,63 @@ private struct SkyCanvas: View {
                 }
             }
 
+            // Deep-sky objects: the icon of their type (as the desktop draws them) and their name.
+            let perArcmin = camera.scale(viewHeight: shorter) * 2 * tan(Double.pi / 180 / 60 / 2)
+            func icon(_ shape: SkyIconShape, at p: CGPoint, sizeArcmin: Double, tint: Color) {
+                let r = min(40, max(3.5, sizeArcmin * perArcmin / 2))
+                let line = StrokeStyle(lineWidth: 1)
+                switch shape {
+                case .galaxy:
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - r * 1.3, y: p.y - r * 0.7, width: r * 2.6, height: r * 1.4)), with: .color(tint), style: line)
+                case .openCluster:
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(tint), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
+                case .globularCluster:
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(tint), style: line)
+                    var cross = Path()
+                    cross.move(to: CGPoint(x: p.x - r, y: p.y))
+                    cross.addLine(to: CGPoint(x: p.x + r, y: p.y))
+                    cross.move(to: CGPoint(x: p.x, y: p.y - r))
+                    cross.addLine(to: CGPoint(x: p.x, y: p.y + r))
+                    context.stroke(cross, with: .color(tint), style: line)
+                case .cluster:
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(tint), style: line)
+                case .planetaryNebula:
+                    context.stroke(Path(ellipseIn: CGRect(x: p.x - r * 0.6, y: p.y - r * 0.6, width: r * 1.2, height: r * 1.2)), with: .color(tint), style: line)
+                    var ticks = Path()
+                    ticks.move(to: CGPoint(x: p.x - r, y: p.y))
+                    ticks.addLine(to: CGPoint(x: p.x - r * 0.6, y: p.y))
+                    ticks.move(to: CGPoint(x: p.x + r * 0.6, y: p.y))
+                    ticks.addLine(to: CGPoint(x: p.x + r, y: p.y))
+                    context.stroke(ticks, with: .color(tint), style: line)
+                case .square:
+                    context.stroke(Path(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r)), with: .color(tint), style: line)
+                }
+            }
+            let onScreen = CGRect(origin: .zero, size: size).insetBy(dx: -20, dy: -20)
+            let markedNames = Set(marked.map { $0.object.name.lowercased() })
             for object in deepSky {
-                guard let p = inSky(ra: Double(object.raDeg), dec: Double(object.decDeg)) else { continue }
-                let box = CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10)
-                context.stroke(Path(ellipseIn: box), with: .color(dim), lineWidth: 1)
+                guard let p = inSky(ra: Double(object.raDeg), dec: Double(object.decDeg)), onScreen.contains(p) else { continue }
+                let label = labels[object.index]
+                if let label, markedNames.contains(label.name.lowercased()) { continue }     // drawn below, in its own colour
+                icon(label?.shape ?? .square, at: p, sizeArcmin: label?.sizeArcmin ?? 0, tint: dim)
+                if let label {
+                    context.draw(Text(label.name).font(.caption2).foregroundStyle(dim), at: CGPoint(x: p.x + 8, y: p.y - 8), anchor: .leading)
+                }
+            }
+            // The stars with proper names.
+            for star in bright {
+                guard let name = labels[star.index]?.name, let p = inSky(ra: Double(star.raDeg), dec: Double(star.decDeg)),
+                    onScreen.contains(p)
+                else { continue }
+                context.draw(Text(name).font(.caption2).foregroundStyle(dim), at: CGPoint(x: p.x + 7, y: p.y - 6), anchor: .leading)
+            }
+            // The saved targets, and every object Find matched, are always on the map with their icon and name, whatever
+            // the catalogs: a saved one in the accent colour, a found one in the text colour and bold.
+            for (object, isSaved) in marked {
+                guard let p = at(ra: object.raDeg, dec: object.decDeg), onScreen.contains(p) else { continue }
+                let tint = isSaved ? accent : color
+                icon(SkyLabel(name: object.name, type: object.type).shape, at: p, sizeArcmin: max(object.sizeArcmin, 12), tint: tint)
+                context.draw(Text(object.name).font(.caption2.bold()).foregroundStyle(tint), at: CGPoint(x: p.x + 10, y: p.y - 10), anchor: .leading)
             }
 
             for body in bodies {
@@ -385,32 +453,55 @@ private struct SkyCanvas: View {
                 context.draw(Text(selection.name).font(.caption.bold()).foregroundStyle(color), at: CGPoint(x: p.x, y: p.y - 24))
             }
 
-            // Hidden, never frozen, when not live (`MAPP-STR-060`).
-            if let pointing, let p = at(ra: pointing.ra, dec: pointing.dec) {
+            // Each telescope: a cross where it points, its field as the sky has it (the rectangle follows the projection,
+            // rotated by the rotator), and its name. Hidden, never frozen, when not live (`MAPP-STR-060`).
+            for scope in telescopes {
+                guard let p = at(ra: scope.raDeg, dec: scope.decDeg) else { continue }
                 var cross = Path()
                 cross.move(to: CGPoint(x: p.x - 12, y: p.y))
                 cross.addLine(to: CGPoint(x: p.x + 12, y: p.y))
                 cross.move(to: CGPoint(x: p.x, y: p.y - 12))
                 cross.addLine(to: CGPoint(x: p.x, y: p.y + 12))
                 context.stroke(cross, with: .color(color), lineWidth: 2)
-                if let frame {
-                    let perDegree = 2 * camera.scale(viewHeight: shorter) * .pi / 180 / 2
-                    let width = max(8, frame.width * perDegree)
-                    let height = max(8, frame.height * perDegree)
-                    context.stroke(
-                        Path(CGRect(x: p.x - width / 2, y: p.y - height / 2, width: width, height: height)), with: .color(color),
-                        lineWidth: 1.5)
+                if let field = scope.fieldOfView {
+                    var frame = Path()
+                    var started = false
+                    for corner in SkyGeometry.fieldOutline(
+                        raDeg: scope.raDeg, decDeg: scope.decDeg, widthDeg: field.width, heightDeg: field.height,
+                        rotationDeg: scope.rotationDeg)
+                    {
+                        guard let q = at(ra: corner.ra, dec: corner.dec) else {
+                            started = false
+                            continue
+                        }
+                        if started { frame.addLine(to: q) } else { frame.move(to: q) }
+                        started = true
+                    }
+                    context.stroke(frame, with: .color(color), lineWidth: 1.5)
                 }
+                context.draw(Text(scope.name).font(.caption.bold()).foregroundStyle(color), at: CGPoint(x: p.x + 16, y: p.y - 14), anchor: .leading)
             }
         }
         .allowsHitTesting(false)
     }
 
-    private var pointingPosition: (ra: Double, dec: Double)? {
-        guard let ra = model.value("mount.position.ra_deg")?.value.doubleValue,
-            let dec = model.value("mount.position.dec_deg")?.value.doubleValue
-        else { return nil }
-        return (ra, dec)
+    /// Where each telescope is pointing now, and the rotator's angle if it has one.
+    private struct PointedTelescope {
+        var name: String
+        var raDeg: Double
+        var decDeg: Double
+        var rotationDeg: Double
+        var fieldOfView: (width: Double, height: Double)?
+    }
+
+    private var pointedTelescopes: [PointedTelescope] {
+        sky.telescopes.compactMap { scope in
+            guard let ra = model.snapshot.value("mount.position.ra_deg", pier: scope.id, now: model.now)?.value.doubleValue,
+                let dec = model.snapshot.value("mount.position.dec_deg", pier: scope.id, now: model.now)?.value.doubleValue
+            else { return nil }
+            let rotation = model.snapshot.value("rotator.angle", pier: scope.id, now: model.now)?.value.doubleValue ?? 0
+            return PointedTelescope(name: scope.name, raDeg: ra, decDeg: dec, rotationDeg: rotation, fieldOfView: scope.fieldOfView)
+        }
     }
 
     /// For drawing only: the check that decides anything is the Master's.
@@ -489,6 +580,12 @@ private struct SkyPanel: View {
                     }
                     .buttonStyle(ActionStyle())
                     .accessibilityIdentifier("sky.result.\(index)")
+                }
+                if !sky.found.isEmpty {
+                    Note("On the map: " + sky.found.map(\.name).joined(separator: ", "))
+                    Button("Clear found") { sky.clearFound() }
+                        .buttonStyle(ActionStyle())
+                        .accessibilityIdentifier("sky.clearfound")
                 }
             }
             timeCard

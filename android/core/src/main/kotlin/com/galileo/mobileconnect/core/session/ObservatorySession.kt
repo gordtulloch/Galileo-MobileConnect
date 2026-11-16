@@ -33,6 +33,7 @@ import com.galileo.mobileconnect.core.link.tile
 import com.galileo.mobileconnect.core.link.checkPosition
 import com.galileo.mobileconnect.core.link.removeSavedTarget
 import com.galileo.mobileconnect.core.link.savedTargets
+import com.galileo.mobileconnect.core.link.targetThumbnail
 import com.galileo.mobileconnect.core.link.read
 import com.galileo.mobileconnect.core.state.AlertEvent
 import com.galileo.mobileconnect.core.state.LivePhase
@@ -177,6 +178,8 @@ class ObservatorySession(
 
     suspend fun stop() {
         retrying?.cancel()
+        catalogueRefresh?.cancel()
+        catalogueRefresh = null
         hold?.stop(HoldStop.Released)
         link?.stop()
         link = null
@@ -214,11 +217,8 @@ class ObservatorySession(
         val role = Role.from(identity.permissions, outcome.allowed)
         val (piers, piersReason) = api.piers()
         val catalogues = state.value.catalogues.toMutableMap()
-        for (pier in piers) if (pier.id !in catalogues) {
-            catalogues[pier.id] = api.catalogue(pier.id)
-            // TEMPORARY: what this Master really offers
-            System.err.println("GalileoCatalogue pier=${pier.id} ops=${catalogues[pier.id]!!.size} " + catalogues[pier.id]!!.joinToString(",") { it.name })
-        }
+        // Every time, not once: availability ("the mount is not connected") follows the Pier's devices.
+        for (pier in piers) catalogues[pier.id] = api.catalogue(pier.id)
         longRunning = catalogues.values.flatten().filter { it.longRunning }.map { it.name }.toSet()
         val capabilities = api.capabilities()
         val alerts = api.alerts()
@@ -231,6 +231,29 @@ class ObservatorySession(
             )
         }
         if (piersReason != null) retryUntilPiersAppear()
+        startCatalogueRefresh()
+    }
+
+    @Volatile private var catalogueRefresh: Job? = null
+
+    /**
+     * Devices connect and drop at the Galileo computer without the phone being told, and which operations are available
+     * depends on that, so each Pier's catalogue is read again every few seconds while connected.
+     */
+    private fun startCatalogueRefresh() {
+        if (catalogueRefresh != null) return
+        catalogueRefresh = scope.launch {
+            while (isActive) {
+                delay(5_000)
+                if (link == null) continue
+                for (pier in state.value.piers) {
+                    val fresh = try { api.catalogue(pier.id) } catch (e: CancellationException) { throw e } catch (e: Exception) { continue }
+                    if (state.value.catalogues[pier.id] != fresh) {
+                        state.update { it.copy(catalogues = it.catalogues + (pier.id to fresh)) }
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -327,6 +350,8 @@ class ObservatorySession(
     private fun finish(stop: SessionStop) {
         state.update { it.copy(stop = stop, ledger = it.ledger.connectionLost()) }
         if (stop is SessionStop.Unpaired) onUnpaired()
+        catalogueRefresh?.cancel()
+        catalogueRefresh = null
         link?.stop()
     }
 

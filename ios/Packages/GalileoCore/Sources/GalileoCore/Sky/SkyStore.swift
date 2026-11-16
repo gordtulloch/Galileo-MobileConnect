@@ -23,6 +23,39 @@ public struct IdentifiedObject: Sendable, Equatable {
     public var magnitude: Double?
 }
 
+/// What the Master calls an object and what kind it is, so that the Star Atlas can label it and draw its icon.
+public struct SkyLabel: Sendable, Equatable {
+    public var name: String
+    /// Core's `ObjectType`: Galaxy, Nebula, Cluster, OpenCluster, GlobularCluster, PlanetaryNebula, SupernovaRemnant,
+    /// DoubleStar, Asterism, Star or Other.
+    public var type: String
+    public var sizeArcmin: Double
+
+    public init(name: String, type: String, sizeArcmin: Double = 0) {
+        self.name = name
+        self.type = type
+        self.sizeArcmin = sizeArcmin
+    }
+
+    /// The icon the desktop Star Atlas draws for this type (`Star Atlas` `_draw_dsos`), so the same object looks the same
+    /// in both: an ellipse for a galaxy, a dashed circle for an open cluster, a circle with a cross for a globular one,
+    /// a circle for any other cluster, a ringed dot for a planetary nebula and a square for everything else.
+    public var shape: SkyIconShape {
+        switch type {
+        case "Galaxy": .galaxy
+        case "OpenCluster": .openCluster
+        case "GlobularCluster": .globularCluster
+        case "Cluster": .cluster
+        case "PlanetaryNebula": .planetaryNebula
+        default: .square
+        }
+    }
+}
+
+public enum SkyIconShape: Sendable, Equatable {
+    case galaxy, openCluster, globularCluster, cluster, planetaryNebula, square
+}
+
 /// Constellation figures, from the Master: the app ships none.
 public struct SkyConstellations: Sendable, Equatable {
     public struct Name: Sendable, Equatable {
@@ -127,6 +160,19 @@ extension MasterAPI {
         let output = try? await callingForSky { try await client.getSkyCatalogs() }
         guard case .ok(let response)? = output, let body = try? response.body.json else { return [:] }
         return Dictionary(uniqueKeysWithValues: body.catalogs.map { ($0.name, Set($0.indexes.compactMap { Int32(exactly: $0) })) })
+    }
+
+    /// Names, types and sizes by the Master's index. Empty if this Master can't say (a plugin from before labels).
+    public func skyLabels() async -> [Int32: SkyLabel] {
+        let output = try? await callingForSky { try await client.getSkyLabels() }
+        guard case .ok(let response)? = output, let body = try? response.body.json else { return [:] }
+        var labels: [Int32: SkyLabel] = [:]
+        labels.reserveCapacity(body.labels.count)
+        for item in body.labels {
+            guard let index = Int32(exactly: item.index) else { continue }
+            labels[index] = SkyLabel(name: item.name, type: item._type, sizeArcmin: item.size_arcmin ?? 0)
+        }
+        return labels
     }
 
     public func constellations() async -> SkyConstellations? {

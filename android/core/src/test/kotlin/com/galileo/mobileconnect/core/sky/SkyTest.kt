@@ -8,6 +8,7 @@ import com.galileo.mobileconnect.core.link.constellations
 import com.galileo.mobileconnect.core.link.ephemeris
 import com.galileo.mobileconnect.core.link.identify
 import com.galileo.mobileconnect.core.link.skyCatalogs
+import com.galileo.mobileconnect.core.link.skyLabels
 import com.galileo.mobileconnect.core.link.skySite
 import com.galileo.mobileconnect.core.link.surveyTile
 import com.galileo.mobileconnect.core.mock.MockMaster
@@ -393,6 +394,33 @@ class SkyTest {
         val catalogs = master().connection(identity, MockMaster.TOKEN).api.skyCatalogs()
         assertTrue(2500 in catalogs["Messier"]!!, "M 42")
         assertTrue(catalogs["NGC"] != null && catalogs["Caldwell"] != null)
+    }
+
+    /** The Star Atlas labels what it draws, and draws it as its type: the Master names and types them. */
+    @Test
+    fun `the Master names and types what the Star Atlas draws`() = runBlocking<Unit> {
+        val labels = master().connection(identity, MockMaster.TOKEN).api.skyLabels()
+        val m42 = labels[2500]!!
+        assertEquals("M 42", m42.name)
+        assertEquals("Nebula", m42.type)
+        assertEquals(SkyIconShape.Square, m42.shape)
+        assertEquals(SkyIconShape.Galaxy, labels.values.first { it.name == "M 31" }.shape)
+        assertEquals(SkyIconShape.OpenCluster, SkyLabel("x", "OpenCluster").shape)
+        assertEquals(SkyIconShape.GlobularCluster, SkyLabel("x", "GlobularCluster").shape)
+        assertEquals(SkyIconShape.PlanetaryNebula, SkyLabel("x", "PlanetaryNebula").shape)
+        assertEquals(SkyIconShape.Cluster, SkyLabel("x", "Cluster").shape)
+    }
+
+    /** A telescope's field is core's rectangle: at the equator it is the width and height asked for, and it closes. */
+    @Test
+    fun `a field outline is cores rectangle`() {
+        val outline = SkyGeometry.fieldOutline(100.0, 0.0, 2.0, 1.0)
+        assertEquals(33, outline.size)
+        assertTrue(abs(outline.first().first - outline.last().first) < 1e-9 && abs(outline.first().second - outline.last().second) < 1e-9)
+        assertTrue(abs((outline.maxOf { it.first } - outline.minOf { it.first }) - 2) < 0.01, "width runs along RA at the equator")
+        assertTrue(abs((outline.maxOf { it.second } - outline.minOf { it.second }) - 1) < 0.01)
+        val turned = SkyGeometry.fieldOutline(100.0, 0.0, 2.0, 1.0, 90.0)
+        assertTrue(abs((turned.maxOf { it.second } - turned.minOf { it.second }) - 2) < 0.01, "a quarter turn: width runs north-south")
     }
 
     @Test

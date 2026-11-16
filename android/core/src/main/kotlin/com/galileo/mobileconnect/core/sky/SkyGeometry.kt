@@ -115,6 +115,44 @@ object SkyGeometry {
         return Mat3(column(0.0, 0.0), column(90.0, 0.0), column(0.0, 90.0))
     }
 
+    /**
+     * The closed outline of a [widthDeg] x [heightDeg] field centred on a J2000 position, as `fov_outline_radec` in core
+     * has it, so that a telescope's field is the same rectangle here as on the desktop. [rotationDeg] is the position
+     * angle of the field's up edge, east of north. Edges are subdivided so that they follow the sky's curvature.
+     */
+    fun fieldOutline(
+        raDeg: Double, decDeg: Double, widthDeg: Double, heightDeg: Double, rotationDeg: Double = 0.0, pointsPerEdge: Int = 8,
+    ): List<Pair<Double, Double>> {
+        val n = max(1, pointsPerEdge)
+        val hw = widthDeg / 2
+        val hh = heightDeg / 2
+        val corners = listOf(-hw to -hh, hw to -hh, hw to hh, -hw to hh, -hw to -hh)
+        val offsets = ArrayList<Pair<Double, Double>>()
+        for (edge in 0 until 4) {
+            val (u0, v0) = corners[edge]
+            val (u1, v1) = corners[edge + 1]
+            for (k in 0 until n) {
+                val f = k.toDouble() / n
+                offsets += (u0 + (u1 - u0) * f) to (v0 + (v1 - v0) * f)
+            }
+        }
+        offsets += corners[0]
+        val theta = rotationDeg * RADIANS
+        val ra0 = raDeg * RADIANS
+        val dec0 = decDeg * RADIANS
+        return offsets.map { (u, v) ->
+            // Tangent-plane offsets in radians: xi east, eta north (the frame's "right" points west at zero rotation).
+            val xi = (-u * cos(theta) + v * sin(theta)) * RADIANS
+            val eta = (u * sin(theta) + v * cos(theta)) * RADIANS
+            val denominator = cos(dec0) - eta * sin(dec0)
+            val ra = ra0 + atan2(xi, denominator)
+            val dec = atan2((sin(dec0) + eta * cos(dec0)) * cos(ra - ra0), denominator)
+            var degrees = (ra / RADIANS) % 360
+            if (degrees < 0) degrees += 360
+            degrees to dec / RADIANS
+        }
+    }
+
     /** Where a J2000 position is in the sky, as `equatorial_to_horizontal` after precession has it in Galileo. */
     fun horizontal(raDeg: Double, decDeg: Double, site: SkySite, at: Instant): HorizontalPosition {
         val (ofDateRa, ofDateDec) = precessed(raDeg, decDeg, at)

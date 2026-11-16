@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -42,6 +43,8 @@ import com.galileo.mobileconnect.core.sky.Mat3
 import com.galileo.mobileconnect.core.sky.SkyCamera
 import com.galileo.mobileconnect.core.sky.SkyConstellations
 import com.galileo.mobileconnect.core.sky.SkyGeometry
+import com.galileo.mobileconnect.core.sky.SkyIconShape
+import com.galileo.mobileconnect.core.sky.SkyLabel
 import com.galileo.mobileconnect.core.sky.SkyObject
 import com.galileo.mobileconnect.core.sky.SkySite
 import com.galileo.mobileconnect.core.sky.SkySurvey
@@ -56,7 +59,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import java.time.Instant
 import kotlin.math.PI
 import kotlin.math.hypot
-import kotlin.math.max
 
 /**
  * The picture: the survey, the ground and the star field drawn with the canvas, and over them everything that needs a
@@ -93,10 +95,19 @@ fun SkyCanvas(sky: SkyModel, onTap: (Offset?) -> Unit, onMoved: () -> Unit) {
                         sky.cameraMoved(Instant.now())
                     }
                 }
-                .pointerInput(sky.shownDeepSky, sky.bright, sky.camera, moment) {
+                .pointerInput(sky.shownDeepSky, sky.bright, sky.marked, sky.camera, moment) {
                     detectTapGestures { at ->
                         val place = site ?: return@detectTapGestures
                         val reach = density.density
+                        val marked = sky.marked.map { it.first }
+                            .mapNotNull { o -> markedDistance(o, at, sky, place, size.width.toFloat(), size.height.toFloat(), moment)?.let { o to it } }
+                            .filter { it.second < 32 * reach }
+                            .minByOrNull { it.second }?.first
+                        if (marked != null) { // what was asked for first: a saved target or a Find match, wherever it is
+                            onTap(at)
+                            scope.launch { sky.pick(marked, Instant.now()) }
+                            return@detectTapGestures
+                        }
                         val hit = nearest(sky.shownDeepSky, 32 * reach, at, sky, place, size.width.toFloat(), size.height.toFloat(), moment)
                             ?: nearest(sky.bright, 28 * reach, at, sky, place, size.width.toFloat(), size.height.toFloat(), moment)
                         if (hit != null) {
@@ -124,7 +135,7 @@ fun SkyCanvas(sky: SkyModel, onTap: (Offset?) -> Unit, onMoved: () -> Unit) {
                 drawStars(native, sky, toView, toHorizon, w, h, scale, theme.text.toArgb(), density.density)
             }
             if (sky.showGround) drawGround(site, camera, theme.landNear, theme.landFar, theme.horizonFill, w, h)
-            drawOverlay(sky, site, moment, camera, theme.text, theme.textSecondary, w, h, measurer, live = app.snapshot.isConnected && sky.timeOffset == 0.0, density.density, app)
+            drawOverlay(sky, site, moment, camera, theme.text, theme.textSecondary, w, h, measurer, live = app.snapshot.isConnected && sky.timeOffset == 0.0, density.density, app, theme.accent)
         }
         if (!app.snapshot.isConnected) {
             Banner("✕", "Not live: showing the last sky received", Modifier.padding(8.dp).padding(end = 60.dp).testTag("sky.notlive"))
@@ -138,6 +149,13 @@ private val com.galileo.mobileconnect.ui.theme.Theme.isLightPage: Boolean get() 
 
 private fun place(camera: SkyCamera, alt: Double, az: Double, w: Float, h: Float): Offset? =
     camera.project(alt, az, h.toDouble())?.let { Offset(w / 2 + it.x.toFloat(), h / 2 - it.y.toFloat()) }
+
+/** How far a marked object is from a touch, or null when it isn't in view. */
+private fun markedDistance(o: Found, at: Offset, sky: SkyModel, site: SkySite, w: Float, h: Float, moment: Instant): Float? {
+    val horizontal = SkyGeometry.horizontal(o.raDeg, o.decDeg, site, moment)
+    val p = place(sky.camera, horizontal.altitude, horizontal.azimuth, w, h) ?: return null
+    return hypot(p.x - at.x, p.y - at.y)
+}
 
 private fun nearest(
     objects: List<SkyObject>, reach: Float, at: Offset, sky: SkyModel, site: SkySite, w: Float, h: Float, moment: Instant,
@@ -271,7 +289,7 @@ private fun DrawScope.drawGround(site: SkySite, camera: SkyCamera, near: Color, 
 
 private fun DrawScope.drawOverlay(
     sky: SkyModel, site: SkySite, moment: Instant, camera: SkyCamera, color: Color, dim: Color, w: Float, h: Float,
-    measurer: TextMeasurer, live: Boolean, density: Float, app: com.galileo.mobileconnect.AppViewModel,
+    measurer: TextMeasurer, live: Boolean, density: Float, app: com.galileo.mobileconnect.AppViewModel, accent: Color,
 ) {
     fun plot(alt: Double, az: Double) = place(camera, alt, az, w, h)
     fun at(ra: Double, dec: Double): Offset? {
@@ -330,9 +348,63 @@ private fun DrawScope.drawOverlay(
         plot(0.0, azimuth)?.let { label(name, Offset(it.x, it.y + 12 * density), bold) }
     }
 
+    // Deep-sky objects: the icon of their type (as the desktop draws them) and their name.
+    val perArcmin = camera.scale(h.toDouble()) * 2 * kotlin.math.tan(PI / 180 / 60 / 2)
+    fun icon(shape: SkyIconShape, p: Offset, sizeArcmin: Double, tint: Color) {
+        val r = (sizeArcmin * perArcmin / 2).coerceIn(3.5 * density, 40.0 * density).toFloat()
+        val line = Stroke(1.dp.toPx())
+        when (shape) {
+            SkyIconShape.Galaxy -> drawOval(tint, topLeft = Offset(p.x - r * 1.3f, p.y - r * 0.7f), size = Size(r * 2.6f, r * 1.4f), style = line)
+            SkyIconShape.OpenCluster -> drawCircle(
+                tint, radius = r, center = p,
+                style = Stroke(1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 2.dp.toPx()))),
+            )
+            SkyIconShape.GlobularCluster -> {
+                drawCircle(tint, radius = r, center = p, style = line)
+                drawLine(tint, Offset(p.x - r, p.y), Offset(p.x + r, p.y), strokeWidth = 1.dp.toPx())
+                drawLine(tint, Offset(p.x, p.y - r), Offset(p.x, p.y + r), strokeWidth = 1.dp.toPx())
+            }
+            SkyIconShape.Cluster -> drawCircle(tint, radius = r, center = p, style = line)
+            SkyIconShape.PlanetaryNebula -> {
+                drawCircle(tint, radius = r * 0.6f, center = p, style = line)
+                drawLine(tint, Offset(p.x - r, p.y), Offset(p.x - r * 0.6f, p.y), strokeWidth = 1.dp.toPx())
+                drawLine(tint, Offset(p.x + r * 0.6f, p.y), Offset(p.x + r, p.y), strokeWidth = 1.dp.toPx())
+            }
+            SkyIconShape.Square -> drawRect(tint, topLeft = Offset(p.x - r, p.y - r), size = Size(2 * r, 2 * r), style = line)
+        }
+    }
+    fun labelBeside(text: String, p: Offset, style: TextStyle) {
+        val layout = measurer.measure(text, style)
+        drawText(layout, topLeft = Offset(p.x + 8 * density, p.y - 8 * density - layout.size.height / 2f))
+    }
+    val onScreen = androidx.compose.ui.geometry.Rect(-20f, -20f, w + 20f, h + 20f)
+    val markedNames = sky.marked.map { it.first.name.lowercase() }.toSet()
+    val labels = sky.labels
     for (o in sky.shownDeepSky) {
         val p = inSky(o.raDeg.toDouble(), o.decDeg.toDouble()) ?: continue
-        drawCircle(dim, radius = 5.dp.toPx(), center = p, style = Stroke(1.dp.toPx()))
+        if (!onScreen.contains(p)) continue
+        val named: SkyLabel? = labels[o.index]
+        if (named != null && named.name.lowercase() in markedNames) continue // drawn below, in its own colour
+        icon(named?.shape ?: SkyIconShape.Square, p, named?.sizeArcmin ?: 0.0, dim)
+        if (named != null) {
+            labelBeside(named.name, p, small)
+        }
+    }
+    // The stars with proper names.
+    for (star in sky.bright) {
+        val name = labels[star.index]?.name ?: continue
+        val p = inSky(star.raDeg.toDouble(), star.decDeg.toDouble()) ?: continue
+        if (onScreen.contains(p)) labelBeside(name, p, small)
+    }
+    // The saved targets, and every object Find matched, are always on the map with their icon and name, whatever the
+    // catalogs: a saved one in the accent colour, a found one in the text colour and bold.
+    for ((o, isSaved) in sky.marked) {
+        val p = at(o.raDeg, o.decDeg) ?: continue
+        if (!onScreen.contains(p)) continue
+        val tint = if (isSaved) accent else color
+        icon(SkyLabel(o.name, o.type).shape, p, maxOf(o.sizeArcmin, 12.0), tint)
+        val layout = measurer.measure(o.name, bold.copy(color = tint))
+        drawText(layout, topLeft = Offset(p.x + 10 * density, p.y - 10 * density - layout.size.height / 2f))
     }
 
     for (body in EphemerisInterpolator.bodies(moment, sky.samples)) {
@@ -351,20 +423,34 @@ private fun DrawScope.drawOverlay(
         }
     }
 
-    // Hidden, never frozen, when not live (MAPP-STR-060).
-    val ra = app.value("mount.position.ra_deg")?.value.double
-    val dec = app.value("mount.position.dec_deg")?.value.double
-    if (live && ra != null && dec != null) {
-        at(ra, dec)?.let { p ->
-            val arm = 12.dp.toPx()
-            drawLine(color, Offset(p.x - arm, p.y), Offset(p.x + arm, p.y), strokeWidth = 2.dp.toPx())
-            drawLine(color, Offset(p.x, p.y - arm), Offset(p.x, p.y + arm), strokeWidth = 2.dp.toPx())
-            sky.fieldOfView?.let { (fw, fh) ->
-                val perDegree = (camera.scale(h.toDouble()) * PI / 180).toFloat()
-                val width = max(8f, fw.toFloat() * perDegree)
-                val height = max(8f, fh.toFloat() * perDegree)
-                drawRect(color, topLeft = Offset(p.x - width / 2, p.y - height / 2), size = androidx.compose.ui.geometry.Size(width, height), style = Stroke(1.5.dp.toPx()))
+    // Each telescope: a cross where it points, its field as the sky has it (the rectangle follows the projection,
+    // rotated by the rotator) and its name. Hidden, never frozen, when not live (MAPP-STR-060).
+    if (!live) return
+    val snapshot = app.snapshot
+    val now = app.now
+    for (scope in sky.telescopes) {
+        val ra = snapshot.value("mount.position.ra_deg", scope.id, now)?.value.double ?: continue
+        val dec = snapshot.value("mount.position.dec_deg", scope.id, now)?.value.double ?: continue
+        val rotation = snapshot.value("rotator.angle", scope.id, now)?.value.double ?: 0.0
+        val p = at(ra, dec) ?: continue
+        val arm = 12.dp.toPx()
+        drawLine(color, Offset(p.x - arm, p.y), Offset(p.x + arm, p.y), strokeWidth = 2.dp.toPx())
+        drawLine(color, Offset(p.x, p.y - arm), Offset(p.x, p.y + arm), strokeWidth = 2.dp.toPx())
+        scope.fieldOfView?.let { (fw, fh) ->
+            val frame = Path()
+            var started = false
+            for ((cornerRa, cornerDec) in SkyGeometry.fieldOutline(ra, dec, fw, fh, rotation)) {
+                val q = at(cornerRa, cornerDec)
+                if (q == null) {
+                    started = false
+                    continue
+                }
+                if (started) frame.lineTo(q.x, q.y) else frame.moveTo(q.x, q.y)
+                started = true
             }
+            drawPath(frame, color, style = Stroke(1.5.dp.toPx()))
         }
+        val layout = measurer.measure(scope.name, bold)
+        drawText(layout, topLeft = Offset(p.x + 16 * density, p.y - 14 * density - layout.size.height / 2f))
     }
 }

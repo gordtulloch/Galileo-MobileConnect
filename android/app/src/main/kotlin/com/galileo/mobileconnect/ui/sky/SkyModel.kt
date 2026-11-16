@@ -5,12 +5,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.galileo.mobileconnect.AppViewModel
+import com.galileo.mobileconnect.core.api.PierInfo
 import com.galileo.mobileconnect.core.link.MasterApi
 import com.galileo.mobileconnect.core.link.checkPosition
 import com.galileo.mobileconnect.core.link.constellations
 import com.galileo.mobileconnect.core.link.ephemeris
 import com.galileo.mobileconnect.core.link.identify
+import com.galileo.mobileconnect.core.link.savedTargets
 import com.galileo.mobileconnect.core.link.skyCatalogs
+import com.galileo.mobileconnect.core.link.skyLabels
 import com.galileo.mobileconnect.core.link.skySite
 import com.galileo.mobileconnect.core.session.ObservatorySession
 import com.galileo.mobileconnect.core.sky.EphemerisSample
@@ -20,6 +23,7 @@ import com.galileo.mobileconnect.core.sky.SiteAnswer
 import com.galileo.mobileconnect.core.sky.SkyCamera
 import com.galileo.mobileconnect.core.sky.SkyConstellations
 import com.galileo.mobileconnect.core.sky.SkyGeometry
+import com.galileo.mobileconnect.core.sky.SkyLabel
 import com.galileo.mobileconnect.core.sky.SkyObject
 import com.galileo.mobileconnect.core.sky.SkySite
 import com.galileo.mobileconnect.core.sky.SkyStore
@@ -50,6 +54,15 @@ data class Selection(
     val details: List<String> = emptyList(),
     val check: PositionCheck? = null,
 )
+
+/** One telescope for the Star Atlas to draw: a Pier's mount, labelled, with the field its train sees (null for a Pier with no camera). */
+data class Telescope(val id: String, val name: String, val fieldOfView: Pair<Double, Double>? = null)
+
+/**
+ * An object found by name: drawn, labelled and given its type's icon whether or not its catalog is switched on, until
+ * it is cleared. The desktop's Find adds the object to the map the same way.
+ */
+data class Found(val name: String, val raDeg: Double, val decDeg: Double, val type: String, val sizeArcmin: Double = 0.0)
 
 /** The stars as the renderer wants them: a unit vector and a magnitude each, flat (x, y, z, magnitude). */
 class StarField(val data: FloatArray) {
@@ -87,6 +100,15 @@ class SkyModel(
     var bright by mutableStateOf<List<SkyObject>>(emptyList()); private set
     var samples by mutableStateOf<List<EphemerisSample>>(emptyList()); private set
     var fieldOfView by mutableStateOf<Pair<Double, Double>?>(null); private set
+    var telescopes by mutableStateOf<List<Telescope>>(emptyList()); private set
+    var found by mutableStateOf<List<Found>>(emptyList()); private set
+
+    /** The Master's saved targets: always drawn, whatever catalogs are on, as on the desktop (SKYMAP-120). */
+    var saved by mutableStateOf<List<Found>>(emptyList()); private set
+    private var savedFetched = 0L
+
+    /** What the Master calls each object and what kind it is, by its index, for labels and icons. */
+    var labels by mutableStateOf<Map<Int, SkyLabel>>(emptyMap()); private set
     var loading by mutableStateOf(false); private set
     var constellations by mutableStateOf(SkyConstellations()); private set
 
@@ -152,6 +174,9 @@ class SkyModel(
         cameraMoved(now)
         fetchSamples(time(now))
         fetchFieldOfView()
+        fetchTelescopes()
+        refreshSaved(force = true)
+        labels = api.skyLabels()
         api.constellations()?.let { constellations = it }
         catalogMembers = api.skyCatalogs()
         chooseDeepSky()
@@ -187,6 +212,7 @@ class SkyModel(
             val site = site ?: return@launch
             val (ra, dec) = SkyGeometry.equatorial(camera.altitude, camera.azimuth, site, moment)
             loading = true
+            refreshSaved()
             store.look(ra, dec, min(180.0, camera.fieldOfView), camera.levelOfDetail) { received(it) }
         }
     }
@@ -265,18 +291,69 @@ class SkyModel(
         fieldOfView = width to height
     }
 
+    /**
+     * Every Pier of the Observatory is a telescope on the map: the field each one's train sees (`sky.framing`, which is
+     * the Framing Assistant's own), asked of that Pier. One without a camera is drawn as a position alone.
+     */
+    suspend fun fetchTelescopes() {
+        val piers = session.snapshot.value.piers.filter { it.reachable && it.access != PierInfo.Access.None }
+        telescopes = piers.map { pier ->
+            val framing = session.read(pier.id, "sky.framing", mapOf("ra_deg" to JsonPrimitive(0), "dec_deg" to JsonPrimitive(0)))
+            val size = framing?.get("fov_deg") as? JsonArray
+            val width = size?.getOrNull(0).double
+            val height = size?.getOrNull(1).double
+            Telescope(pier.id, pier.name, if (size?.size == 2 && width != null && height != null) width to height else null)
+        }
+    }
+
+    /** The saved targets again, so that one saved (or removed) since is on (or off) the map. At most every ten seconds. */
+    suspend fun refreshSaved(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - savedFetched < 10_000) return
+        savedFetched = now
+        val list = api.savedTargets() ?: return
+        saved = list.targets.map { Found(it.name, it.raDeg, it.decDeg, it.type, it.sizeArcmin ?: 0.0) }
+    }
+
+    /** Everything always drawn with its icon and name, and tappable: what Find matched, then the saved targets it didn't also match. */
+    val marked: List<Pair<Found, Boolean>>
+        get() {
+            val names = found.map { it.name.lowercase() }.toSet()
+            return found.map { it to false } + saved.filter { it.name.lowercase() !in names }.map { it to true }
+        }
+
+    /** A marked object tapped: it becomes the selection, to be designated (Goto, Add to Session). */
+    suspend fun pick(obj: Found, now: Instant) {
+        selectPosition(obj.name, obj.raDeg, obj.decDeg, now, centre = false, askForDetails = true)
+    }
+
+    /** Puts an object on the map, so that Find shows it where it is rather than only centring on empty sky. */
+    fun show(name: String, raDeg: Double, decDeg: Double, type: String, sizeArcmin: Double = 0.0) {
+        found = found.filter { it.name != name } + Found(name, raDeg, decDeg, type, sizeArcmin)
+    }
+
+    fun clearFound() {
+        found = emptyList()
+    }
+
     // -- search and selection ---------------------------------------------------------------------------------------
 
     suspend fun search() {
         val text = query.trim()
         if (text.isEmpty()) {
             results = emptyList()
+            found = emptyList() // as on the desktop, an empty Find clears what the last one plotted
             return
         }
         searching = true
         try {
             val found = session.read(pier, "sky.search", mapOf("query" to JsonPrimitive(text), "limit" to JsonPrimitive(20)))
             results = (found["objects"] as? JsonArray)?.toList() ?: emptyList()
+            // Every match is plotted, so that the right one can be seen on the sky and tapped to designate it.
+            this.found = results.mapNotNull { o ->
+                val name = o["name"].string ?: return@mapNotNull null
+                Found(name, o["ra_deg"].double ?: return@mapNotNull null, o["dec_deg"].double ?: return@mapNotNull null, o["type"].string ?: "Other", o["size_arcmin"].double ?: 0.0)
+            }
         } finally {
             searching = false
         }
@@ -288,6 +365,7 @@ class SkyModel(
         val ra = obj["ra_deg"].double ?: return
         val dec = obj["dec_deg"].double ?: return
         results = emptyList()
+        show(name, ra, dec, obj["type"].string ?: "Other", obj["size_arcmin"].double ?: 0.0)
         selectPosition(name, ra, dec, now, centre = true, askForDetails = true)
     }
 

@@ -300,6 +300,7 @@ class MockMaster(
                 scenario["sky"]["site"]?.let { reply(request, 200, it) } ?: reply(request, 404, j("error" to "no location set"))
             "GET" to "/mobileconnect/v1/sky/constellations" -> reply(request, 200, skyConstellations())
             "GET" to "/mobileconnect/v1/sky/catalogs" -> reply(request, 200, skyCatalogs())
+            "GET" to "/mobileconnect/v1/sky/labels" -> reply(request, 200, skyLabels())
             // The demo ships no sky pictures, as they aren't ours to. Tests can point it at a folder of real tiles.
             "GET" to "/mobileconnect/v1/sky/survey/tile" -> reply(request, 404, j("error" to "no sky survey in the demo"))
             "GET" to "/mobileconnect/v1/sky/check" ->
@@ -646,6 +647,20 @@ class MockMaster(
     private fun targetList(): JsonElement {
         val items = synchronized(lock) { targets.toList() }
         return j("targets" to items, "version" to items.joinToString("|") { it["name"].string ?: "" }.hashCode().toString(16))
+    }
+
+    /** Name, type and size of each deep-sky object, at the index [skyCatalogs] gives it. */
+    private fun skyLabels(): JsonElement {
+        val starCount = scenario["sky"]["stars"].double?.toInt() ?: 0
+        val objects = scenario["sky"]["objects"].array ?: emptyList()
+        return j(
+            "labels" to objects.mapIndexed { at, o ->
+                j(
+                    "index" to starCount + at, "name" to (o["name"].string ?: ""), "type" to (o["type"].string ?: "Other"),
+                    "size_arcmin" to (o["size_arcmin"].double ?: 0.0),
+                )
+            },
+        )
     }
 
     private fun skyCatalogs(): JsonElement {

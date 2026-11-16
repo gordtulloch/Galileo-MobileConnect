@@ -136,6 +136,8 @@ public actor ObservatorySession {
 
     public func stop() async {
         retrying?.cancel()
+        catalogueRefresh?.cancel()
+        catalogueRefresh = nil
         await hold?.stop(.released)
         await link?.stop()
         link = nil
@@ -175,8 +177,10 @@ public actor ObservatorySession {
         if Role.hasConfigurationGrant(identity.permissions) { throw StartStop.stop(.configurationGrant) }
         let role = Role.from(permissions: identity.permissions, allowed: outcome.allowed)
         let (piers, piersReason) = try await connection.api.piers()
+        // Every time, not once: an operation's availability ("the mount is not connected") follows the Pier's
+        // devices, so a catalogue kept from before they connected would go on refusing them.
         var catalogues = snapshot.catalogues
-        for pier in piers where catalogues[pier.id] == nil {
+        for pier in piers {
             catalogues[pier.id] = try await connection.api.catalogue(pier: pier.id)
         }
         longRunning = Set(catalogues.values.flatMap { $0 }.filter(\.longRunning).map(\.name))
@@ -193,6 +197,35 @@ public actor ObservatorySession {
         snapshot.notice = piersReason
         publish()
         if piersReason != nil { retryUntilPiersAppear() }
+        startCatalogueRefresh()
+    }
+
+    private var catalogueRefresh: Task<Void, Never>?
+
+    /// Devices connect and drop at the Galileo computer without the phone being told, and which operations are
+    /// available depends on that, so each Pier's catalogue is read again every few seconds while connected.
+    private func startCatalogueRefresh() {
+        guard catalogueRefresh == nil else { return }
+        catalogueRefresh = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard let self, !Task.isCancelled else { return }
+                await self.refreshCatalogues()
+            }
+        }
+    }
+
+    private func refreshCatalogues() async {
+        guard link != nil, snapshot.isConnected else { return }
+        var changed = false
+        for pier in snapshot.piers {
+            guard let fresh = try? await connection.api.catalogue(pier: pier.id) else { continue }
+            if snapshot.catalogues[pier.id] != fresh {
+                snapshot.catalogues[pier.id] = fresh
+                changed = true
+            }
+        }
+        if changed { publish() }
     }
 
     /// The Master was up but Galileo's control surface was not (Galileo is still starting, or was restarted while the
@@ -275,6 +308,8 @@ public actor ObservatorySession {
     }
 
     private func finish(_ stop: SessionStop) {
+        catalogueRefresh?.cancel()
+        catalogueRefresh = nil
         snapshot.stop = stop
         snapshot.ledger.connectionLost()
         if case .unpaired = stop { onUnpaired() }

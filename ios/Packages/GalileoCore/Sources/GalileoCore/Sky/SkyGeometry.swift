@@ -69,6 +69,43 @@ public enum SkyGeometry {
         return simd_float3x3(columns: (column(0, 0), column(90, 0), column(0, 90)))
     }
 
+    /// The closed outline of a `width` x `height` field centred on a J2000 position, as `fov_outline_radec` in core has it,
+    /// so that a telescope's field is the same rectangle in the app as on the desktop. `rotation` is the position angle of
+    /// the field's up edge, east of north. Edges are subdivided so that they follow the sky's curvature.
+    public static func fieldOutline(
+        raDeg: Double, decDeg: Double, widthDeg: Double, heightDeg: Double, rotationDeg: Double = 0, pointsPerEdge: Int = 8
+    ) -> [(ra: Double, dec: Double)] {
+        let n = max(1, pointsPerEdge)
+        let hw = widthDeg / 2
+        let hh = heightDeg / 2
+        let corners = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh), (-hw, -hh)]
+        var offsets: [(Double, Double)] = []
+        for edge in 0..<4 {
+            let (u0, v0) = corners[edge]
+            let (u1, v1) = corners[edge + 1]
+            for k in 0..<n {
+                let f = Double(k) / Double(n)
+                offsets.append((u0 + (u1 - u0) * f, v0 + (v1 - v0) * f))
+            }
+        }
+        offsets.append(corners[0])
+        let theta = rotationDeg * .pi / 180
+        let ra0 = raDeg * .pi / 180
+        let dec0 = decDeg * .pi / 180
+        return offsets.map { u, v in
+            // Tangent-plane offsets in radians: xi east, eta north (the frame's "right" points west at zero rotation).
+            let xi = (-u * cos(theta) + v * sin(theta)) * .pi / 180
+            let eta = (u * sin(theta) + v * cos(theta)) * .pi / 180
+            let denominator = cos(dec0) - eta * sin(dec0)
+            let ra = ra0 + atan2(xi, denominator)
+            let dec = atan2((sin(dec0) + eta * cos(dec0)) * cos(ra - ra0), denominator)
+            var degrees = ra * 180 / .pi
+            degrees = degrees.truncatingRemainder(dividingBy: 360)
+            if degrees < 0 { degrees += 360 }
+            return (degrees, dec * 180 / .pi)
+        }
+    }
+
     /// Where a J2000 position is in the sky, as `equatorial_to_horizontal` after precession has it in Galileo.
     public static func horizontal(raDeg: Double, decDeg: Double, site: SkySite, at date: Date) -> HorizontalPosition {
         let ofDate = precessed(raDeg: raDeg, decDeg: decDeg, at: date)

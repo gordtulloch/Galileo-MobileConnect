@@ -306,6 +306,10 @@ private fun SkyPanel(sky: SkyModel, onPicked: () -> Unit) {
                     scope.launch { sky.select(obj, app.now) }
                 }
             }
+            if (sky.found.isNotEmpty()) {
+                Note("On the map: " + sky.found.joinToString(", ") { it.name })
+                ActionButton("Clear found", tag = "sky.clearfound") { sky.clearFound() }
+            }
         }
         TimeCard(sky)
         Card("Show") {

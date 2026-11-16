@@ -15,6 +15,30 @@ final class SkyModel {
         var check: PositionCheck?
     }
 
+    /// One telescope for the Star Atlas to draw: a Pier's mount, labelled, with the field its train sees.
+    struct Telescope: Equatable, Identifiable {
+        var id: String
+        var name: String
+        /// Width and height in degrees; `nil` for a Pier with no camera, which has a position but no frame to draw.
+        var fieldOfView: (width: Double, height: Double)?
+
+        static func == (a: Telescope, b: Telescope) -> Bool {
+            a.id == b.id && a.name == b.name && a.fieldOfView?.width == b.fieldOfView?.width
+                && a.fieldOfView?.height == b.fieldOfView?.height
+        }
+    }
+
+    /// An object found by name (or tapped): drawn, labelled and given its type's icon whether or not its catalog is
+    /// switched on, until it is cleared. The desktop's Find adds the object to the map the same way.
+    struct Found: Equatable, Identifiable {
+        var name: String
+        var raDeg: Double
+        var decDeg: Double
+        var type: String
+        var sizeArcmin: Double = 0
+        var id: String { name }
+    }
+
     var camera = SkyCamera()
     /// Seconds from now that the view is showing. Zero is live (`MAPP-SKY-020`).
     var timeOffset: TimeInterval = 0
@@ -32,6 +56,13 @@ final class SkyModel {
     private(set) var bright: [SkyObject] = []
     private(set) var samples: [EphemerisSample] = []
     private(set) var fieldOfView: (width: Double, height: Double)?
+    private(set) var telescopes: [Telescope] = []
+    private(set) var found: [Found] = []
+    /// The Master's saved targets: always drawn, whatever catalogs are on, as on the desktop (`SKYMAP-120`).
+    private(set) var saved: [Found] = []
+    private var savedFetched: Date?
+    /// What the Master calls each object and what kind it is, by its index, for labels and icons.
+    private(set) var labels: [Int32: SkyLabel] = [:]
     private(set) var loading = false
     private(set) var constellations = SkyConstellations()
     var showConstellations = UserDefaults.standard.object(forKey: "sky.constellations") as? Bool ?? true {
@@ -98,6 +129,9 @@ final class SkyModel {
         cameraMoved(now: now)
         await fetchSamples(around: time(now: now))
         await fetchFieldOfView()
+        await fetchTelescopes()
+        await refreshSaved(force: true)
+        labels = await session.api.skyLabels()
         if let figures = await session.api.constellations() { constellations = figures }
         catalogMembers = await session.api.skyCatalogs()
         chooseDeepSky()
@@ -126,6 +160,7 @@ final class SkyModel {
             guard !Task.isCancelled, let self, let site = self.site else { return }
             let centre = SkyGeometry.equatorial(altitude: camera.altitude, azimuth: camera.azimuth, site: site, at: moment)
             self.loading = true
+            await self.refreshSaved()
             await self.store.look(
                 raDeg: centre.ra, decDeg: centre.dec, radius: min(180, camera.fieldOfView), level: camera.levelOfDetail
             ) { [weak self] objects in
@@ -198,24 +233,81 @@ final class SkyModel {
         fieldOfView = (width, height)
     }
 
+    /// Every Pier of the Observatory is a telescope on the map: the field each one's train sees (`sky.framing`, which
+    /// is the Framing Assistant's own), asked of that Pier. One without a camera is drawn as a position alone.
+    func fetchTelescopes() async {
+        let snapshot = await session.current
+        let piers = snapshot.piers.filter { $0.reachable && $0.access != .none }
+        var made: [Telescope] = []
+        for pier in piers {
+            var scope = Telescope(id: pier.id, name: pier.name)
+            if let framing = await session.read(pier: pier.id, operation: "sky.framing", args: ["ra_deg": 0, "dec_deg": 0]),
+                let size = framing["fov_deg"]?.arrayValue, size.count == 2,
+                let width = size[0].doubleValue, let height = size[1].doubleValue
+            {
+                scope.fieldOfView = (width, height)
+            }
+            made.append(scope)
+        }
+        telescopes = made
+    }
+
     // MARK: Search and selection
+
+    /// The saved targets again, so that one saved (or removed) since is on (or off) the map. At most every ten seconds.
+    func refreshSaved(force: Bool = false) async {
+        if !force, let savedFetched, Date().timeIntervalSince(savedFetched) < 10 { return }
+        savedFetched = Date()
+        guard let list = try? await session.api.savedTargets() else { return }
+        saved = list.targets.map { Found(name: $0.name, raDeg: $0.raDeg, decDeg: $0.decDeg, type: $0.type, sizeArcmin: $0.sizeArcmin) }
+    }
+
+    /// Everything that is always drawn with its icon and name, and can be tapped: what Find matched, then the saved
+    /// targets it didn't also match.
+    var marked: [(object: Found, saved: Bool)] {
+        let names = Set(found.map { $0.name.lowercased() })
+        return found.map { ($0, false) } + saved.filter { !names.contains($0.name.lowercased()) }.map { ($0, true) }
+    }
+
+    /// A marked object tapped, or chosen from the results: it becomes the selection, to be designated (Goto, Add to Session).
+    func pick(_ object: Found, now: Date) async {
+        await selectPosition(name: object.name, raDeg: object.raDeg, decDeg: object.decDeg, now: now, centre: false, askForDetails: true)
+    }
+
+    /// Puts an object on the map, so that Find shows it where it is rather than only centring on empty sky.
+    func show(name: String, raDeg: Double, decDeg: Double, type: String, sizeArcmin: Double = 0) {
+        let object = Found(name: name, raDeg: raDeg, decDeg: decDeg, type: type, sizeArcmin: sizeArcmin)
+        if let at = found.firstIndex(where: { $0.name == name }) { found[at] = object } else { found.append(object) }
+    }
+
+    func clearFound() { found = [] }
 
     func search() async {
         let text = query.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else {
             results = []
+            found = []      // as on the desktop, an empty Find clears what the last one plotted
             return
         }
         searching = true
         defer { searching = false }
         let found = await session.read(pier: pier, operation: "sky.search", args: ["query": .string(text), "limit": 20])
         results = found?["objects"]?.arrayValue ?? []
+        // Every match is plotted, so that the right one can be seen on the sky and tapped to designate it.
+        self.found = results.compactMap { object in
+            guard let name = object["name"]?.stringValue, let ra = object["ra_deg"]?.doubleValue, let dec = object["dec_deg"]?.doubleValue
+            else { return nil }
+            return Found(
+                name: name, raDeg: ra, decDeg: dec, type: object["type"]?.stringValue ?? "Other",
+                sizeArcmin: object["size_arcmin"]?.doubleValue ?? 0)
+        }
     }
 
     /// A search result, with the Master's details and check.
     func select(_ object: JSONValue, now: Date) async {
         guard let name = object["name"]?.stringValue, let ra = object["ra_deg"]?.doubleValue, let dec = object["dec_deg"]?.doubleValue else { return }
         results = []
+        show(name: name, raDeg: ra, decDeg: dec, type: object["type"]?.stringValue ?? "Other", sizeArcmin: object["size_arcmin"]?.doubleValue ?? 0)
         await selectPosition(name: name, raDeg: ra, decDeg: dec, now: now, centre: true, askForDetails: true)
     }
 

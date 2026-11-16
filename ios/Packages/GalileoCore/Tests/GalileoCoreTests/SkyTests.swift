@@ -375,4 +375,32 @@ struct SkyTests {
         #expect(catalogs["Messier"]?.contains(2500) == true, "M 42")
         #expect(catalogs["NGC"] != nil && catalogs["Caldwell"] != nil)
     }
+
+    /// The Star Atlas labels what it draws, and draws it as its type: the Master names and types them.
+    @Test func theMasterNamesAndTypesWhatItDraws() async throws {
+        let master = try MockMaster(scenarioNamed: "normal-night")
+        let api = MasterConnection.demo(master, identity: testIdentity, token: MockMaster.token).api
+        let labels = await api.skyLabels()
+        let m42 = try #require(labels[2500])
+        #expect(m42.name == "M 42" && m42.type == "Nebula" && m42.shape == .square)
+        let m31 = try #require(labels.values.first { $0.name == "M 31" })
+        #expect(m31.shape == .galaxy)
+        #expect(SkyLabel(name: "x", type: "OpenCluster").shape == .openCluster)
+        #expect(SkyLabel(name: "x", type: "GlobularCluster").shape == .globularCluster)
+        #expect(SkyLabel(name: "x", type: "PlanetaryNebula").shape == .planetaryNebula)
+        #expect(SkyLabel(name: "x", type: "Cluster").shape == .cluster)
+    }
+
+    /// A telescope's field is core's rectangle: at the equator it is the width and height it was asked for, and it closes.
+    @Test func aFieldOutlineIsCoresRectangle() {
+        let outline = SkyGeometry.fieldOutline(raDeg: 100, decDeg: 0, widthDeg: 2, heightDeg: 1)
+        #expect(outline.count == 33)
+        #expect(abs(outline[0].ra - outline[32].ra) < 1e-9 && abs(outline[0].dec - outline[32].dec) < 1e-9)
+        let ras = outline.map(\.ra)
+        let decs = outline.map(\.dec)
+        #expect(abs((ras.max()! - ras.min()!) - 2) < 0.01, "width runs along RA at the equator")
+        #expect(abs((decs.max()! - decs.min()!) - 1) < 0.01)
+        let turned = SkyGeometry.fieldOutline(raDeg: 100, decDeg: 0, widthDeg: 2, heightDeg: 1, rotationDeg: 90)
+        #expect(abs((turned.map(\.dec).max()! - turned.map(\.dec).min()!) - 2) < 0.01, "rotated a quarter turn: width runs north-south")
+    }
 }

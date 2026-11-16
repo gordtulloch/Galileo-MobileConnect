@@ -104,6 +104,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-SKY-100 | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-100 | U, UI |
 | MAPP-SKY-110 | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-110 | U, UI |
 | MAPP-SKY-120 | The app shall show the user's saved targets (GET /mobileconnect/v1/targets) as a Targets screen — newest first with name, type, magnitude, size… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-120 | U, UI |
+| MAPP-SKY-130 | The Star Atlas shall label every telescope and draw its field of view as the sky has it; label every deep-sky object and named star with its type's icon; and add an object found by name to the display. | iOS, Android | P2 | S-SKY | I-SKY | A-SKY | — | TC-MAPP-SKY-130 | U, UI |
 
 ## 7. MAPP-SOL — Plate Solving and Alignment
 

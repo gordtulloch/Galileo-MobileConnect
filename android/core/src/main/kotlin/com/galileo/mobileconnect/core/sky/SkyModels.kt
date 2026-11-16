@@ -17,6 +17,23 @@ data class IdentifiedObject(
     val magnitude: Double?,
 )
 
+/** The icon the desktop Star Atlas draws for a type, so that the same object looks the same in both. */
+enum class SkyIconShape { Galaxy, OpenCluster, GlobularCluster, Cluster, PlanetaryNebula, Square }
+
+/** What the Master calls an object and what kind it is (core's `ObjectType`), so the Star Atlas can label it and draw its icon. */
+data class SkyLabel(val name: String, val type: String, val sizeArcmin: Double = 0.0) {
+    /** An ellipse for a galaxy, a dashed circle for an open cluster, a circle with a cross for a globular one, a circle for any other cluster, a ringed dot for a planetary nebula and a square for everything else. */
+    val shape: SkyIconShape
+        get() = when (type) {
+            "Galaxy" -> SkyIconShape.Galaxy
+            "OpenCluster" -> SkyIconShape.OpenCluster
+            "GlobularCluster" -> SkyIconShape.GlobularCluster
+            "Cluster" -> SkyIconShape.Cluster
+            "PlanetaryNebula" -> SkyIconShape.PlanetaryNebula
+            else -> SkyIconShape.Square
+        }
+}
+
 /** One object on the Master's saved targets list (SKY-130 on the desktop), as the Targets screen shows it. */
 data class SavedTarget(
     val name: String,

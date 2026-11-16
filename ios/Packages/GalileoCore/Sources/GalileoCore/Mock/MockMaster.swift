@@ -225,6 +225,8 @@ public actor MockMaster: ClientTransport, StreamTransport {
             return try reply(200, skyConstellations())
         case ("GET", "/mobileconnect/v1/sky/catalogs"):
             return try reply(200, skyCatalogs())
+        case ("GET", "/mobileconnect/v1/sky/labels"):
+            return try reply(200, skyLabels())
         case ("GET", "/mobileconnect/v1/sky/survey/tile"):
             // The demo ships no sky pictures, as they aren't ours to. Tests can point it at a folder of real tiles.
             guard let image = Self.testSurveyTile(query: query) else { return try reply(404, ["error": "no sky survey in the demo"]) }
@@ -629,6 +631,19 @@ public actor MockMaster: ClientTransport, StreamTransport {
             .object(["name": .string(name), "indexes": members { $0.hasPrefix(prefix) && $0.dropFirst(prefix.count).first?.isNumber == true }])
         }
         return .object(["catalogs": .array([catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC ")])])
+    }
+
+    /// Name, type and size of each deep-sky object, at the index `skyCatalogs` gives it.
+    private func skyLabels() -> JSONValue {
+        let starCount = scenario["sky"]?["stars"]?.doubleValue.map(Int.init) ?? 0
+        let objects = scenario["sky"]?["objects"]?.arrayValue ?? []
+        let labels: [JSONValue] = objects.enumerated().map { offset, object in
+            .object([
+                "index": .number(Double(starCount + offset)), "name": object["name"] ?? .string(""),
+                "type": object["type"] ?? .string("Other"), "size_arcmin": object["size_arcmin"] ?? .number(0),
+            ])
+        }
+        return .object(["labels": .array(labels)])
     }
 
     private static func testSurveyTile(query: [String: String]) -> Data? {
