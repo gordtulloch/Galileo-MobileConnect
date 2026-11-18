@@ -154,6 +154,8 @@ private fun SolverControl() {
                 if (cameras.any { it.slot == cameraSlot }) put("camera_slot", JsonPrimitive(cameraSlot))
             }
             OperationButton("Capture & Solve", "solve.capture", captureArgs, ActionKind.Prominent)
+            // How far the frame being taken has got; the operation's own bar above it keeps moving through the solving.
+            ProgressRow("solve.exposure_progress", "Exposure")
             ActionButton("Load & Slew…", enabled = app.operation("solve.load")?.available == true, tag = "solve.load.choose") {
                 choosing = !choosing
                 if (choosing) {

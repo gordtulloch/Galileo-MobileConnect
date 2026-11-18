@@ -242,15 +242,15 @@ final class DemoUITests: XCTestCase {
         element("lease.take").tap()
         XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
         open("Imaging")
+        element("imaging.panel").tap()   // Start, Stop, Loop and Hide are on one line in the capture settings
         let loop = element("liveloop")
-        for _ in 0..<6 where !loop.exists || loop.frame.maxY > app.windows.firstMatch.frame.height - 40 { app.swipeUp() }
         XCTAssertTrue(loop.waitForExistence(timeout: 5))
         loop.tap()
-        XCTAssertTrue(app.staticTexts["Stop live loop"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Stop loop"].waitForExistence(timeout: 5))
         sleep(2)
         screenshot("night-liveloop")
         loop.tap()
-        XCTAssertTrue(app.staticTexts["Start live loop"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Loop"].waitForExistence(timeout: 5))
     }
 
     /// `MAPP-LAY-010`: the tablet's menu hides itself once used, and can be kept open instead. The phone has no menu.

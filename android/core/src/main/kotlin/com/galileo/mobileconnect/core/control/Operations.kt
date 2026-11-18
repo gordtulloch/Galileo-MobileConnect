@@ -16,8 +16,8 @@ sealed interface OperationState {
         override val isOpen get() = true
     }
 
-    /** Accepted, and still running on the Master. */
-    data class Running(val progress: Double? = null) : OperationState {
+    /** Accepted, and still running on the Master. [progress] is 0 to 1 when the Master knows it; [message] is its latest step. */
+    data class Running(val progress: Double? = null, val message: String? = null) : OperationState {
         override val isOpen get() = true
     }
 
@@ -111,7 +111,11 @@ data class OperationLedger(
         val record = records[index].copy(correlationId = event.correlationId)
         val next = when (event.phase) {
             "op.started" -> if (record.state.isOpen) record.copy(state = OperationState.Running()) else record
-            "op.progress" -> record.copy(state = OperationState.Running(event.progress))
+            "op.progress" -> {
+                // A step that gives only words keeps the bar where it was, and the other way round.
+                val before = record.state as? OperationState.Running
+                record.copy(state = OperationState.Running(event.progress ?: before?.progress, event.message ?: before?.message))
+            }
             "op.finished" -> record.copy(state = finalState(event))
             else -> record
         }

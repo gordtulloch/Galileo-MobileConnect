@@ -41,14 +41,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.galileo.mobileconnect.core.state.displayText
 import com.galileo.mobileconnect.core.state.double
+import com.galileo.mobileconnect.core.state.string
+import kotlinx.coroutines.launch
 import com.galileo.mobileconnect.ui.ActionButton
 import com.galileo.mobileconnect.ui.ActionKind
 import com.galileo.mobileconnect.ui.Banner
 import com.galileo.mobileconnect.ui.ButtonRow
 import com.galileo.mobileconnect.ui.LocalApp
 import com.galileo.mobileconnect.ui.Note
-import com.galileo.mobileconnect.ui.OperationButton
-import com.galileo.mobileconnect.ui.OperationForm
+import com.galileo.mobileconnect.ui.Field
+import com.galileo.mobileconnect.ui.OutcomeNote
+import com.galileo.mobileconnect.ui.SingleLineChoices
+import com.galileo.mobileconnect.ui.send
 import com.galileo.mobileconnect.ui.TextBox
 import com.galileo.mobileconnect.ui.ThemedProgress
 import com.galileo.mobileconnect.ui.ThemedSlider
@@ -68,7 +72,6 @@ fun ImagingScreen() {
     val app = LocalApp.current
     val theme = LocalTheme.current
     var panelOpen by remember { mutableStateOf(false) }
-    var more by remember { mutableStateOf(false) }
     var stretch by remember { mutableStateOf(50.0) }
     // The live stack rather than the latest exposure, when there is one to show.
     var showStack by remember { mutableStateOf(false) }
@@ -87,7 +90,7 @@ fun ImagingScreen() {
         }
         Column(Modifier.align(Alignment.TopCenter).padding(if (panelOpen) 0.dp else 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             app.workingPier?.let { app.snapshot.unavailableReason(it) }?.let { Banner("⚠", "${app.pier?.name ?: "This Pier"}: $it") }
-            if (panelOpen) Panel(more, { more = !more }, { panelOpen = false })
+            if (panelOpen) Panel { panelOpen = false }
         }
         if (!panelOpen) {
             Box(Modifier.align(Alignment.TopEnd).padding(8.dp).width(com.galileo.mobileconnect.ui.minimumTarget)) {
@@ -166,7 +169,9 @@ private fun Progress(stackFrames: Int?) {
     val exposing = app.value("imaging.exposure_progress")?.value.double
     val series = app.value("imaging.progress")?.value.double
     val stacked = app.value("imaging.stack.progress")?.value.double
-    if (exposing == null && series == null && stacked == null && !app.liveLoopRunning) return
+    // An older Master publishes no progress keys; the capture's own progress events still say it is under way.
+    val running = app.record("imaging.capture")?.state as? com.galileo.mobileconnect.core.control.OperationState.Running
+    if (exposing == null && series == null && stacked == null && !app.liveLoopRunning && running == null) return
     Column(
         Modifier.fillMaxWidth().background(theme.veil(0.6f)).padding(horizontal = 12.dp, vertical = 8.dp).testTag("imaging.progress"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -174,6 +179,9 @@ private fun Progress(stackFrames: Int?) {
         if (exposing != null) {
             val seconds = app.value("imaging.exposure_s")?.value.double
             Bar("Exposure", seconds?.let { "${if (it == Math.rint(it)) it.toLong().toString() else "%.1f".format(it)} s" }, exposing)
+        }
+        if (exposing == null && series == null && stacked == null && running != null) {
+            com.galileo.mobileconnect.ui.RunningProgress(running.progress, running.message ?: "Capturing", "Capture")
         }
         if (series != null) {
             val frame = app.value("imaging.frame")?.value?.displayText()
@@ -206,66 +214,79 @@ private fun Bar(label: String, detail: String?, value: Double) {
     }
 }
 
-/** The settings that matter every time, small; the rest one tap further. */
+/**
+ * Everything on a few lines, so nothing is hidden behind a More: the frame type on one line, the numbers that change
+ * with it on one line, and Start, Stop, Loop and Hide on one line, in that order (MAPP-IMG-010, MAPP-IMG-020).
+ */
 @Composable
-private fun Panel(more: Boolean, onMore: () -> Unit, onHide: () -> Unit) {
+private fun Panel(onHide: () -> Unit) {
+    val app = LocalApp.current
     val theme = LocalTheme.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val operation = "imaging.capture"
+    val text = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateMapOf<String, String>() }
+    val flags = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    var message by remember { mutableStateOf<String?>(null) }
+    val info = app.operation(operation)
+    val byName = info?.arguments?.associateBy { it.name } ?: emptyMap()
+    val numbers = listOf("seconds", "count", "binning", "gain", "offset").mapNotNull { byName[it] }
+    val shown = listOfNotNull(byName["frame_type"], byName["live_stack"]) + numbers
+    val record = app.record(operation)
+    val open = record?.state?.isOpen == true
     CompositionLocalProvider(LocalCompact provides true) {
         Column(
             Modifier.fillMaxWidth().background(theme.surface).border(1.dp, theme.border).padding(8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             ReadOnlyHint()
-            OperationForm("Start", "imaging.capture", fields = listOf("seconds", "count", "frame_type", "gain", "offset", "live_stack"), kind = ActionKind.Prominent)
+            if (app.canOperate) {
+                byName["frame_type"]?.let { type ->
+                    SingleLineChoices(type.choices, text["frame_type"] ?: type.defaultValue.string ?: type.choices.firstOrNull() ?: "") { text["frame_type"] = it }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    numbers.forEach { Box(Modifier.weight(1f)) { Field(operation, it, text, flags) } }
+                }
+                byName["live_stack"]?.let { Field(operation, it, text, flags) }
+            }
             ButtonRow(
-                { OperationButton("Stop", "imaging.stop") },
-                { ActionButton(if (more) "Less" else "More", tag = "imaging.more", onClick = onMore) },
+                {
+                    if (app.canOperate) ActionButton(
+                        "Start", kind = ActionKind.Prominent, busy = open, enabled = info != null && info.available && !open, tag = operation,
+                    ) { if (info != null) scope.launch { message = send(app, operation, shown, text, flags) } }
+                },
+                { if (app.canOperate) ActionButton("Stop", enabled = app.operation("imaging.stop") != null, tag = "imaging.stop") { scope.launch { message = app.perform("imaging.stop") } } },
+                {
+                    if (app.canOperate && info != null) ActionButton(
+                        if (app.liveLoopRunning) "Stop loop" else "Loop", kind = if (app.liveLoopRunning) ActionKind.Destructive else ActionKind.Normal, tag = "liveloop",
+                        enabled = app.liveLoopRunning || (info.available && !open),
+                    ) {
+                        val seconds = (text["seconds"]?.takeIf { it.isNotEmpty() } ?: byName["seconds"]?.defaultValue?.displayText() ?: "2").toDoubleOrNull()
+                        when {
+                            app.liveLoopRunning -> app.stopLiveLoop()
+                            seconds != null && seconds > 0 -> {
+                                message = null
+                                // The loop takes every other setting from the form too, so it is the capture the user set up, repeated.
+                                val settings = send(shown, text, flags).filterKeys { it != "seconds" && it != "count" }
+                                app.startLiveLoop(seconds, settings)
+                            }
+                            else -> message = "Exposure must be a number above zero."
+                        }
+                    }
+                },
                 { ActionButton("Hide", tag = "imaging.panel.close", onClick = onHide) },
             )
-            if (more) {
-                Histogram()
-                OperationButton("Abort exposure", "camera.abort")
-                OperationForm("Single exposure", "camera.expose", fields = listOf("seconds", "binning"))
-                LiveLoop()
-            }
-        }
-    }
-}
-
-/** MAPP-IMG-020: one exposure after another, each shown as it arrives. */
-@Composable
-private fun LiveLoop() {
-    val app = LocalApp.current
-    val theme = LocalTheme.current
-    var seconds by remember { mutableStateOf("2") }
-    var message by remember { mutableStateOf<String?>(null) }
-    if (!app.canOperate || app.operation("imaging.capture") == null) return
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier.weight(1f).heightIn(min = compactTarget).clip(RoundedCornerShape(7.dp)).background(theme.raised).padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Txt("Loop (s)", size = 13.sp, color = theme.textSecondary)
-                TextBox(seconds, { seconds = it }, "2", keyboard = KeyboardType.Decimal, label = "Live loop seconds", tag = "liveloop.seconds", align = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp))
-            }
-            Box(Modifier.weight(1f)) {
-                ActionButton(
-                    if (app.liveLoopRunning) "Stop loop" else "Live loop", kind = if (app.liveLoopRunning) ActionKind.Destructive else ActionKind.Normal, tag = "liveloop",
-                ) {
-                    val value = seconds.toDoubleOrNull()
-                    when {
-                        app.liveLoopRunning -> app.stopLiveLoop()
-                        value != null && value > 0 -> {
-                            message = null
-                            app.startLiveLoop(value)
-                        }
-                        else -> message = "Seconds must be a number above zero."
-                    }
+            if (app.canOperate) {
+                val unavailable = info?.takeIf { !it.available && !open }?.unavailableBecause
+                when {
+                    info == null -> Note("This Master doesn't offer this yet.")
+                    unavailable != null -> Note(unavailable)
+                    message != null -> Note(message!!)
+                    app.liveLoopMessage != null -> Note(app.liveLoopMessage!!)
+                    record != null -> OutcomeNote(record)
                 }
             }
+            Histogram()
         }
-        (message ?: app.liveLoopMessage)?.let { Note(it) }
     }
 }
 

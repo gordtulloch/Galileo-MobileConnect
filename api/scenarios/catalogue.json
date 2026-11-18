@@ -602,6 +602,14 @@
      "type": "bool",
      "required": false,
      "default": false
+    },
+    {
+     "name": "binning",
+     "type": "int",
+     "required": false,
+     "default": 1,
+     "min": 1,
+     "max": 4
     }
    ],
    "description": "Take one frame or a series; each frame is saved to the Library. With live_stack, a series of three or more frames is also registered and averaged into a stack, shown as it builds",

@@ -87,6 +87,7 @@
         "pier": { "type": "string" },
         "operation": { "type": "string" },
         "progress": { "type": "number", "minimum": 0, "maximum": 1 },
+        "message": { "type": "string", "description": "On op.progress: what the Master is doing now, in its own words." },
         "outcome": { "enum": ["ok", "refused", "invalid", "unavailable", "busy", "unreachable"] },
         "reason": { "type": "string" }
       }

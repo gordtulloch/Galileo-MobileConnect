@@ -50,10 +50,7 @@ struct FocusScreen: View {
             LiveRow(label: "State", key: "focus.state")
             LiveRow(label: "Last result", key: "focus.last_result")
             LiveRow(label: "Temperature compensation", key: "focus.compensation")
-            HStack(spacing: 8) {
-                OperationButton(title: "Run autofocus", operation: "focus.autofocus", icon: "scope", kind: .prominent)
-                OperationButton(title: "Cancel", operation: "focus.autofocus_cancel", icon: "xmark")
-            }
+            AutofocusControls()
             VCurve()
         }
     }
@@ -120,6 +117,53 @@ extension View {
                 AxisGridLine().foregroundStyle(theme.border)
                 AxisTick().foregroundStyle(theme.border)
                 AxisValueLabel().foregroundStyle(theme.textSecondary)
+            }
+        }
+    }
+}
+
+/// Run and Cancel side by side, with the run's progress under them at the full width (not squeezed into half of it, as
+/// an `OperationButton`'s note would be).
+private struct AutofocusControls: View {
+    @Environment(AppModel.self) private var model
+    @State private var message: String?
+
+    var body: some View {
+        if model.canOperate {
+            let run = model.operation("focus.autofocus")
+            let record = model.record(of: "focus.autofocus")
+            let running = record?.state.isOpen == true
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button {
+                        Task { message = await model.perform("focus.autofocus") }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if running { ProgressView() } else { Image(systemName: "scope").accessibilityHidden(true) }
+                            Text("Run autofocus")
+                        }
+                    }
+                    .buttonStyle(ActionStyle(kind: .prominent))
+                    .disabled(run == nil || run?.available == false || running)
+                    .accessibilityIdentifier("focus.autofocus")
+                    Button {
+                        Task { message = await model.perform("focus.autofocus_cancel") }
+                    } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                    .buttonStyle(ActionStyle())
+                    .disabled(model.operation("focus.autofocus_cancel") == nil)
+                    .accessibilityIdentifier("focus.autofocus_cancel")
+                }
+                if run == nil {
+                    Note("This Master doesn't offer autofocus yet.")
+                } else if let reason = run?.unavailableBecause, run?.available == false, !running {
+                    Note(reason)
+                } else if let message {
+                    Note(message)
+                } else if let record {
+                    OutcomeNote(record: record)
+                }
             }
         }
     }

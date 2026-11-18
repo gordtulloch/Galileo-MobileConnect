@@ -131,6 +131,17 @@ class LedgerTest {
     }
 
     @Test
+    fun `a step's words and a fraction are kept when only the other arrives`() {
+        var ledger = OperationLedger().sent("a", "p", "o", now).answered("a", OpResult.Ok(null, "c"), longRunning = true)
+        ledger = ledger.apply(OperationEvent("op.progress", "c", message = "Point 1 of 9", progress = 0.1))
+        assertEquals(OperationState.Running(0.1, "Point 1 of 9"), ledger.record("a")?.state)
+        ledger = ledger.apply(OperationEvent("op.progress", "c", message = "Confirming"))
+        assertEquals(OperationState.Running(0.1, "Confirming"), ledger.record("a")?.state)
+        ledger = ledger.apply(OperationEvent("op.progress", "c", progress = 0.5))
+        assertEquals(OperationState.Running(0.5, "Confirming"), ledger.record("a")?.state)
+    }
+
+    @Test
     fun `op finished can overtake the HTTP answer`() {
         val ledger = OperationLedger().sent("a", "p", "o", now)
             .apply(event("op.finished", "c", request = "a", outcome = "ok"))

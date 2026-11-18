@@ -94,6 +94,19 @@ struct LedgerTests {
         #expect(ledger.record("a")?.state == .refused("Clouds"))
     }
 
+    @Test("a step's words and a fraction are kept when only the other arrives")
+    func progressKeepsWhatItWasNotGiven() {
+        var ledger = OperationLedger()
+        ledger.sent(id: "a", pier: "p", operation: "o", at: now)
+        ledger.answered("a", .ok(value: nil, correlationID: "c"), longRunning: true)
+        ledger.apply(OperationEvent(phase: "op.progress", correlationID: "c", progress: 0.1, message: "Point 1 of 9"))
+        #expect(ledger.record("a")?.state == .running(progress: 0.1, message: "Point 1 of 9"))
+        ledger.apply(OperationEvent(phase: "op.progress", correlationID: "c", message: "Confirming"))
+        #expect(ledger.record("a")?.state == .running(progress: 0.1, message: "Confirming"))
+        ledger.apply(OperationEvent(phase: "op.progress", correlationID: "c", progress: 0.5))
+        #expect(ledger.record("a")?.state == .running(progress: 0.5, message: "Confirming"))
+    }
+
     @Test("op.finished can overtake the HTTP answer")
     func finishBeforeAnswer() {
         var ledger = OperationLedger()

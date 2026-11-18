@@ -256,10 +256,31 @@ fun FocusScreen() {
                     LiveRow("State", "focus.state")
                     LiveRow("Last result", "focus.last_result")
                     LiveRow("Temperature compensation", "focus.compensation")
-                    ButtonRow(
-                        { OperationButton("Run autofocus", "focus.autofocus", kind = ActionKind.Prominent) },
-                        { OperationButton("Cancel", "focus.autofocus_cancel") },
-                    )
+                    // Not OperationButtons: their notes would be squeezed into half the width, and a run's progress needs all of it.
+                    val run = app.operation("focus.autofocus")
+                    val record = app.record("focus.autofocus")
+                    val running = record?.state?.isOpen == true
+                    var focusMessage by remember { mutableStateOf<String?>(null) }
+                    if (app.canOperate) {
+                        ButtonRow(
+                            {
+                                ActionButton("Run autofocus", kind = ActionKind.Prominent, busy = running, enabled = run != null && run.available && !running, tag = "focus.autofocus") {
+                                    scope.launch { focusMessage = app.perform("focus.autofocus") }
+                                }
+                            },
+                            {
+                                ActionButton("Cancel", enabled = app.operation("focus.autofocus_cancel") != null, tag = "focus.autofocus_cancel") {
+                                    scope.launch { focusMessage = app.perform("focus.autofocus_cancel") }
+                                }
+                            },
+                        )
+                        when {
+                            run == null -> Note("This Master doesn't offer autofocus yet.")
+                            !run.available && !running && run.unavailableBecause != null -> Note(run.unavailableBecause!!)
+                            focusMessage != null -> Note(focusMessage!!)
+                            record != null -> OutcomeNote(record)
+                        }
+                    }
                     VCurve()
                 }
             },
@@ -565,16 +586,14 @@ private fun jobDetail(job: kotlinx.serialization.json.JsonElement): String {
     return parts.joinToString(", ")
 }
 
-/** deg/s for each jog level, as Galileo's Mount page (`JOG_RATE_LEVELS`), for the label. */
-private val JOG_RATES = listOf("0.002", "0.004", "0.008", "0.017", "0.033", "0.084", "0.2", "1", "10")
-
 /** The jog speed slider, under the pad: a stepped track drawn here (a system slider can't be held to Night). */
 @Composable
 private fun JogSpeed(level: Int, onLevel: (Int) -> Unit) {
     val theme = LocalTheme.current
     val thumb = 36.dp
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Txt("Speed $level · ${JOG_RATES[level - 1]}°/s", weight = FontWeight.SemiBold)
+        // No rate in deg/s: each telescope slews at its own speeds, so the level is all that is true of every mount.
+        Txt("Speed $level", weight = FontWeight.SemiBold)
         androidx.compose.foundation.layout.BoxWithConstraints(
             Modifier.fillMaxWidth().height(44.dp)
                 .testTag("mount.speed")

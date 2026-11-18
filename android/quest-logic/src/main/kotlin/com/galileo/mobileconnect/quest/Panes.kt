@@ -15,7 +15,7 @@ data class Placement(val center: Vec3, val yawRadians: Float) {
 
 /** The areas the dock offers, in order (MAPP-QST-330). Sky is not among them: the star field is the sky (MAPP-QST-300). */
 enum class DockArea(val label: String) {
-    Overview("Overview"), Focus("Focus"), PolarAlignment("Polar"), Targets("Targets"), MountControl("Mount"), Imaging("Imaging"), Solve("Solve"),
+    Overview("Overview"), MountControl("Mount"), Focus("Focus"), PolarAlignment("Polar"), Targets("Targets"), Imaging("Imaging"), Solve("Solve"),
     Guiding("Guiding"), Sessions("Sessions"), Safety("Safety"), Equipment("Equipment"), Settings("Settings"),
 }
 

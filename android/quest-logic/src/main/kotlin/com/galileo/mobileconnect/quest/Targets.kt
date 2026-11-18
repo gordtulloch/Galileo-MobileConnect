@@ -33,7 +33,7 @@ data class TargetTile(val name: String, val subtitle: String, val target: SavedT
 
 /** The Targets pane's rules, apart from drawing it: what a tile says, which actions it offers, and what they send. */
 object Targets {
-    const val EMPTY = "No saved targets — save objects from Search or What's Up Tonight on the Galileo desktop"
+    const val EMPTY = "No Targets found."
 
     /** Magnitude 90 or more and size 0 mean "unknown" on the wire; unknown parts are left out rather than shown as numbers. */
     fun subtitle(target: SavedTarget): String {

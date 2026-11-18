@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -357,7 +359,7 @@ fun OperationButton(
 fun OutcomeNote(record: OperationRecord) {
     when (val state = record.state) {
         OperationState.Pending -> Note("Waiting for the Master…")
-        is OperationState.Running -> if (state.progress != null) ThemedProgress(state.progress!!) else Note("Running…")
+        is OperationState.Running -> RunningProgress(state.progress, state.message ?: "Running…")
         is OperationState.Done -> Note("Done.")
         is OperationState.Refused -> Attention(state.reason)
         is OperationState.Unavailable -> Attention(state.reason)
@@ -385,6 +387,30 @@ fun ThemedProgress(value: Double, label: String = "Progress") {
         },
     ) {
         Box(Modifier.fillMaxWidth(clamped.toFloat()).height(6.dp).background(theme.accent))
+    }
+}
+
+/**
+ * A bar that moves, for an operation whose progress the Master can't measure (a plate solve, a focus run between its
+ * points), so a long operation is never a screen that looks idle. It is the same height and colours as [ThemedProgress].
+ */
+@Composable
+fun IndeterminateProgress(label: String = "Working") {
+    val theme = LocalTheme.current
+    val transition = rememberInfiniteTransition(label = label)
+    val position by transition.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart), label = label)
+    BoxWithConstraints(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(theme.raised).semantics { contentDescription = label }) {
+        val segment = maxWidth * 0.3f
+        Box(Modifier.offset(x = (maxWidth + segment) * position - segment).width(segment).height(6.dp).background(theme.accent))
+    }
+}
+
+/** What an operation that is running has to show: its bar (moving when unmeasured) and, if the Master said, its step. */
+@Composable
+fun RunningProgress(progress: Double?, message: String?, label: String = "Progress") {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        message?.takeIf { it.isNotBlank() }?.let { Note(it) }
+        if (progress != null) ThemedProgress(progress, label) else IndeterminateProgress(label)
     }
 }
 
@@ -522,6 +548,21 @@ fun Choices(options: List<String>, selected: String, minWidth: Int = 88, onSelec
     }
 }
 
+/** A few choices as equal buttons on one line, whatever the width (a frame type is four short words, never four lines). */
+@Composable
+fun SingleLineChoices(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (LocalCompact.current) 4.dp else 8.dp)) {
+        options.forEach { choice ->
+            Box(Modifier.weight(1f)) {
+                ActionButton(
+                    choice, kind = if (choice == selected) ActionKind.Prominent else ActionKind.Normal,
+                    description = if (choice == selected) "$choice, selected" else choice,
+                ) { onSelect(choice) }
+            }
+        }
+    }
+}
+
 /** Moves only while pressed (MAPP-DEV-030). The core does the timing and the stopping. */
 @Composable
 fun HoldButton(
@@ -637,6 +678,7 @@ fun HoldToConfirm(title: String, tag: String, enabled: Boolean = true, onAction:
 
 /** `ra_deg` reads as "RA" with its unit beside it, not "Ra Deg (deg)". */
 fun argumentTitle(name: String): String {
+    if (name == "seconds") return "Exposure"
     val words = name.split('_').toMutableList()
     if (words.size > 1 && words.last() in setOf("deg", "s", "arcsec", "pct")) words.removeAt(words.size - 1)
     return words.joinToString(" ") { word ->
@@ -683,7 +725,7 @@ fun OperationForm(title: String, operation: String, fields: List<String>? = null
 
 private val ArgumentInfo.isBoxed get() = kind != ArgumentInfo.Kind.Bool && kind != ArgumentInfo.Kind.Enum
 
-private fun hint(argument: ArgumentInfo): String {
+fun hint(argument: ArgumentInfo): String {
     argument.defaultValue?.let { return it.displayText() }
     val low = argument.minimum
     val high = argument.maximum
@@ -693,7 +735,7 @@ private fun hint(argument: ArgumentInfo): String {
 private fun plain(v: Double) = if (v == Math.rint(v)) v.toLong().toString() else v.toString()
 
 @Composable
-private fun Field(
+fun Field(
     operation: String,
     argument: ArgumentInfo,
     text: MutableMap<String, String>,
@@ -735,13 +777,20 @@ private fun Field(
     }
 }
 
-private suspend fun send(
+suspend fun send(
     app: AppViewModel,
     operation: String,
     shown: List<ArgumentInfo>,
     text: Map<String, String>,
     flags: Map<String, Boolean>,
-): String? {
+): String? = app.perform(operation, send(shown, text, flags))
+
+/** The arguments a form has been filled in with, as the Master takes them; blank fields are left to its defaults. */
+fun send(
+    shown: List<ArgumentInfo>,
+    text: Map<String, String>,
+    flags: Map<String, Boolean>,
+): Map<String, JsonElement> {
     val args = mutableMapOf<String, JsonElement>()
     for (argument in shown) {
         when (argument.kind) {
@@ -754,5 +803,5 @@ private suspend fun send(
             ArgumentInfo.Kind.Enum, ArgumentInfo.Kind.Str -> text[argument.name]?.takeIf { it.isNotEmpty() }?.let { args[argument.name] = JsonPrimitive(it) }
         }
     }
-    return app.perform(operation, args)
+    return args
 }

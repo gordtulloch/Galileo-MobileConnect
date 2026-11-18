@@ -252,9 +252,7 @@ def tour(screen: Screen, label: str, exposure: float | None) -> None:
             time.sleep(exposure + 6)  # the exposure, and the picture coming back
             screen.pause(1.5)
         else:
-            screen.tap("imaging.more", quiet=True)
-            screen.pause(1.5)
-            screen.tap("imaging.more", quiet=True)
+            screen.pause(1.5)  # the settings are all on show now; there is no More to open
             screen.tap("imaging.panel.close", quiet=True)
             screen.pause(0.8)
     screen.swipe(int(w * 0.35), h - 70, int(w * 0.75), h - 70, 900)  # the stretch slider

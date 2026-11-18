@@ -10,7 +10,6 @@ struct ImagingScreen: View {
     @Environment(\.theme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var panelOpen = false
-    @State private var more = false
     @State private var stretch = 50.0
     /// The live stack rather than the latest exposure, when there is one to show.
     @State private var showStack = false
@@ -129,11 +128,19 @@ struct ImagingScreen: View {
         let exposing = model.value("imaging.exposure_progress")?.value.doubleValue
         let series = model.value("imaging.progress")?.value.doubleValue
         let stacked = model.value("imaging.stack.progress")?.value.doubleValue
-        if exposing != nil || series != nil || stacked != nil || model.liveLoopRunning {
+        // An older Master publishes no progress keys; the capture's own progress events still say it is under way.
+        let running: (progress: Double?, message: String?)? = {
+            if case .running(let progress, let message)? = model.record(of: "imaging.capture")?.state { return (progress, message) }
+            return nil
+        }()
+        if exposing != nil || series != nil || stacked != nil || model.liveLoopRunning || running != nil {
             VStack(alignment: .leading, spacing: 4) {
                 if let exposing {
                     let seconds = model.value("imaging.exposure_s")?.value.doubleValue
                     bar("Exposure", detail: seconds.map { "\($0.formatted(.number.precision(.fractionLength(0...1)))) s" }, value: exposing)
+                }
+                if exposing == nil, series == nil, stacked == nil, let running {
+                    RunningProgress(progress: running.progress, message: running.message ?? "Capturing", label: "Capture")
                 }
                 if let series {
                     bar("Series", detail: frameText, value: series)
@@ -177,78 +184,26 @@ struct ImagingScreen: View {
         }
     }
 
-    /// The settings that matter every time, small; the rest one tap further.
+    /// Everything on a few lines, so nothing is hidden behind a More: the frame type on one line, the numbers that
+    /// change with it on one line, then Start, Stop, Loop and Hide on one line (`MAPP-IMG-010`, `MAPP-IMG-020`).
     private var panel: some View {
         VStack(alignment: .leading, spacing: 6) {
             ReadOnlyHint()
             OperationForm(
                 title: "Start", operation: "imaging.capture", icon: "camera",
-                fields: ["seconds", "count", "frame_type", "gain", "offset", "live_stack"], kind: .prominent)
-            HStack(spacing: 6) {
-                OperationButton(title: "Stop", operation: "imaging.stop", icon: "stop")
-                Button(more ? "Less" : "More") { more.toggle() }
-                    .buttonStyle(ActionStyle())
-                    .accessibilityIdentifier("imaging.more")
-                Button("Hide") { panelOpen = false }
-                    .buttonStyle(ActionStyle())
-                    .accessibilityIdentifier("imaging.panel.close")
-            }
-            if more {
-                Histogram()
-                OperationButton(title: "Abort exposure", operation: "camera.abort", icon: "xmark")
-                OperationForm(title: "Single exposure", operation: "camera.expose", icon: "camera.shutter.button", fields: ["seconds", "binning"])
-                LiveLoop()
-            }
+                fields: ["frame_type", "seconds", "count", "binning", "gain", "offset", "live_stack"], kind: .prominent,
+                choicesOnOneLine: true, stopOperation: "imaging.stop", loopable: true,
+                trailing: AnyView(
+                    Button("Hide") { panelOpen = false }
+                        .buttonStyle(ActionStyle())
+                        .accessibilityIdentifier("imaging.panel.close")))
+            Histogram()
         }
         .environment(\.compactControls, true)
         .padding(8)
         .frame(maxWidth: .infinity)
         .background(theme.surface)
         .overlay(alignment: .bottom) { Rectangle().fill(theme.border).frame(height: 1) }
-    }
-}
-
-/// `MAPP-IMG-020`: one exposure after another, each shown as it arrives.
-private struct LiveLoop: View {
-    @Environment(AppModel.self) private var model
-    @Environment(\.theme) private var theme
-    @State private var seconds = "2"
-    @State private var message: String?
-
-    var body: some View {
-        if model.canOperate, model.operation("imaging.capture") != nil {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    HStack {
-                        Text("Loop (s)").font(.footnote).foregroundStyle(theme.textSecondary)
-                        TextField("", text: $seconds, prompt: Text("2").foregroundStyle(theme.textSecondary))
-                            .font(.footnote)
-                            .multilineTextAlignment(.trailing)
-                            .keyboardType(.numbersAndPunctuation)
-                            .foregroundStyle(theme.text)
-                            .accessibilityLabel("Live loop seconds")
-                            .accessibilityIdentifier("liveloop.seconds")
-                    }
-                    .frame(minHeight: Layout.compactTarget)
-                    .padding(.horizontal, 8)
-                    .background(theme.raised, in: RoundedRectangle(cornerRadius: 7))
-                    Button {
-                        if model.liveLoopRunning {
-                            model.stopLiveLoop()
-                        } else if let value = Double(seconds), value > 0 {
-                            message = model.startLiveLoop(seconds: value)
-                        } else {
-                            message = "Seconds must be a number above zero."
-                        }
-                    } label: {
-                        Label(model.liveLoopRunning ? "Stop loop" : "Live loop", systemImage: model.liveLoopRunning ? "stop" : "repeat")
-                    }
-                    .buttonStyle(ActionStyle(kind: model.liveLoopRunning ? .destructive : .normal))
-                    .accessibilityIdentifier("liveloop")
-                }
-                if let shown = message ?? model.liveLoopMessage { Note(shown) }
-            }
-        }
     }
 }
 

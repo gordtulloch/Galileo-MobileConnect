@@ -4,8 +4,9 @@ import Foundation
 public struct OperationRecord: Sendable, Equatable, Identifiable {
     public enum State: Sendable, Equatable {
         case pending
-        /// Accepted, and still running on the Master.
-        case running(progress: Double?)
+        /// Accepted, and still running on the Master. `progress` is 0 to 1 when the Master knows it; `message` is its
+        /// latest step.
+        case running(progress: Double?, message: String? = nil)
         case done(JSONValue?)
         case refused(String)
         case invalid(path: String?, reason: String)
@@ -118,7 +119,14 @@ public struct OperationLedger: Sendable, Equatable {
         case "op.started":
             if records[index].state.isOpen { records[index].state = .running(progress: nil) }
         case "op.progress":
-            records[index].state = .running(progress: event.progress)
+            // A step that gives only words keeps the bar where it was, and the other way round.
+            var progress = event.progress
+            var message = event.message
+            if case .running(let before, let said) = records[index].state {
+                progress = progress ?? before
+                message = message ?? said
+            }
+            records[index].state = .running(progress: progress, message: message)
         case "op.finished":
             records[index].state = Self.finalState(of: event)
         default: break

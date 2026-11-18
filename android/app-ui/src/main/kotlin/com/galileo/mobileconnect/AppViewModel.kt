@@ -400,13 +400,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * One exposure after another, each shown as it arrives. Core has no live-loop operation, so this repeats a single
      * capture while the app is in front: it asks for nothing while nobody is looking.
      */
-    fun startLiveLoop(seconds: Double) {
+    fun startLiveLoop(seconds: Double, settings: Map<String, JsonElement> = emptyMap()) {
         if (liveLoopRunning) return
         liveLoopRunning = true
         liveLoopMessage = null
         liveLoop = viewModelScope.launch {
             while (isActive && liveLoopRunning) {
-                val problem = perform("imaging.capture", mapOf("seconds" to JsonPrimitive(seconds), "count" to JsonPrimitive(1)))
+                val problem = perform("imaging.capture", settings + mapOf("seconds" to JsonPrimitive(seconds), "count" to JsonPrimitive(1)))
                 if (problem != null) {
                     liveLoopMessage = problem
                     break

@@ -149,8 +149,8 @@ Capture and the display of images (PSD G5, PC7). The app handles node-rendered p
 
 | ID | Platforms | Requirement | Priority |
 |---|---|---|---|
-| MAPP-IMG-010 | All | The app shall start single exposures and exposure series with per-run parameters, show progress, and abort a running exposure or series. | MVP |
-| MAPP-IMG-020 | All | The app shall run a live exposure loop and display each result as it arrives. | MVP |
+| MAPP-IMG-010 | All | The app shall start single exposures and exposure series with per-run parameters (frame type, exposure, count, binning, gain, offset), all on view at once with no More/Less control, and stop a running exposure or series with Stop. Every long-running operation (capture, autofocus, plate solve, polar alignment) shall show a progress bar: measured when the Master reports a fraction, a moving bar when it does not, with the Master's current step as text. | MVP |
+| MAPP-IMG-020 | All | The app shall run a live exposure loop, with the capture settings the user has entered, and display each result as it arrives. | MVP |
 | MAPP-IMG-030 | All | The app shall display the current frame as a preview rendered by the Master, scaled to the device, with pinch-to-zoom and pan, loading further detail as tiles when the user zooms. | MVP |
 | MAPP-IMG-040 | All | The app shall let the user adjust the preview stretch interactively and shall show the histogram. | MVP |
 | MAPP-IMG-050 | All | The app shall show the image statistics the Master reports for the frame: star count, HFR and FWHM. | MVP |

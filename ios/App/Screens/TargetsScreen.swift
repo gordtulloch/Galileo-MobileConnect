@@ -13,11 +13,11 @@ struct TargetsScreen: View {
 
     var body: some View {
         ScreenScroll("Targets") {
-            if let failure { Banner(icon: "exclamationmark.triangle", text: failure) }
+            if failure != nil { Note("No Targets found.").accessibilityIdentifier("targets.empty") }
             if let message { Note(message).accessibilityIdentifier("targets.message") }
             if let list {
                 if list.targets.isEmpty {
-                    Note(list.reason ?? "No saved targets — save objects from Search or What's Up Tonight on the Galileo desktop.")
+                    Note("No Targets found.")
                         .accessibilityIdentifier("targets.empty")
                 }
                 ForEach(list.targets) { target in tile(target) }

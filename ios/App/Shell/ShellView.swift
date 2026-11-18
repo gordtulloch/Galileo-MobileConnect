@@ -4,10 +4,10 @@ import SwiftUI
 enum Area: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case sky = "Sky"
+    case mountControl = "Mount Control"
     case focus = "Focus"
     case polarAlignment = "Polar Alignment"
     case targets = "Targets"
-    case mountControl = "Mount Control"
     case imaging = "Imaging"
     case solve = "Solve"
     case guiding = "Guiding"

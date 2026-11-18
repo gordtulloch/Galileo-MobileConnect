@@ -242,6 +242,54 @@ struct ThemedProgress: View {
     }
 }
 
+/// A bar that moves, for an operation whose progress the Master can't measure (a plate solve, a focus run between its
+/// points), so a long operation is never a screen that looks idle. Same height and colours as `ThemedProgress`.
+struct IndeterminateProgress: View {
+    var label = "Working"
+    @Environment(\.theme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { geometry in
+            let segment = geometry.size.width * 0.3
+            ZStack(alignment: .leading) {
+                Capsule().fill(theme.raised)
+                if reduceMotion {
+                    Capsule().fill(theme.accent).frame(width: segment).frame(maxWidth: .infinity)
+                } else {
+                    TimelineView(.animation) { timeline in
+                        let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.4) / 1.4
+                        Capsule().fill(theme.accent).frame(width: segment)
+                            .offset(x: (geometry.size.width + segment) * phase - segment)
+                    }
+                }
+            }
+            .clipShape(Capsule())
+        }
+        .frame(height: 6)
+        .accessibilityElement()
+        .accessibilityLabel(label)
+    }
+}
+
+/// What an operation that is running has to show: its bar (moving when unmeasured) and, if the Master said, its step.
+struct RunningProgress: View {
+    var progress: Double?
+    var message: String?
+    var label = "Progress"
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let message, !message.isEmpty { Note(message) }
+            if let progress {
+                ThemedProgress(value: progress, label: label)
+            } else {
+                IndeterminateProgress(label: label)
+            }
+        }
+    }
+}
+
 /// The system slider's thumb is white and its track grey, which Night can't have.
 struct ThemedSlider: View {
     let label: String
@@ -302,12 +350,8 @@ struct OutcomeNote: View {
     var body: some View {
         switch record.state {
         case .pending: Note("Waiting for the Master…")
-        case .running(let progress):
-            if let progress {
-                ThemedProgress(value: progress)
-            } else {
-                Note("Running…")
-            }
+        case .running(let progress, let message):
+            RunningProgress(progress: progress, message: message ?? "Running…")
         case .done: Note("Done.")
         case .refused(let why), .unavailable(let why), .busy(let why), .unreachable(let why): attention(why)
         case .invalid(let path, let why):
@@ -333,9 +377,17 @@ struct OperationForm: View {
     /// Arguments to show; the rest keep the Master's defaults.
     var fields: [String]?
     var kind: ActionKind = .normal
+    /// Choices (a frame type) as equal buttons on one line, first, with no label of their own.
+    var choicesOnOneLine = false
+    /// An operation that ends this one (Stop) and whether to offer a loop of it, each a button beside the main one.
+    var stopOperation: String?
+    var loopable = false
+    /// More buttons for that row (Hide).
+    var trailing: AnyView?
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.compactControls) private var compact
+    @State private var loopMessage: String?
     @State private var text: [String: String] = [:]
     @State private var flags: [String: Bool] = [:]
     @State private var message: String?
@@ -347,43 +399,80 @@ struct OperationForm: View {
                 if compact {
                     // Short boxes side by side, so the form takes a line or two rather than a screenful.
                     let arguments = shown(info)
+                    if choicesOnOneLine { ForEach(arguments.filter { $0.kind == .enum }) { field($0) } }
                     HStack(alignment: .bottom, spacing: 6) {
                         ForEach(arguments.filter(\.isBoxed)) { field($0) }
                     }
-                    ForEach(arguments.filter { !$0.isBoxed }) { field($0) }
+                    ForEach(arguments.filter { !$0.isBoxed && !(choicesOnOneLine && $0.kind == .enum) }) { field($0) }
                 } else {
                     ForEach(shown(info)) { argument in
                         field(argument)
                     }
                 }
                 let record = model.record(of: operation)
-                Button {
-                    guard let info else { return }
-                    Task { message = await send(info) }
-                } label: {
-                    HStack(spacing: 8) {
-                        if record?.state.isOpen == true {
-                            ProgressView().tint(theme.text)
-                        } else if let icon {
-                            Image(systemName: icon).accessibilityHidden(true)
+                HStack(spacing: 6) {
+                    Button {
+                        guard let info else { return }
+                        Task { message = await send(info) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if record?.state.isOpen == true {
+                                ProgressView().tint(theme.text)
+                            } else if let icon {
+                                Image(systemName: icon).accessibilityHidden(true)
+                            }
+                            Text(title)
                         }
-                        Text(title)
                     }
+                    .buttonStyle(ActionStyle(kind: kind))
+                    .disabled(info == nil || info?.available == false || record?.state.isOpen == true)
+                    .accessibilityIdentifier(operation)
+                    if let stopOperation {
+                        Button("Stop") { Task { message = await model.perform(stopOperation) } }
+                            .buttonStyle(ActionStyle())
+                            .disabled(model.operation(stopOperation) == nil)
+                            .accessibilityIdentifier(stopOperation)
+                    }
+                    if loopable, let info {
+                        Button(model.liveLoopRunning ? "Stop loop" : "Loop") { toggleLoop(info) }
+                            .buttonStyle(ActionStyle(kind: model.liveLoopRunning ? .destructive : .normal))
+                            .disabled(!model.liveLoopRunning && (info.available == false || record?.state.isOpen == true))
+                            .accessibilityIdentifier("liveloop")
+                    }
+                    if let trailing { trailing }
                 }
-                .buttonStyle(ActionStyle(kind: kind))
-                .disabled(info == nil || info?.available == false || record?.state.isOpen == true)
-                .accessibilityIdentifier(operation)
                 if info == nil {
                     Note("This Master doesn't offer this yet.")
                 } else if let reason = info?.unavailableBecause, info?.available == false {
                     Note(reason)
                 } else if let message {
                     Note(message)
+                } else if let said = loopMessage ?? model.liveLoopMessage {
+                    Note(said)
                 } else if let record {
                     OutcomeNote(record: record)
                 }
             }
         }
+    }
+
+    /// Repeats this capture with the form's own settings (frame type, gain, binning...) until stopped.
+    private func toggleLoop(_ info: OperationInfo) {
+        if model.liveLoopRunning {
+            model.stopLiveLoop()
+            return
+        }
+        let entered = text["seconds"].flatMap { $0.isEmpty ? nil : $0 }
+        let fallback = info.arguments.first { $0.name == "seconds" }?.defaultValue?.displayText ?? "2"
+        guard let seconds = Double(entered ?? fallback), seconds > 0 else {
+            loopMessage = "Exposure must be a number above zero."
+            return
+        }
+        loopMessage = nil
+        var settings = arguments(info)
+        settings["seconds"] = nil
+        settings["count"] = nil
+        loopMessage = model.startLiveLoop(seconds: seconds, settings: settings)
     }
 
     private func shown(_ info: OperationInfo?) -> [ArgumentInfo] {
@@ -394,6 +483,7 @@ struct OperationForm: View {
 
     /// `ra_deg` reads as "RA" with its unit beside it, not "Ra Deg (deg)".
     private func title(_ name: String) -> String {
+        if name == "seconds" { return "Exposure" }
         var words = name.split(separator: "_").map(String.init)
         if let last = words.last, words.count > 1, ["deg", "s", "arcsec", "pct"].contains(last) { words.removeLast() }
         return words.map { word in
@@ -411,6 +501,15 @@ struct OperationForm: View {
         case .enum:
             // Buttons rather than a Picker: a system menu can't be held to Night.
             let selected = text[argument.name] ?? argument.defaultValue?.stringValue ?? argument.choices.first ?? ""
+            if choicesOnOneLine {
+                HStack(spacing: compact ? 4 : 8) {
+                    ForEach(argument.choices, id: \.self) { choice in
+                        Button(choice) { text[argument.name] = choice }
+                            .buttonStyle(ActionStyle(kind: selected == choice ? .prominent : .normal))
+                            .accessibilityValue(selected == choice ? "selected" : "")
+                    }
+                }
+            } else {
             Text(label).font(compact ? .caption2 : .footnote).foregroundStyle(theme.textSecondary)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 56 : 88))], spacing: compact ? 4 : 8) {
                 ForEach(argument.choices, id: \.self) { choice in
@@ -418,6 +517,7 @@ struct OperationForm: View {
                         .buttonStyle(ActionStyle(kind: selected == choice ? .prominent : .normal))
                         .accessibilityValue(selected == choice ? "selected" : "")
                 }
+            }
             }
         default:
             if compact {
@@ -461,6 +561,11 @@ struct OperationForm: View {
     }
 
     private func send(_ info: OperationInfo) async -> String? {
+        await model.perform(operation, args: arguments(info))
+    }
+
+    /// What the form has been filled in with, as the Master takes it; blank fields are left to its defaults.
+    private func arguments(_ info: OperationInfo) -> [String: JSONValue] {
         var args: [String: JSONValue] = [:]
         for argument in shown(info) {
             switch argument.kind {
@@ -474,7 +579,7 @@ struct OperationForm: View {
                 if let entered = text[argument.name], !entered.isEmpty { args[argument.name] = .string(entered) }
             }
         }
-        return await model.perform(operation, args: args)
+        return args
     }
 }
 

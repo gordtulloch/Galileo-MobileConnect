@@ -27,6 +27,8 @@ public struct OperationEvent: Sendable, Equatable {
     public var progress: Double?
     public var outcome: String?
     public var reason: String?
+    /// What the Master is doing, in its words ("Capturing image…"), on `op.progress`.
+    public var message: String?
 }
 
 public enum StreamEvent: Sendable, Equatable {
@@ -85,7 +87,7 @@ public enum StreamMessage: Sendable, Equatable {
                     phase: phase, correlationID: correlation, requestID: json["request_id"]?.stringValue,
                     pier: json["pier"]?.stringValue, operation: json["operation"]?.stringValue,
                     progress: json["progress"]?.doubleValue, outcome: json["outcome"]?.stringValue,
-                    reason: json["reason"]?.stringValue))
+                    reason: json["reason"]?.stringValue, message: json["message"]?.stringValue))
         case "alert":
             guard let id = json["id"]?.stringValue, let severity = json["severity"]?.stringValue,
                 let time = now("time"), let message = json["message"]?.stringValue

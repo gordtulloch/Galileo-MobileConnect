@@ -93,6 +93,8 @@ struct SolverControl: View {
                 OperationButton(
                     title: "Capture & Solve", operation: "solve.capture", icon: "camera.viewfinder",
                     args: captureArgs, kind: .prominent)
+                // How far the frame being taken has got; the operation's own bar keeps moving through the solving.
+                ProgressRow(key: "solve.exposure_progress", label: "Exposure")
                 Button {
                     choosing.toggle()
                     if choosing { Task { await loadFrames() } }

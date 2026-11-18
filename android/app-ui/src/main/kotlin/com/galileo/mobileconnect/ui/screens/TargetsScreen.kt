@@ -43,7 +43,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
 /** What to say under the list when there is nothing to list. */
-const val NO_TARGETS = "No saved targets — save objects from Search or What's Up Tonight on the Galileo desktop."
+const val NO_TARGETS = "No Targets found."
 
 /** The line of coordinates on a tile. */
 fun coordinates(target: SavedTarget): String = "RA %.3f°  Dec %+.3f°".format(target.raDeg, target.decDeg)
@@ -76,9 +76,9 @@ fun TargetsScreen() {
         message?.let { Note(it) }
         val current = listing
         when {
-            current == null && failed -> Note("The Master couldn't give its saved targets just now. Refresh to try again.")
+            current == null && failed -> Note(NO_TARGETS)
             current == null -> Note("Loading the saved targets…")
-            current.targets.isEmpty() -> Note(current.reason ?: NO_TARGETS)
+            current.targets.isEmpty() -> Note(NO_TARGETS)
             else -> current.targets.forEach { target ->
                 TargetTile(target) { name ->
                     scope.launch {

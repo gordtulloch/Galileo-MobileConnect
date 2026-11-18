@@ -350,12 +350,12 @@ final class AppModel {
 
     /// One exposure after another, each shown as it arrives. Core has no live-loop operation, so this repeats a
     /// single capture while the app is in front: it asks for nothing while nobody is looking.
-    func startLiveLoop(seconds: Double) -> String? {
+    func startLiveLoop(seconds: Double, settings: [String: JSONValue] = [:]) -> String? {
         guard !liveLoopRunning else { return nil }
         liveLoopRunning = true
         liveLoop = Task { [weak self] in
             while let self, !Task.isCancelled, self.liveLoopRunning {
-                let problem = await self.perform("imaging.capture", args: ["seconds": .number(seconds), "count": 1])
+                let problem = await self.perform("imaging.capture", args: settings.merging(["seconds": .number(seconds), "count": 1]) { _, new in new })
                 guard problem == nil else {
                     self.liveLoopMessage = problem
                     break

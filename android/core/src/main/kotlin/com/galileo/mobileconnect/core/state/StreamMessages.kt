@@ -23,6 +23,8 @@ data class OperationEvent(
     val progress: Double? = null,
     val outcome: String? = null,
     val reason: String? = null,
+    /** What the Master is doing, in its words ("Capturing image…"), on `op.progress`. */
+    val message: String? = null,
 )
 
 sealed interface StreamEvent {
@@ -80,7 +82,7 @@ sealed interface StreamMessage {
                         OperationEvent(
                             phase = type, correlationId = correlation, requestId = json["request_id"].string,
                             pier = json["pier"].string, operation = json["operation"].string,
-                            progress = json["progress"].double, outcome = json["outcome"].string,
+                            progress = json["progress"].double, message = json["message"].string, outcome = json["outcome"].string,
                             reason = json["reason"].string,
                         ),
                     )

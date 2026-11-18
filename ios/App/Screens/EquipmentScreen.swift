@@ -129,9 +129,6 @@ private struct JogPad: View {
     /// The jog speed, the Mount page's levels 1 to 9, kept on the device.
     @AppStorage("mount.jogLevel") private var level = 7
 
-    /// deg/s for each level, as Galileo's Mount page (`JOG_RATE_LEVELS`), for the label.
-    private static let rates: [Int: String] = [1: "0.002", 2: "0.004", 3: "0.008", 4: "0.017", 5: "0.033", 6: "0.084", 7: "0.2", 8: "1", 9: "10"]
-
     private static let rows: [[(String, String, String)]] = [
         [("North West", "arrow.up.left", "northwest"), ("North", "arrow.up", "north"), ("North East", "arrow.up.right", "northeast")],
         [("West", "arrow.left", ""), ("", "", ""), ("East", "arrow.right", "")],
@@ -183,7 +180,8 @@ private struct JogPad: View {
     /// The speed slider, under the pad: a stepped track drawn here (the system slider can't be held to Night).
     private var speed: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Speed \(level) · \(Self.rates[level] ?? "")°/s").font(.subheadline.weight(.semibold)).foregroundStyle(theme.text)
+            // No rate in deg/s: each telescope slews at its own speeds, so the level is all that is true of every mount.
+            Text("Speed \(level)").font(.subheadline.weight(.semibold)).foregroundStyle(theme.text)
             GeometryReader { geometry in
                 let width = geometry.size.width
                 ZStack(alignment: .leading) {

@@ -62,10 +62,10 @@ import kotlinx.serialization.json.JsonArray
 enum class Area(val label: String, val glyph: String) {
     Overview("Overview", "▤"),
     Sky("Sky", "✦"),
+    MountControl("Mount Control", "✥"),
     Focus("Focus", "◎"),
     PolarAlignment("Polar Alignment", "⌖"),
     Targets("Targets", "★"),
-    MountControl("Mount Control", "✥"),
     Imaging("Imaging", "◉"),
     Solve("Solve", "⌗"),
     Guiding("Guiding", "⊕"),
