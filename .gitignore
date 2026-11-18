@@ -18,3 +18,4 @@ android/quest/src/main/assets/speech/
 android/keystore.properties
 *.jks
 *.keystore
+dist/

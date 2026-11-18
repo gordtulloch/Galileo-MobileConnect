@@ -31,15 +31,21 @@ which is fine for your own devices but not for testers.
 
 ## Each release
 
+Releases are made on this computer by `scripts/release_android.py`; the signing key is never put on GitHub.
+
 1. Raise `versionCode` (it must go up by at least one, or Android refuses the install as a downgrade) and `versionName` in
    `android/app/build.gradle.kts`.
-2. Build: from `android/`, `gradlew :app:assembleRelease`. The APK is
-   `android/app/build/outputs/apk/release/app-release.apk`.
-3. Check it is signed with the release key, not the debug one:
-   `apksigner verify --print-certs app-release.apk` (in the SDK's `build-tools`); the certificate must not say
-   "Android Debug".
-4. Give it a clear name, e.g. `Galileo-MobileConnect-0.1.1.apk`, and upload it (with the matching MobileConnect plugin zip)
-   to a GitHub Release. Say which Galileo version it needs.
+2. Update `docs/android/release-notes.md` for this version (it becomes the GitHub release description).
+3. Commit and push.
+4. `python scripts/release_android.py` runs the unit tests, builds the signed APK into `dist/`, and checks it is signed
+   with the release key (it refuses a debug-signed build). Nothing is published.
+5. `python scripts/release_android.py --publish` then tags `v<version>`, creates the GitHub pre-release with the APK, and
+   lists it on the web site's download page (`apps` in Galileo.web's `downloads.json`, committed and pushed). It needs
+   `gh` logged in and a clone of Galileo.web next to this repository (or `--web PATH`), and it refuses to run with
+   uncommitted or unpushed changes, a missing note for this version, or an existing release of the same version.
+
+Say in the release notes which Galileo version and MobileConnect plug-in version the app needs, and upload the plug-in's
+zip with the plug-in's own release (Galileo-Plugins builds it when a plug-in's version is pushed).
 
 ## What to tell testers
 
