@@ -175,7 +175,7 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 | MAPP-SKY-080 | All | The app shall hide everything below 0 degrees altitude behind an opaque landscape-style ground, with a switch to turn it off and the selection and mount markers still shown, and shall fill the sky between 0 degrees and the local horizon profile in transparent red. | P2 |
 | MAPP-SKY-090 | All | The app's sky view shall use the same projection as Galileo's Star Atlas: the same field-of-view definition, precession, sidereal time and limits, so that a position is drawn in the same place for the same view. | P2 |
 | MAPP-SKY-100 | All | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add to Session. | P2 |
-| MAPP-SKY-110 | All | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as the Star Atlas does. | P2 |
+| MAPP-SKY-110 | All | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC, IC), by the Master's membership, starting with Messier as the Star Atlas does. | P2 |
 | MAPP-SKY-120 | All | The app shall show the user's saved targets (`GET /mobileconnect/v1/targets`) as a Targets screen — newest first with name, type, magnitude, size and position — with Slew To, Goto and Centre, and Remove (only with control), and an empty state that says where to save objects. | P2 |
 | MAPP-SKY-130 | iOS, Android | The Star Atlas shall label every telescope (each reachable Pier, by name) at its pointing position and draw its field of view as the sky has it (the Framing Assistant's rectangle, rotated by the rotator, following the projection); label every deep-sky object and named star it draws, with the icon of its type as the desktop draws it (galaxy ellipse, open cluster dashed circle, globular cluster circle with cross, other cluster circle, planetary nebula ringed dot, square otherwise); and add an object found by name to the display, with its icon and label, until cleared. Every saved target (`GET /mobileconnect/v1/targets`) shall always be plotted with its icon and label, whatever catalogs are chosen, and a search shall plot every object it matches, each tappable so that it can be selected and designated (`SKYMAP-120` in the desktop's SRS). | P2 |
 
@@ -203,7 +203,7 @@ Manual and automatic focus, both from the Master's focus module (`MAPP` follows 
 |---|---|---|---|
 | MAPP-GUI-010 | All | The app shall connect and disconnect the guider service, start and stop guiding, dither and recalibrate. | MVP |
 | MAPP-GUI-020 | All | The app shall display the guide error trace and the guide-star cut-out the Master supplies. | MVP |
-| MAPP-GUI-030 | All | The app shall show the guide star as the cut-out or as the whole guide frame, and let the user choose the guide star by tapping either. | MVP |
+| MAPP-GUI-030 | All | The app shall show the guide star as PHD2's cut-out only, at a small size (PHD2 sends a network client nothing larger), and shall not offer choosing the guide star by tapping it. | MVP |
 
 ### 3.9 `MAPP-FLP` — Meridian Flip
 
@@ -219,7 +219,7 @@ Running and authoring Sessions, using the Sessions model of the Master (PSD G5, 
 | ID | Platforms | Requirement | Priority |
 |---|---|---|---|
 | MAPP-SES-010 | All | The app shall list the saved sessions of the Master and load one. | MVP |
-| MAPP-SES-020 | All | The app shall run, pause, resume, skip a step of, and stop a session, with a confirmation for stop. | MVP |
+| MAPP-SES-015 | All | The app shall offer only the Master's saved sessions for the working Pier, never session templates, and run one immediately; it shall show "Jobs already running" when the Master refuses because a job is running, and ask "Pre-empt any upcoming jobs?" before starting while a scheduled job is still to come. | MVP || MAPP-SES-020 | All | The app shall run, pause, resume, skip a step of, and stop a session, with a confirmation for stop. | MVP |
 | MAPP-SES-030 | All | The app shall show the progress of a running session block by block, including nested blocks, the current exposure and the time remaining. | MVP |
 | MAPP-SES-040 | All | The app shall let the user author and edit a session: add, remove, reorder and nest instruction, condition and trigger blocks, and set each block's parameters, using the block types and validation the Master supplies, including blocks registered by plugins (`SES-340`). | P2 |
 | MAPP-SES-050 | All | The app shall save an authored session to the Master and shall report the Master's validation messages without discarding the user's work. | P2 |
@@ -234,7 +234,8 @@ Running and authoring Sessions, using the Sessions model of the Master (PSD G5, 
 | MAPP-SCH-010 | All | The app shall show the Master's job queue and the next job to run. | MVP |
 | MAPP-SCH-020 | All | The app shall let the user create, edit and delete a scheduler job, including adding a job from a target selected in the sky view. | P2 |
 | MAPP-SCH-030 | All | The app shall let the user enable, disable, reorder and run-now a job. | P2 |
-
+| MAPP-SCH-040 | All | The app shall list the Pier's queued jobs under "Queued jobs", showing on the running job's tile a Pause (Resume while paused) and a Stop button. | MVP |
+| MAPP-SCH-050 | All | The app shall let the user reorder the jobs that are not running by dragging their tiles and remove one with an X button, and shall not offer either for the running job. | MVP |
 ### 3.12 `MAPP-CAL` — Calibration
 
 | ID | Platforms | Requirement | Priority |
@@ -401,8 +402,8 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | MAPP-FOC | 3 | 3 | 0 | 0 |
 | MAPP-GUI | 3 | 3 | 0 | 0 |
 | MAPP-FLP | 2 | 2 | 0 | 0 |
-| MAPP-SES | 8 | 3 | 5 | 0 |
-| MAPP-SCH | 3 | 1 | 2 | 0 |
+| MAPP-SES | 9 | 4 | 5 | 0 |
+| MAPP-SCH | 5 | 3 | 2 | 0 |
 | MAPP-CAL | 1 | 0 | 1 | 0 |
 | MAPP-SAF | 4 | 4 | 0 | 0 |
 | MAPP-EMG | 2 | 2 | 0 | 0 |
@@ -414,7 +415,7 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | MAPP-LAY | 6 | 5 | 1 | 0 |
 | MAPP-PLT | 10 | 10 | 0 | 0 |
 | MAPP-QST | 29 | 22 | 4 | 3 |
-| **Total** | **136** | **107** | **26** | **3** |
+| **Total** | **139** | **110** | **26** | **3** |
 
 ---
 

@@ -11,14 +11,7 @@ struct GuidingScreen: View {
         ScreenScroll("Guiding") {
             ReadOnlyHint()
             Columns {
-                Card("Guide star") { GuidePicture() }
-                Card("Guide error") {
-                    LiveRow(label: "State", key: "guiding.state")
-                    LiveRow(label: "RMS RA", key: "guiding.rms_ra", unit: "″", digits: 2)
-                    LiveRow(label: "RMS Dec", key: "guiding.rms_dec", unit: "″", digits: 2)
-                    LiveRow(label: "Star SNR", key: "guiding.star_snr")
-                    GuideTrace()
-                }
+                Card("Guide error") { GuideTrace() }
             } right: {
                 Card("Control") {
                     HStack(spacing: 8) {
@@ -26,8 +19,9 @@ struct GuidingScreen: View {
                         OperationButton(title: "Disconnect", operation: "guiding.disconnect", icon: "poweroff")
                     }
                     HStack(spacing: 8) {
+                        OperationButton(title: "Loop", operation: "guiding.loop", icon: "repeat")
                         OperationButton(title: "Start guiding", operation: "guiding.start", icon: "play", kind: .prominent)
-                        OperationButton(title: "Stop guiding", operation: "guiding.stop", icon: "stop")
+                        OperationButton(title: "Stop", operation: "guiding.stop", icon: "stop")
                     }
                     HStack(spacing: 8) {
                         OperationButton(title: "Dither", operation: "guiding.dither", icon: "arrow.up.and.down.and.arrow.left.and.right")
@@ -36,7 +30,32 @@ struct GuidingScreen: View {
                     OperationButton(title: "Find star", operation: "guiding.find_star", icon: "sparkle.magnifyingglass")
                 }
             }
+            Card("Guide star") { GuidePicture() }
         }
+    }
+}
+
+/// The state, RMS error and star SNR on one small line, laid over the foot of the trace.
+private struct GuideReadout: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+
+    private func number(_ key: String, _ digits: Int) -> String? {
+        model.value(key)?.value.doubleValue.map { String(format: "%.\(digits)f", $0) }
+    }
+
+    var body: some View {
+        let parts = [
+            model.value("guiding.state")?.value.displayText,
+            number("guiding.rms_ra", 2).map { "RA \($0)″" },
+            number("guiding.rms_dec", 2).map { "Dec \($0)″" },
+            number("guiding.star_snr", 0).map { "SNR \($0)" },
+        ].compactMap { $0 }
+        Text(parts.isEmpty ? "No guide data yet." : parts.joined(separator: "   "))
+            .font(.caption2).foregroundStyle(theme.textSecondary)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(theme.surface.opacity(0.75))
+            .accessibilityIdentifier("guide.readout")
     }
 }
 
@@ -60,6 +79,7 @@ private struct GuideTrace: View {
             return row
         }
         if samples.isEmpty {
+            GuideReadout()
             Note("The trace appears here while guiding.")
         } else {
             // Told apart by dash as well as colour: Night has only the one hue.
@@ -72,6 +92,7 @@ private struct GuideTrace: View {
             .themedAxes(theme)
             .frame(height: 220)
             .opacity(model.snapshot.isConnected ? 1 : 0.4)
+            .overlay(alignment: .bottom) { GuideReadout().padding(.bottom, 28) }
             .accessibilityLabel("Guide error trace")
             .accessibilityIdentifier("guide.trace")
             Note("Solid: RA. Dashed: Dec. Arc-seconds.")
@@ -79,32 +100,22 @@ private struct GuideTrace: View {
     }
 }
 
-/// The guide star as the Master has it: PHD2's close-up of the star, or the whole guide frame. A tap on either asks
-/// PHD2 to choose the star there (`MAPP-GUI-030`); the Master looks for the best star in a small box around the tap, so
-/// it need not be exact. Taps are sent as where on the picture they landed, in that picture's own pixels, and the
-/// Master works out where that is on the guide frame.
+/// The guide star as the Master has it: PHD2's close-up of the star, which is all PHD2 sends a network client. Small,
+/// and not tappable: the star is chosen in PHD2 (or by the Master's Find star).
 private struct GuidePicture: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.displayScale) private var scale
-    @State private var fullFrame = false
     @State private var image: UIImage?
     /// The picture's size in the Master's pixels: the guide frame, or the cut-out.
     @State private var pixelSize: CGSize?
     @State private var problem: String?
-    @State private var message: String?
 
     private var state: String { model.value("guiding.state")?.value.displayText ?? "" }
-    /// PHD2 only takes a new star while looping; the Master says no at any other time, and so is only asked then.
-    private var canChoose: Bool { ["Looping", "Selected", "LostLock"].contains(state) }
-    private var request: String { "\(model.workingPier ?? "")/\(fullFrame)/\(state)/\(model.value("guiding.rms_ra")?.value.displayText ?? "")" }
+    private var request: String { "\(model.workingPier ?? "")/\(state)/\(model.value("guiding.rms_ra")?.value.displayText ?? "")" }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                choice("Star", on: !fullFrame) { fullFrame = false }
-                choice("Full frame", on: fullFrame) { fullFrame = true }
-            }
             ZStack {
                 theme.background
                 if let image, let pixelSize {
@@ -112,23 +123,11 @@ private struct GuidePicture: View {
                         let fit = Self.fit(pixelSize, in: box.size)
                         Image(uiImage: image)
                             .resizable()
-                            .interpolation(fullFrame ? .medium : .none)
+                            .interpolation(.none)
                             .frame(width: fit.width, height: fit.height)
                             .colorMultiply(theme.imageTint)
                             .position(x: box.size.width / 2, y: box.size.height / 2)
-                            .contentShape(Rectangle())
-                            .gesture(SpatialTapGesture().onEnded { tap in
-                                guard canChoose else { return }
-                                let point = CGPoint(x: tap.location.x / fit.width * pixelSize.width,
-                                                    y: tap.location.y / fit.height * pixelSize.height)
-                                Task {
-                                    message = await model.perform("guiding.select_star", args: [
-                                        "x": .number(point.x), "y": .number(point.y),
-                                        "space": .string(fullFrame ? "frame" : "cutout")])
-                                }
-                            })
-                            .accessibilityLabel(fullFrame ? "Guide frame" : "Guide star")
-                            .accessibilityHint(canChoose ? "Tap a star to guide on it." : "")
+                            .accessibilityLabel("Guide star")
                             .accessibilityIdentifier("guide.picture")
                     }
                 } else if let problem {
@@ -138,15 +137,11 @@ private struct GuidePicture: View {
                 }
             }
             .frame(maxWidth: .infinity)
-            .aspectRatio(4 / 3, contentMode: .fit)
-            if let message { Note(message) }
-            Note(canChoose
-                 ? "Tap a star to guide on it."
-                 : "Loop exposures to choose a star; the star can't be changed while guiding.")
+            .frame(height: 150)
         }
         .task(id: request) { await load() }
-        .task(id: fullFrame) {
-            // The Master only keeps fetching the picture (for the frame, a file write each) while someone is looking.
+        .task {
+            // The Master only keeps fetching the picture while someone is looking.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(2))
                 if !Task.isCancelled { await load() }
@@ -154,24 +149,8 @@ private struct GuidePicture: View {
         }
     }
 
-    private func choice(_ title: String, on: Bool, action: @escaping () -> Void) -> some View {
-        Button(title, action: action)
-            .buttonStyle(ActionStyle(kind: on ? .prominent : .normal))
-            .accessibilityValue(on ? "Showing" : "")
-            .accessibilityIdentifier("guide.show.\(title)")
-    }
-
     private func load() async {
-        if fullFrame {
-            if let shot = await model.preview(width: Int(1200 * min(scale, 2) / 2), stretch: 50, guide: true),
-               let decoded = UIImage(data: shot.data), let width = shot.frameWidth, let height = shot.frameHeight {
-                image = decoded
-                pixelSize = CGSize(width: width, height: height)
-                problem = nil
-            } else if image == nil || pixelSize == nil {
-                problem = "No guide frame yet. The Master can only show it when PHD2 runs on the Master's computer."
-            }
-        } else if let star = await model.read("guiding.star"), star["available"]?.boolValue != false,
+        if let star = await model.read("guiding.star"), star["available"]?.boolValue != false,
                   let width = star["width"]?.doubleValue.map(Int.init), let height = star["height"]?.doubleValue.map(Int.init),
                   let encoded = star["pixels"]?.stringValue, let data = Data(base64Encoded: encoded),
                   let decoded = Self.render(pixels: data, width: width, height: height) {

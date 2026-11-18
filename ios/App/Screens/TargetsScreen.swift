@@ -32,37 +32,38 @@ struct TargetsScreen: View {
 
     private func tile(_ target: SavedTarget) -> some View {
         Card {
-            // The object's picture runs the full height of the tile, on the right.
+            // One row: the picture on the left, the text in the middle, the three buttons stacked on the right.
             HStack(alignment: .center, spacing: 10) {
+                TargetThumbnail(name: target.name)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(target.name) · \(target.type)").font(.headline).accessibilityIdentifier("target.name")
                     Text(target.summary).font(.subheadline).foregroundStyle(theme.textSecondary)
                     Text(String(format: "RA %.3f°  Dec %.3f°", target.raDeg, target.decDeg))
                         .font(.footnote).foregroundStyle(theme.textSecondary)
+                    if !model.canEditTargets { Note("Only an Operator can remove a saved target.") }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityElement(children: .combine)
-                TargetThumbnail(name: target.name)
+                VStack(spacing: 6) {
+                    OperationButton(
+                        title: "Slew To", operation: "mount.slew", icon: "scope",
+                        args: ["ra_deg": .number(target.raDeg), "dec_deg": .number(target.decDeg)])
+                    OperationButton(
+                        title: "Goto and Centre", operation: "solve.centre", icon: "viewfinder",
+                        args: [
+                            "ra_deg": .number(target.raDeg), "dec_deg": .number(target.decDeg), "name": .string(target.name),
+                        ])
+                    Button {
+                        Task { await remove(target) }
+                    } label: {
+                        Label("Remove", systemImage: "trash")
+                    }
+                    .buttonStyle(ActionStyle(kind: .destructive))
+                    .disabled(!model.canEditTargets)
+                    .accessibilityIdentifier("target.remove")
+                }
+                .frame(width: 150)
             }
-            HStack(spacing: 8) {
-                OperationButton(
-                    title: "Slew To", operation: "mount.slew", icon: "scope",
-                    args: ["ra_deg": .number(target.raDeg), "dec_deg": .number(target.decDeg)])
-                OperationButton(
-                    title: "Goto and Centre", operation: "solve.centre", icon: "viewfinder",
-                    args: [
-                        "ra_deg": .number(target.raDeg), "dec_deg": .number(target.decDeg), "name": .string(target.name),
-                    ])
-            }
-            Button {
-                Task { await remove(target) }
-            } label: {
-                Label("Remove", systemImage: "trash")
-            }
-            .buttonStyle(ActionStyle(kind: .destructive))
-            .disabled(!model.canEditTargets)
-            .accessibilityIdentifier("target.remove")
-            if !model.canEditTargets { Note("Only an Operator can remove a saved target.") }
         }
         .contextMenu {
             if model.canEditTargets {
@@ -98,8 +99,8 @@ private struct TargetThumbnail: View {
     var body: some View {
         // The text beside it sets the tile's height; the picture fills that, never makes it taller.
         Color.clear
-            .frame(width: 110)
-            .frame(minHeight: 90)
+            .frame(width: 96)
+            .frame(minHeight: 96)
             .overlay {
                 if let image {
                     Image(uiImage: image).resizable().scaledToFill().accessibilityHidden(true)

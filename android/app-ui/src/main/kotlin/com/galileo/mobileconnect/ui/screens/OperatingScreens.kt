@@ -2,6 +2,11 @@ package com.galileo.mobileconnect.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.padding
@@ -25,6 +30,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +62,7 @@ import com.galileo.mobileconnect.ui.Note
 import com.galileo.mobileconnect.ui.OperationButton
 import com.galileo.mobileconnect.ui.OperationForm
 import com.galileo.mobileconnect.ui.OutcomeNote
+import com.galileo.mobileconnect.ui.RunningProgress
 import com.galileo.mobileconnect.ui.ScreenScroll
 import com.galileo.mobileconnect.ui.ThemedProgress
 import com.galileo.mobileconnect.ui.Txt
@@ -212,8 +219,9 @@ private fun JogPad() {
     val takesLevel = info.arguments.any { it.name == "level" }
     fun direction(name: String): Map<String, kotlinx.serialization.json.JsonElement> =
         buildMap { put("direction", JsonPrimitive(name)); if (takesLevel) put("level", JsonPrimitive(level)) }
-    // The screen less the top bar, the area strip and the screen's padding.
-    val height = (LocalConfiguration.current.screenHeightDp - 200 - (if (takesLevel) 96 else 0)).coerceAtLeast(280).dp
+    // The screen less the top bar, the area strip and the screen's padding, and the speed slider under the pad (its
+    // title, a 44 dp track and the gaps) so that it is on screen without scrolling.
+    val height = (LocalConfiguration.current.screenHeightDp - 200 - (if (takesLevel) 180 else 0)).coerceAtLeast(220).dp
     val rows = listOf(
         listOf(Triple("North West", "↖", "northwest"), Triple("North", "↑", "north"), Triple("North East", "↗", "northeast")),
         listOf(Triple("West", "←", "west"), null, Triple("East", "→", "east")),
@@ -253,8 +261,6 @@ fun FocusScreen() {
         Columns(
             left = {
                 Card("Autofocus") {
-                    LiveRow("State", "focus.state")
-                    LiveRow("Last result", "focus.last_result")
                     LiveRow("Temperature compensation", "focus.compensation")
                     // Not OperationButtons: their notes would be squeezed into half the width, and a run's progress needs all of it.
                     val run = app.operation("focus.autofocus")
@@ -331,16 +337,43 @@ private fun StepButton(steps: Int) {
 private fun VCurve() {
     val app = LocalApp.current
     val theme = LocalTheme.current
-    val points = app.workingPier?.let { app.snapshot.live.piers[it]?.series?.get("focus.vcurve") }?.takeLast(30) ?: emptyList()
-    val samples = points.mapNotNull { point ->
+    // The Master publishes the whole run as one object, `focus.autofocus`: step/steps, the [position, hfr] points so far,
+    // the best position and the outcome. Older Masters that published a `focus.vcurve` series still draw from it.
+    // The app flattens an object into one key per field (`focus.autofocus.points`, `.running`...).
+    fun field(name: String) = app.value("focus.autofocus.$name")?.value
+    val picture = field("phase")
+    val measured = (field("points") as? JsonArray)?.mapNotNull { pair ->
+        val p = pair as? JsonArray ?: return@mapNotNull null
+        val position = p.getOrNull(0).double ?: return@mapNotNull null
+        val hfr = p.getOrNull(1).double ?: return@mapNotNull null
+        position to hfr
+    } ?: emptyList()
+    val legacy = app.workingPier?.let { app.snapshot.live.piers[it]?.series?.get("focus.vcurve") }?.takeLast(30)?.mapNotNull { point ->
         val position = point.value["position"].double ?: return@mapNotNull null
         val hfr = point.value["hfr"].double ?: return@mapNotNull null
         position to hfr
+    } ?: emptyList()
+    val samples = measured.ifEmpty { legacy }
+    val running = field("running").bool == true
+    if (samples.isNotEmpty()) {
+        val latest = samples.last()
+        val best = samples.minByOrNull { it.second }
+        ValueRow("Latest HFR", "%.2f px at %d".format(latest.second, latest.first.roundToInt()))
+        if (best != null) ValueRow("Lowest HFR so far", "%.2f px at %d".format(best.second, best.first.roundToInt()))
+    }
+    if (!running && picture.string == "finished") {
+        val bestPosition = field("best_position").double
+        val outcome = when {
+            field("cancelled").bool == true -> "Autofocus cancelled."
+            field("success").bool == true && bestPosition != null -> "Best focus at ${bestPosition.roundToInt()}."
+            else -> "Autofocus failed: ${field("failure_reason").string?.takeIf { it.isNotBlank() } ?: "no reason given"}."
+        }
+        Note(outcome)
     }
     if (samples.isEmpty()) {
         Note("The V-curve appears here during a run.")
     } else {
-        Chart(listOf(ChartSeries(samples, theme.accent, scatter = true)), "V-curve, ${samples.size} points", height = 180, tag = "vcurve")
+        Chart(listOf(ChartSeries(samples, theme.accent, scatter = true)), "V-curve, ${samples.size} points (HFR against position)", height = 180, tag = "vcurve")
     }
 }
 
@@ -527,51 +560,182 @@ fun SessionsScreen() {
     }
 }
 
+/** What the Master lists for a saved session (never a template). */
+private data class SavedSession(val name: String, val target: String)
+
+/** One entry of the Pier's queue: the job running (queued or run by hand) first, then the rest in order. */
+private data class QueuedJob(
+    val name: String, val running: Boolean, val paused: Boolean, val queued: Boolean, val detail: String,
+)
+
 @Composable
 private fun SavedSessions() {
     val app = LocalApp.current
+    val scope = rememberCoroutineScope()
+    var sessions by remember { mutableStateOf<List<SavedSession>?>(null) }
+    var asked by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(app.workingPier, app.snapshot.isConnected) {
+        while (true) {
+            if (app.snapshot.isConnected) {
+                val list = app.read("session.saved")?.get("sessions") as? JsonArray
+                if (list != null) sessions = list.mapNotNull { j -> j["name"].string?.let { SavedSession(it, j["target"].string ?: "") } }
+                asked = true
+            }
+            delay(5000)
+        }
+    }
     Card("Saved sessions") {
-        val names = (app.value("session.templates")?.value as? JsonArray)?.mapNotNull { it.string } ?: emptyList()
-        if (names.isEmpty()) Note("The Master reports no saved sessions.")
-        app.sessionTarget?.let { target ->
-            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Txt("Target from the sky: ${target.name}", weight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                Column(Modifier.heightIn(min = 0.dp)) { ActionButton("Clear", tag = "session.target.clear") { app.sessionTarget = null } }
-            }
-        }
-        names.forEach { name ->
-            if (app.canOperate) {
-                val args = mutableMapOf<String, kotlinx.serialization.json.JsonElement>("template" to JsonPrimitive(name))
-                app.sessionTarget?.let {
-                    args["target_name"] = JsonPrimitive(it.name)
-                    args["ra_deg"] = JsonPrimitive(it.raDeg)
-                    args["dec_deg"] = JsonPrimitive(it.decDeg)
+        val list = sessions
+        if (list.isNullOrEmpty()) Note(if (asked) "No saved sessions on this Pier. Save one in the desktop app's Sessions screen." else "Loading the saved sessions…")
+        list?.forEach { saved ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Txt(saved.name, weight = FontWeight.SemiBold)
+                    if (saved.target.isNotEmpty()) Note(saved.target)
                 }
-                OperationButton("Run $name", "session.run", args)
-            } else {
-                Txt(name)
+                Column(Modifier.width(96.dp)) {
+                    ActionButton("Run", kind = ActionKind.Prominent, enabled = app.canOperate, tag = "session.run.${saved.name}") {
+                        scope.launch { note = startSaved(app, saved.name) }
+                    }
+                }
             }
         }
+        note?.let { Note(it) }
+        app.record("session.run_saved")?.let { OutcomeNote(it) }
+    }
+}
+
+/**
+ * Starts a saved session now, as Run on the desktop does. The Master is asked first whether it can: a job already
+ * running is "Jobs already running", and jobs still to come are put to the user as "Pre-empt any upcoming jobs?"
+ * (MAPP-SES-015). Returns a message for the screen, or null.
+ */
+private suspend fun startSaved(app: com.galileo.mobileconnect.AppViewModel, name: String): String? {
+    val check = app.read("session.start_check", mapOf("name" to JsonPrimitive(name)))
+        ?: return "This Master can't run saved sessions yet: update Galileo on the Master."
+    val reason = check["reason"].string.orEmpty()
+    return when {
+        reason.isNotEmpty() -> reason
+        check["running"].string.orEmpty().isNotEmpty() -> "Jobs already running"
+        ((check["upcoming"] as? JsonArray)?.size ?: 0) > 0 -> { app.preemptFor = name; null }
+        else -> app.perform("session.run_saved", mapOf("name" to JsonPrimitive(name)))
     }
 }
 
 @Composable
 private fun JobQueue() {
     val app = LocalApp.current
-    val theme = LocalTheme.current
-    Card("Job queue") {
-        val jobs = (app.value("scheduler.jobs")?.value as? JsonArray) ?: JsonArray(emptyList())
-        if (jobs.isEmpty()) Note("Nothing queued on this Pier.")
-        app.value("scheduler.next")?.value.string?.let { next ->
-            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-                Txt("Next", color = theme.textSecondary, modifier = Modifier.weight(1f))
-                Txt(next, weight = FontWeight.SemiBold)
+    val scope = rememberCoroutineScope()
+    var jobs by remember { mutableStateOf<List<QueuedJob>?>(null) }
+    var dragging by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    suspend fun load() {
+        val list = app.read("scheduler.jobs")?.get("jobs") as? JsonArray ?: return
+        jobs = list.map { j ->
+            QueuedJob(
+                name = j["name"].string ?: "Job", running = j["running"].bool == true, paused = j["paused"].bool == true,
+                queued = j["queued"].bool != false, detail = jobDetail(j),
+            )
+        }
+    }
+    LaunchedEffect(app.workingPier, app.snapshot.isConnected) {
+        while (true) {
+            if (app.snapshot.isConnected && !dragging) load()
+            delay(3000)
+        }
+    }
+    Card("Queued jobs") {
+        val list = jobs
+        if (list.isNullOrEmpty()) Note("Nothing queued on this Pier.")
+        // The running entries are first and fixed; only the others can be moved, among themselves.
+        val fixed = list?.count { it.running || !it.queued } ?: 0
+        list?.forEachIndexed { index, job ->
+            androidx.compose.runtime.key(job.name) {
+                JobTile(
+                    job, canMove = !job.running && job.queued && app.canOperate && (list.size - fixed) > 1,
+                    onDragging = { dragging = it },
+                    onMove = { steps ->
+                        val target = (index + steps).coerceIn(fixed, list.lastIndex)
+                        if (target != index) {
+                            jobs = list.toMutableList().also { it.add(target, it.removeAt(index)) }
+                            scope.launch {
+                                note = app.perform(
+                                    "scheduler.reorder",
+                                    mapOf("name" to JsonPrimitive(job.name), "position" to JsonPrimitive(target - list.count { !it.queued })),
+                                )
+                                load()
+                            }
+                        }
+                    },
+                    onRemove = { scope.launch { note = app.perform("scheduler.remove", mapOf("name" to JsonPrimitive(job.name))); load() } },
+                    onControl = { operation -> scope.launch { note = app.perform(operation); load() } },
+                )
             }
         }
-        jobs.forEach { job ->
-            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Txt(job["name"].string ?: "Job", size = 15.sp, weight = FontWeight.SemiBold)
-                Txt(jobDetail(job), size = 13.sp, color = theme.textSecondary)
+        note?.let { Note(it) }
+    }
+}
+
+/**
+ * One queue entry. The running one has Pause (Resume while paused) and Stop. Any other can be dragged (press and hold,
+ * then drag) to a new place, and has an X to take it off the queue (MAPP-SCH-040, MAPP-SCH-050).
+ */
+@Composable
+private fun JobTile(
+    job: QueuedJob, canMove: Boolean, onDragging: (Boolean) -> Unit, onMove: (Int) -> Unit,
+    onRemove: () -> Unit, onControl: (String) -> Unit,
+) {
+    val app = LocalApp.current
+    val theme = LocalTheme.current
+    var offset by remember { mutableStateOf(0f) }
+    var height by remember { mutableStateOf(1) }
+    val lifted = offset != 0f
+    Row(
+        Modifier.fillMaxWidth()
+            .zIndex(if (lifted) 1f else 0f)
+            .offset { androidx.compose.ui.unit.IntOffset(0, offset.roundToInt()) }
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (lifted) theme.raised else theme.surface)
+            .onSizeChanged { height = it.height.coerceAtLeast(1) }
+            .pointerInput(canMove, job.name) {
+                if (canMove) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { onDragging(true) },
+                        onDrag = { change, amount -> change.consume(); offset += amount.y },
+                        onDragEnd = {
+                            val steps = (offset / (height + 8.dp.toPx())).roundToInt()
+                            offset = 0f
+                            onDragging(false)
+                            onMove(steps)
+                        },
+                        onDragCancel = { offset = 0f; onDragging(false) },
+                    )
+                }
+            }
+            .padding(vertical = 6.dp)
+            .testTag("job.${job.name}"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (canMove) Txt("≡", size = 20.sp, color = theme.textSecondary, modifier = Modifier.semantics { contentDescription = "Drag to reorder" })
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Txt(job.name, size = 15.sp, weight = FontWeight.SemiBold)
+            Txt(job.detail, size = 13.sp, color = theme.textSecondary)
+        }
+        if (job.running) {
+            if (app.canOperate) {
+                Column(Modifier.width(96.dp)) {
+                    if (job.paused) ActionButton("Resume", tag = "job.resume") { onControl("scheduler.resume") }
+                    else ActionButton("Pause", tag = "job.pause") { onControl("scheduler.pause") }
+                }
+                Column(Modifier.width(80.dp)) {
+                    ActionButton("Stop", kind = ActionKind.Destructive, tag = "job.stop") { onControl("scheduler.stop") }
+                }
+            }
+        } else if (job.queued) {
+            Column(Modifier.width(48.dp).semantics { contentDescription = "Remove ${job.name}" }) {
+                ActionButton("✕", enabled = app.canOperate, tag = "job.remove.${job.name}") { onRemove() }
             }
         }
     }
@@ -579,10 +743,15 @@ private fun JobQueue() {
 
 private fun jobDetail(job: kotlinx.serialization.json.JsonElement): String {
     val parts = mutableListOf<String>()
-    job["run_state"].string?.let { parts += it.replaceFirstChar { c -> c.uppercase() } }
+    when {
+        job["paused"].bool == true -> parts += "Paused"
+        job["running"].bool == true -> parts += "Running"
+        else -> job["run_state"].string?.let { parts += it.replaceFirstChar { c -> c.uppercase() } }
+    }
     val done = job["frames_captured"].int
     val total = job["total_required"].int
     if (done != null && total != null && total > 0) parts += "$done of $total frames"
+    job["start"].string?.let { parts += "starts ${it.replace('T', ' ').take(16)} UTC" }
     return parts.joinToString(", ")
 }
 

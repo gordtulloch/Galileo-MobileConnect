@@ -673,7 +673,7 @@ class MockMaster(
                 n.startsWith(prefix) && n.drop(prefix.length).firstOrNull()?.isDigit() == true
             }.map { starCount + it },
         )
-        return j("catalogs" to listOf(catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC ")))
+        return j("catalogs" to listOf(catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC "), catalog("IC", "IC ")))
     }
 
     private fun mockSite(): SkySite? {

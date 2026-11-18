@@ -955,7 +955,7 @@ paths:
       x-galileo-status: implemented
       responses:
         "200":
-          description: Messier, Caldwell and NGC, with the objects of each. An object can be in several.
+          description: Messier, Caldwell, NGC and IC, with the objects of each. An object can be in several.
           content:
             application/json:
               schema:

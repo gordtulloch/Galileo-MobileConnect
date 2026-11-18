@@ -277,10 +277,6 @@ def tour(screen: Screen, label: str, exposure: float | None) -> None:
     log(f"--- {label}: Guiding")
     screen.go("Guiding")
     screen.pause(1.2)
-    screen.tap("guide.show.Full frame", quiet=True)
-    screen.pause(1.5)
-    screen.tap("guide.show.Star", quiet=True)
-    screen.pause(0.8)
     screen.swipe(mid_x, h - 200, mid_x, 300)
     screen.pause()
 

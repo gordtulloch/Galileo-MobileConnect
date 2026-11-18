@@ -102,7 +102,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-SKY-080 | The app shall hide everything below 0 degrees altitude behind an opaque landscape-style ground, with a switch to turn it off and the selection and… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-080 | U, UI |
 | MAPP-SKY-090 | The app's sky view shall use the same projection as Galileo's Star Atlas: the same field-of-view definition, precession, sidereal time and limits,… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-090 | U, UI |
 | MAPP-SKY-100 | Selecting an object in the sky view shall offer what the Star Atlas's context menu offers, beside the object: Goto, Goto and Centre, Sync and Add… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-100 | U, UI |
-| MAPP-SKY-110 | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC), by the Master's membership, starting with Messier as… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-110 | U, UI |
+| MAPP-SKY-110 | The app shall let the user choose which deep-sky catalogs are shown (Messier, Caldwell, NGC, IC), by the Master's membership, starting with Messier as… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-110 | U, UI |
 | MAPP-SKY-120 | The app shall show the user's saved targets (GET /mobileconnect/v1/targets) as a Targets screen — newest first with name, type, magnitude, size… | All | P2 | S-SKY | I-SKY | A-SKY | Q-PANE | TC-MAPP-SKY-120 | U, UI |
 | MAPP-SKY-130 | The Star Atlas shall label every telescope and draw its field of view as the sky has it; label every deep-sky object and named star with its type's icon; and add an object found by name to the display. | iOS, Android | P2 | S-SKY | I-SKY | A-SKY | — | TC-MAPP-SKY-130 | U, UI |
 
@@ -128,7 +128,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 |---|---|---|---|---|---|---|---|---|---|
 | MAPP-GUI-010 | The app shall connect and disconnect the guider service, start and stop guiding, dither and recalibrate | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-GUI-010 | C, UI |
 | MAPP-GUI-020 | The app shall display the guide error trace and the guide-star cut-out the Master supplies | All | MVP | S-STATE | I-OPS | A-OPS | Q-PANE | TC-MAPP-GUI-020 | C, UI |
-| MAPP-GUI-030 | The app shall show the guide star as the cut-out or as the whole guide frame, and let the user choose the guide star by tapping either | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-GUI-030 | C, UI |
+| MAPP-GUI-030 | The app shall show the guide star as PHD2's cut-out only, at a small size, and shall not offer choosing the guide star by tapping it | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-GUI-030 | C, UI |
 
 ## 10. MAPP-FLP — Meridian Flip
 
@@ -142,7 +142,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | ID | Req. | Pl. | Pri. | Shared | iOS | Android | Quest | Test case | Method |
 |---|---|---|---|---|---|---|---|---|---|
 | MAPP-SES-010 | The app shall list the saved sessions of the Master and load one | All | MVP | S-SES | I-SES | A-SES | Q-PANE | TC-MAPP-SES-010 | U, UI |
-| MAPP-SES-020 | The app shall run, pause, resume, skip a step of, and stop a session, with a confirmation for stop | All | MVP | S-SES, S-CTL | I-SES, I-SAFE | A-SES, A-SAFE | Q-PANE | TC-MAPP-SES-020 | U, UI |
+| MAPP-SES-015 | The app shall offer only saved sessions (never templates), run one immediately, and handle "Jobs already running" and the pre-empt prompt | All | MVP | S-SES | I-SES | A-SES | Q-PANE | TC-MAPP-SES-015 | U, UI || MAPP-SES-020 | The app shall run, pause, resume, skip a step of, and stop a session, with a confirmation for stop | All | MVP | S-SES, S-CTL | I-SES, I-SAFE | A-SES, A-SAFE | Q-PANE | TC-MAPP-SES-020 | U, UI |
 | MAPP-SES-030 | The app shall show the progress of a running session block by block, including nested blocks, the current exposure and the time remaining | All | MVP | S-STATE, S-SES | I-SES | A-SES | Q-PANE | TC-MAPP-SES-030 | U, UI |
 | MAPP-SES-040 | The app shall let the user author and edit a session: add, remove, reorder and nest instruction, condition and trigger blocks, and set each… | All | P2 | S-SES | I-SES | A-SES | Q-PANE | TC-MAPP-SES-040 | U, UI |
 | MAPP-SES-050 | The app shall save an authored session to the Master and shall report the Master's validation messages without discarding the user's work | All | P2 | S-SES | I-SES | A-SES | Q-PANE | TC-MAPP-SES-050 | U, UI |
@@ -157,7 +157,8 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-SCH-010 | The app shall show the Master's job queue and the next job to run | All | MVP | S-SCH | I-SES | A-SES | Q-PANE | TC-MAPP-SCH-010 | U, UI |
 | MAPP-SCH-020 | The app shall let the user create, edit and delete a scheduler job, including adding a job from a target selected in the sky view | All | P2 | S-SCH | I-SES | A-SES | Q-PANE | TC-MAPP-SCH-020 | U, UI |
 | MAPP-SCH-030 | The app shall let the user enable, disable, reorder and run-now a job | All | P2 | S-SCH | I-SES | A-SES | Q-PANE | TC-MAPP-SCH-030 | U, UI |
-
+| MAPP-SCH-040 | The app shall list the Pier's queued jobs, with Pause and Stop on the running job's tile | All | MVP | S-SCH | I-SES | A-SES | Q-PANE | TC-MAPP-SCH-040 | U, UI |
+| MAPP-SCH-050 | The app shall let the user reorder queued jobs by dragging and remove one with an X, not the running job | All | MVP | S-SCH | I-SES | A-SES | Q-PANE | TC-MAPP-SCH-050 | U, UI |
 ## 13. MAPP-CAL — Calibration
 
 | ID | Req. | Pl. | Pri. | Shared | iOS | Android | Quest | Test case | Method |

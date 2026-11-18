@@ -167,7 +167,7 @@ object ControlPolicy {
      * Operations that always get a dialog here, whatever the Master's class says (MAPP-CTL-040). A minimum: whatever the
      * Master marks `confirm` also prompts.
      */
-    val alwaysConfirm = setOf("camera.abort", "imaging.stop", "session.stop", "mount.park", "mount.unpark", "flip.now")
+    val alwaysConfirm = setOf("camera.abort", "imaging.stop", "session.stop", "scheduler.stop", "mount.park", "mount.unpark", "flip.now")
 
     fun title(operation: OperationInfo?, name: String): String {
         val description = operation?.description

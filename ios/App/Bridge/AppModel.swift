@@ -24,6 +24,8 @@ final class AppModel {
 
     var workingPier: String?
     var question: ConfirmationRequest?
+    /// The saved session the user asked to run while jobs are still to come: asks "Pre-empt any upcoming jobs?".
+    var preemptFor: String?
     var leaseOffer: LeaseRefusal?
     var emergencyOpen = false
     var pierPickerOpen = false
@@ -289,9 +291,9 @@ final class AppModel {
     }
 
     /// One read-class operation's value on the working Pier (the guide-star cut-out, for one).
-    func read(_ operation: String) async -> JSONValue? {
+    func read(_ operation: String, args: [String: JSONValue] = [:]) async -> JSONValue? {
         guard let pier = workingPier, let session else { return nil }
-        return await session.read(pier: pier, operation: operation)
+        return await session.read(pier: pier, operation: operation, args: args)
     }
 
     func tile(level: Int, x: Int, y: Int, stretch: Int, stack: Bool = false, solve: Bool = false) async -> Data? {

@@ -1,5 +1,6 @@
 package com.galileo.mobileconnect.ui
 
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -81,6 +82,21 @@ fun DialogLayer() {
             app.pier?.let { Note("On ${it.name}.") }
             ActionButton("Cancel", tag = "confirm.cancel") { app.question = null }
             ActionButton("Yes, do it", kind = ActionKind.Destructive, tag = "confirm.accept") { app.accept(question) }
+        }
+        app.preemptFor != null -> {
+            val name = app.preemptFor!!
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            Dialog("Pre-empt any upcoming jobs?") {
+                Txt("$name will start now. Jobs scheduled for later stay on the queue and start in their own time unless this session is still running.")
+                app.pier?.let { Note("On ${it.name}.") }
+                ActionButton("Cancel", tag = "preempt.cancel") { app.preemptFor = null }
+                ActionButton("Pre-empt", kind = ActionKind.Prominent, tag = "preempt.accept") {
+                    app.preemptFor = null
+                    scope.launch {
+                        app.perform("session.run_saved", mapOf("name" to kotlinx.serialization.json.JsonPrimitive(name), "preempt" to kotlinx.serialization.json.JsonPrimitive(true)))
+                    }
+                }
+            }
         }
         app.pierPickerOpen -> Dialog("Working Pier") {
             app.snapshot.piers.forEach { pier ->

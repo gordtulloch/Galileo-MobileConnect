@@ -394,6 +394,7 @@ class SkyTest {
         val catalogs = master().connection(identity, MockMaster.TOKEN).api.skyCatalogs()
         assertTrue(2500 in catalogs["Messier"]!!, "M 42")
         assertTrue(catalogs["NGC"] != null && catalogs["Caldwell"] != null)
+        assertTrue(catalogs["IC"] != null, "IC, as on the desktop")
     }
 
     /** The Star Atlas labels what it draws, and draws it as its type: the Master names and types them. */

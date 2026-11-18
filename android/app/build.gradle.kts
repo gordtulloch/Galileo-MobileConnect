@@ -1,3 +1,5 @@
+import java.util.Properties
+
 // app - the Jetpack Compose app (docs/android/SDD.md 3.0). Screens read one SessionSnapshot from :core; nothing here
 // talks to the Master except through it.
 
@@ -25,10 +27,30 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing comes from android/keystore.properties (gitignored; see docs/android/TESTING.md). Without it the
+    // release build is signed with the debug key, so a clone still builds, but that APK is for your own devices only:
+    // a tester who installs it cannot later update to a build signed with the real key.
+    val keystoreProperties = Properties().apply {
+        val file = rootProject.file("keystore.properties")
+        if (file.exists()) file.inputStream().use { load(it) }
+    }
+    val hasReleaseKey = keystoreProperties.getProperty("storeFile") != null
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug") // a sideloaded build until a release key exists (AO9)
+            signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
         }
     }
 

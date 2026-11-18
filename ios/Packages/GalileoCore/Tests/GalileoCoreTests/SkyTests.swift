@@ -374,6 +374,7 @@ struct SkyTests {
         let catalogs = await api.skyCatalogs()
         #expect(catalogs["Messier"]?.contains(2500) == true, "M 42")
         #expect(catalogs["NGC"] != nil && catalogs["Caldwell"] != nil)
+        #expect(catalogs["IC"] != nil, "IC, as on the desktop")
     }
 
     /// The Star Atlas labels what it draws, and draws it as its type: the Master names and types them.

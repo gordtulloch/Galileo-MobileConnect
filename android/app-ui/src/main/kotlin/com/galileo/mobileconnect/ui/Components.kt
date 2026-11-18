@@ -39,6 +39,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,7 @@ import com.galileo.mobileconnect.core.control.HoldState
 import com.galileo.mobileconnect.core.control.HoldStop
 import com.galileo.mobileconnect.core.control.OperationRecord
 import com.galileo.mobileconnect.core.control.OperationState
+import com.galileo.mobileconnect.core.state.bool
 import com.galileo.mobileconnect.core.state.displayText
 import com.galileo.mobileconnect.core.state.double
 import com.galileo.mobileconnect.core.state.string
@@ -416,13 +418,14 @@ fun RunningProgress(progress: Double?, message: String?, label: String = "Progre
 
 /** The system slider's thumb is white and its track grey, which Night can't have. */
 @Composable
-fun ThemedSlider(label: String, value: Double, range: ClosedFloatingPointRange<Double>, onChange: (Double) -> Unit) {
+fun ThemedSlider(label: String, value: Double, range: ClosedFloatingPointRange<Double>, thin: Boolean = false, onChange: (Double) -> Unit) {
     val theme = LocalTheme.current
     val compact = LocalCompact.current
-    val thumb = if (compact) 20.dp else 28.dp
+    // thin: a slider that sits beside progress bars is no taller than they are, its knob only just wider than the track.
+    val thumb = if (thin) 12.dp else if (compact) 20.dp else 28.dp
     val span = range.endInclusive - range.start
     Box(
-        Modifier.fillMaxWidth().height(if (compact) 28.dp else 44.dp)
+        Modifier.fillMaxWidth().height(if (thin) 20.dp else if (compact) 28.dp else 44.dp)
             .semantics {
                 contentDescription = label
                 stateDescription = String.format(Locale.US, "%.2f", value)
@@ -458,7 +461,7 @@ fun ThemedSlider(label: String, value: Double, range: ClosedFloatingPointRange<D
 
 /** A switch the theme can colour. */
 @Composable
-fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier, tight: Boolean = false) {
     val theme = LocalTheme.current
     val compact = LocalCompact.current
     Row(
@@ -467,7 +470,8 @@ fun Toggle(label: String, checked: Boolean, onChange: (Boolean) -> Unit, modifie
             .semantics(mergeDescendants = true) { stateDescription = if (checked) "on" else "off" },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Txt(label, size = if (compact) 13.sp else 16.sp, modifier = Modifier.weight(1f))
+        // tight: the switch sits right beside its own label (several to a line), not at the far end of a wide cell.
+        Txt(label, size = if (compact) 13.sp else 16.sp, modifier = if (tight) Modifier.padding(end = 4.dp) else Modifier.weight(1f))
         Box(
             Modifier.size(width = 52.dp, height = 30.dp).clip(CircleShape)
                 .background(if (checked) theme.accent else theme.raised).border(1.dp, theme.border, CircleShape),
@@ -688,7 +692,7 @@ fun argumentTitle(name: String): String {
 
 /** A form built from a catalogue entry's arguments: ranges and units come from the Master (ADR-APP-004). */
 @Composable
-fun OperationForm(title: String, operation: String, fields: List<String>? = null, kind: ActionKind = ActionKind.Normal) {
+fun OperationForm(title: String, operation: String, fields: List<String>? = null, kind: ActionKind = ActionKind.Normal, oneLine: Boolean = false) {
     val app = LocalApp.current
     if (!app.canOperate) return
     val compact = LocalCompact.current
@@ -702,7 +706,25 @@ fun OperationForm(title: String, operation: String, fields: List<String>? = null
     val open = record?.state?.isOpen == true
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (compact) {
+        if (oneLine) {
+            // Every field, whatever its kind, side by side on a single line.
+            CompositionLocalProvider(LocalCompact provides true) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Bottom, modifier = Modifier.fillMaxWidth()) {
+                    shown.forEach { argument ->
+                        Box(Modifier.weight(if (argument.kind == ArgumentInfo.Kind.Enum) 1.4f else 1f)) {
+                            if (argument.kind == ArgumentInfo.Kind.Enum) {
+                                val selected = text[argument.name] ?: argument.defaultValue.string ?: argument.choices.firstOrNull() ?: ""
+                                SingleLineChoices(argument.choices, selected) { text[argument.name] = it }
+                            } else if (argument.kind == ArgumentInfo.Kind.Bool) {
+                                Toggle(argumentTitle(argument.name), flags[argument.name] ?: argument.defaultValue.bool ?: false, { flags[argument.name] = it }, tight = true)
+                            } else {
+                                Field(operation, argument, text, flags)
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (compact) {
             // Short boxes side by side, so the form takes a line or two rather than a screenful.
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                 shown.filter { it.isBoxed }.forEach { Box(Modifier.weight(1f)) { Field(operation, it, text, flags) } }
@@ -745,7 +767,7 @@ fun Field(
     val compact = LocalCompact.current
     val label = argumentTitle(argument.name)
     when (argument.kind) {
-        ArgumentInfo.Kind.Bool -> Toggle(label, flags[argument.name] ?: false, { flags[argument.name] = it })
+        ArgumentInfo.Kind.Bool -> Toggle(label, flags[argument.name] ?: argument.defaultValue.bool ?: false, { flags[argument.name] = it })
         ArgumentInfo.Kind.Enum -> {
             val selected = text[argument.name] ?: argument.defaultValue.string ?: argument.choices.firstOrNull() ?: ""
             Txt(label, size = if (compact) 11.sp else 13.sp, color = theme.textSecondary)

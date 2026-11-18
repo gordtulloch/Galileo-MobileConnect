@@ -419,7 +419,7 @@ class SkyModel(
     }
 
     companion object {
-        val catalogs = listOf("Messier", "Caldwell", "NGC")
+        val catalogs = listOf("Messier", "Caldwell", "NGC", "IC")
 
         /** `LOD_MAGNITUDE` in `galileo.skystream`, with the last level's "everything" cut off for drawing. */
         fun limitingMagnitude(level: Int): Float = floatArrayOf(4f, 7f, 10f, 13f, 15f)[max(0, min(4, level))]

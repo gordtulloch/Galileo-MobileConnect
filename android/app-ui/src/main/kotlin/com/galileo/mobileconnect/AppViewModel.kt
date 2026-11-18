@@ -74,6 +74,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     var workingPier by mutableStateOf<String?>(null)
     var question by mutableStateOf<ConfirmationRequest?>(null)
+    /** The saved session the user asked to run while jobs are still to come: asks "Pre-empt any upcoming jobs?". */
+    var preemptFor by mutableStateOf<String?>(null)
     var leaseOffer by mutableStateOf<LeaseRefusal?>(null)
     var emergencyOpen by mutableStateOf(false)
     var pierPickerOpen by mutableStateOf(false)
@@ -355,10 +357,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /** One read-class operation's value on the working Pier (the guide-star cut-out, for one). */
-    suspend fun read(operation: String): JsonElement? {
+    suspend fun read(operation: String, args: Map<String, JsonElement> = emptyMap()): JsonElement? {
         val pier = workingPier ?: return null
         val current = session ?: return null
-        return current.read(pier, operation)
+        return current.read(pier, operation, args)
     }
 
     suspend fun tile(level: Int, x: Int, y: Int, stretch: Int, source: PreviewSource = PreviewSource.Current): ByteArray? {

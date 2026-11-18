@@ -98,26 +98,25 @@ private fun TargetTile(target: SavedTarget, onRemove: (String) -> Unit) {
     var goToMessage by remember(target.name) { mutableStateOf<String?>(null) }
     val args: Map<String, JsonElement> = mapOf("ra_deg" to JsonPrimitive(target.raDeg), "dec_deg" to JsonPrimitive(target.decDeg))
     Card(target.name, Modifier.testTag("target.${target.name}")) {
-        // The object's picture runs the full height of this block, on the right; the text sets the height.
+        // One row: the object's picture on the left (as tall as the buttons), its text in the middle, the three buttons
+        // stacked on the right, so a target takes the height of its buttons and no more.
         Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            TargetThumbnail(target.name)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Txt(target.summary, size = 13.sp, weight = FontWeight.SemiBold)
                 Note(coordinates(target))
                 if (target.designations.isNotEmpty()) Note(target.designations.joinToString(", "))
-            }
-            TargetThumbnail(target.name)
-        }
-        if (app.canOperate) {
-            Column(Modifier.fillMaxWidth().padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                ActionButton("Slew To", kind = ActionKind.Prominent, tag = "target.slew") {
-                    scope.launch { goToMessage = app.goTo(target.name, target.raDeg, target.decDeg) }
-                }
                 goToMessage?.let { Note(it) }
-                OperationButton("Goto and Centre", "solve.centre", args + ("name" to JsonPrimitive(target.name)))
             }
-        }
-        Row(Modifier.fillMaxWidth()) {
-            ActionButton("Remove", kind = ActionKind.Destructive, enabled = app.canOperate, tag = "target.remove") { onRemove(target.name) }
+            Column(Modifier.width(150.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (app.canOperate) {
+                    ActionButton("Slew To", kind = ActionKind.Prominent, tag = "target.slew") {
+                        scope.launch { goToMessage = app.goTo(target.name, target.raDeg, target.decDeg) }
+                    }
+                    OperationButton("Goto and Centre", "solve.centre", args + ("name" to JsonPrimitive(target.name)))
+                }
+                ActionButton("Remove", kind = ActionKind.Destructive, enabled = app.canOperate, tag = "target.remove") { onRemove(target.name) }
+            }
         }
     }
 }
@@ -132,7 +131,7 @@ private fun TargetThumbnail(name: String) {
             android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size)?.asImageBitmap()
         }
     }
-    Box(Modifier.width(110.dp).fillMaxHeight().clip(RoundedCornerShape(8.dp))) {
+    Box(Modifier.width(96.dp).fillMaxHeight().clip(RoundedCornerShape(8.dp))) {
         picture?.let { Image(it, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
     }
 }

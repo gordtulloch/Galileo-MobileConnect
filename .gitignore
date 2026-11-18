@@ -13,3 +13,8 @@ xcuserdata/
 android/local.properties
 
 android/quest/src/main/assets/speech/
+
+# release signing: never commit the key or its passwords
+android/keystore.properties
+*.jks
+*.keystore

@@ -172,7 +172,7 @@ public enum ControlPolicy {
     /// Operations that always get a dialog here, whatever the Master's class says (`MAPP-CTL-040`). A minimum:
     /// whatever the Master marks `confirm` also prompts.
     public static let alwaysConfirm: Set<String> = [
-        "camera.abort", "imaging.stop", "session.stop", "mount.park", "mount.unpark", "flip.now",
+        "camera.abort", "imaging.stop", "session.stop", "scheduler.stop", "mount.park", "mount.unpark", "flip.now",
     ]
 
     static func title(for operation: OperationInfo?, name: String) -> String {

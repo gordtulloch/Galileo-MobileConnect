@@ -128,18 +128,26 @@ struct ImagingScreen: View {
         let exposing = model.value("imaging.exposure_progress")?.value.doubleValue
         let series = model.value("imaging.progress")?.value.doubleValue
         let stacked = model.value("imaging.stack.progress")?.value.doubleValue
+        let phase = model.value("imaging.phase")?.value.stringValue
+        let frame = model.value("imaging.frame")?.value.displayText
+        let count = model.value("imaging.count")?.value.displayText
         // An older Master publishes no progress keys; the capture's own progress events still say it is under way.
         let running: (progress: Double?, message: String?)? = {
             if case .running(let progress, let message)? = model.record(of: "imaging.capture")?.state { return (progress, message) }
             return nil
         }()
-        if exposing != nil || series != nil || stacked != nil || model.liveLoopRunning || running != nil {
+        if exposing != nil || phase != nil || series != nil || stacked != nil || model.liveLoopRunning || running != nil {
             VStack(alignment: .leading, spacing: 4) {
-                if let exposing {
-                    let seconds = model.value("imaging.exposure_s")?.value.doubleValue
-                    bar("Exposure", detail: seconds.map { "\($0.formatted(.number.precision(.fractionLength(0...1)))) s" }, value: exposing)
+                if exposing != nil || phase != nil {
+                    // "Exposure 1 of 999 integrating...", then "downloading...": the one line that says exposures are being made.
+                    let of = frame.flatMap { frame in count.map { " \(frame) of \($0)" } } ?? ""
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Exposure\(of) \(phase ?? "integrating")...")
+                            .font(.caption.weight(.semibold)).foregroundStyle(theme.text)
+                        ThemedProgress(value: exposing ?? (phase == "downloading" ? 1 : 0), label: "Exposure")
+                    }
                 }
-                if exposing == nil, series == nil, stacked == nil, let running {
+                if exposing == nil, phase == nil, series == nil, stacked == nil, let running {
                     RunningProgress(progress: running.progress, message: running.message ?? "Capturing", label: "Capture")
                 }
                 if let series {

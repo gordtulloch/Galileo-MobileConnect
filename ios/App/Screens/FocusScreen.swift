@@ -47,8 +47,6 @@ struct FocusScreen: View {
 
     private var autofocus: some View {
         Card("Autofocus") {
-            LiveRow(label: "State", key: "focus.state")
-            LiveRow(label: "Last result", key: "focus.last_result")
             LiveRow(label: "Temperature compensation", key: "focus.compensation")
             AutofocusControls()
             VCurve()
@@ -81,10 +79,35 @@ private struct VCurve: View {
     }
 
     var body: some View {
-        let points = (model.workingPier.flatMap { model.snapshot.live.piers[$0]?.series["focus.vcurve"] } ?? []).suffix(30)
-        let samples = points.enumerated().compactMap { index, point -> Sample? in
-            guard let position = point.value["position"]?.doubleValue, let hfr = point.value["hfr"]?.doubleValue else { return nil }
+        // The Master publishes the whole run as one object, `focus.autofocus`: step/steps, the [position, hfr] points so
+        // far, the best position and the outcome. An older Master's `focus.vcurve` series still draws.
+        // The app flattens an object into one key per field (`focus.autofocus.points`, `.running`...).
+        func field(_ name: String) -> JSONValue? { model.value("focus.autofocus.\(name)")?.value }
+        let phase = field("phase")?.stringValue
+        let measured = (field("points")?.arrayValue ?? []).enumerated().compactMap { index, pair -> Sample? in
+            guard let pair = pair.arrayValue, pair.count > 1, let position = pair[0].doubleValue, let hfr = pair[1].doubleValue else { return nil }
             return Sample(id: index, position: position, hfr: hfr)
+        }
+        let legacy = (model.workingPier.flatMap { model.snapshot.live.piers[$0]?.series["focus.vcurve"] } ?? []).suffix(30)
+            .enumerated().compactMap { index, point -> Sample? in
+                guard let position = point.value["position"]?.doubleValue, let hfr = point.value["hfr"]?.doubleValue else { return nil }
+                return Sample(id: index, position: position, hfr: hfr)
+            }
+        let samples = measured.isEmpty ? legacy : measured
+        let running = field("running")?.boolValue == true
+        if let latest = samples.last, let best = samples.min(by: { $0.hfr < $1.hfr }) {
+            Note(String(format: "Latest HFR %.2f px at %d. Lowest so far %.2f px at %d.",
+                        latest.hfr, Int(latest.position.rounded()), best.hfr, Int(best.position.rounded())))
+        }
+        if !running, phase == "finished" {
+            if field("cancelled")?.boolValue == true {
+                Note("Autofocus cancelled.")
+            } else if field("success")?.boolValue == true, let best = field("best_position")?.doubleValue {
+                Note("Best focus at \(Int(best.rounded())).")
+            } else {
+                let why = field("failure_reason")?.stringValue ?? ""
+                Note("Autofocus failed: \(why.isEmpty ? "no reason given" : why).")
+            }
         }
         if samples.isEmpty {
             Note("The V-curve appears here during a run.")
@@ -96,7 +119,7 @@ private struct VCurve: View {
             .chartXScale(domain: .automatic(includesZero: false))
             .themedAxes(theme)
             .frame(height: 180)
-            .accessibilityLabel("V-curve, \(samples.count) points")
+            .accessibilityLabel("V-curve, \(samples.count) points (HFR against position)")
             .accessibilityIdentifier("vcurve")
         }
     }

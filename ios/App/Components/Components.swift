@@ -379,6 +379,8 @@ struct OperationForm: View {
     var kind: ActionKind = .normal
     /// Choices (a frame type) as equal buttons on one line, first, with no label of their own.
     var choicesOnOneLine = false
+    /// Every field, whatever its kind, side by side on a single line.
+    var oneLine = false
     /// An operation that ends this one (Stop) and whether to offer a loop of it, each a button beside the main one.
     var stopOperation: String?
     var loopable = false
@@ -396,7 +398,35 @@ struct OperationForm: View {
         if model.canOperate {
             let info = model.operation(operation)
             VStack(alignment: .leading, spacing: 8) {
-                if compact {
+                if oneLine {
+                    HStack(alignment: .bottom, spacing: 8) {
+                        ForEach(shown(info)) { argument in
+                            if argument.kind == .enum {
+                                // The choices on one line, with no label of their own.
+                                let selected = text[argument.name] ?? argument.defaultValue?.stringValue ?? argument.choices.first ?? ""
+                                HStack(spacing: 4) {
+                                    ForEach(argument.choices, id: \.self) { choice in
+                                        Button(choice) { text[argument.name] = choice }
+                                            .buttonStyle(ActionStyle(kind: selected == choice ? .prominent : .normal))
+                                            .accessibilityValue(selected == choice ? "selected" : "")
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            } else if argument.kind == .bool {
+                                // The switch right beside its own label, so which one it belongs to is never in doubt.
+                                Toggle(title(argument.name), isOn: Binding(
+                                    get: { flags[argument.name] ?? argument.defaultValue?.boolValue ?? false },
+                                    set: { flags[argument.name] = $0 }))
+                                    .font(.footnote)
+                                    .fixedSize()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                field(argument).frame(maxWidth: .infinity)
+                            }
+                        }
+                    }
+                    .environment(\.compactControls, true)
+                } else if compact {
                     // Short boxes side by side, so the form takes a line or two rather than a screenful.
                     let arguments = shown(info)
                     if choicesOnOneLine { ForEach(arguments.filter { $0.kind == .enum }) { field($0) } }
@@ -495,7 +525,7 @@ struct OperationForm: View {
         let label = title(argument.name)
         switch argument.kind {
         case .bool:
-            Toggle(label, isOn: Binding(get: { flags[argument.name] ?? false }, set: { flags[argument.name] = $0 }))
+            Toggle(label, isOn: Binding(get: { flags[argument.name] ?? argument.defaultValue?.boolValue ?? false }, set: { flags[argument.name] = $0 }))
                 .frame(minHeight: compact ? Layout.compactTarget : Layout.minimumTarget)
                 .font(compact ? .footnote : .body)
         case .enum:

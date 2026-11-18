@@ -10,7 +10,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import com.galileo.mobileconnect.ui.Txt
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,14 +73,7 @@ fun GuidingScreen() {
         ReadOnlyHint()
         Columns(
             left = {
-                Card("Guide star") { GuidePicture() }
-                Card("Guide error") {
-                    LiveRow("State", "guiding.state")
-                    LiveRow("RMS RA", "guiding.rms_ra", "″", 2)
-                    LiveRow("RMS Dec", "guiding.rms_dec", "″", 2)
-                    LiveRow("Star SNR", "guiding.star_snr")
-                    GuideTrace()
-                }
+                Card("Guide error") { GuideTrace() }
             },
             right = {
                 Card("Control") {
@@ -84,8 +82,9 @@ fun GuidingScreen() {
                         { OperationButton("Disconnect", "guiding.disconnect") },
                     )
                     ButtonRow(
+                        { OperationButton("Loop", "guiding.loop") },
                         { OperationButton("Start guiding", "guiding.start", kind = ActionKind.Prominent) },
-                        { OperationButton("Stop guiding", "guiding.stop") },
+                        { OperationButton("Stop", "guiding.stop") },
                     )
                     ButtonRow(
                         { OperationButton("Dither", "guiding.dither") },
@@ -95,7 +94,29 @@ fun GuidingScreen() {
                 }
             },
         )
+        Card("Guide star") { GuidePicture() }
     }
+}
+
+/** The state, RMS error and star SNR on one small line, laid over the foot of the trace. */
+@Composable
+private fun GuideReadout(modifier: Modifier = Modifier) {
+    val app = LocalApp.current
+    val theme = LocalTheme.current
+    fun number(key: String, digits: Int): String? =
+        app.value(key)?.value.double?.let { "%.${digits}f".format(it) }
+    val parts = listOfNotNull(
+        app.value("guiding.state")?.value?.displayText(),
+        number("guiding.rms_ra", 2)?.let { "RA $it″" },
+        number("guiding.rms_dec", 2)?.let { "Dec $it″" },
+        number("guiding.star_snr", 0)?.let { "SNR $it" },
+    )
+    Txt(
+        parts.joinToString("   ").ifEmpty { "No guide data yet." },
+        modifier.background(theme.surface.copy(alpha = 0.75f)).padding(horizontal = 6.dp, vertical = 2.dp)
+            .testTag("guide.readout"),
+        size = 11.sp, color = theme.textSecondary,
+    )
 }
 
 @Composable
@@ -107,69 +128,55 @@ private fun GuideTrace() {
     val ra = points.mapNotNull { p -> p.value["ra"].double?.let { (p.asOf.toEpochMilli() - start) / 1000.0 to it } }
     val dec = points.mapNotNull { p -> p.value["dec"].double?.let { (p.asOf.toEpochMilli() - start) / 1000.0 to it } }
     if (ra.isEmpty() && dec.isEmpty()) {
+        GuideReadout()
         Note("The trace appears here while guiding.")
     } else {
         // Told apart by dash as well as colour: Night has only the one hue.
-        Chart(
-            listOf(ChartSeries(ra, theme.accent), ChartSeries(dec, theme.good, dashed = true)),
-            "Guide error trace", yRange = -2.0..2.0, height = 220, tag = "guide.trace",
-            modifier = Modifier.then(if (app.snapshot.isConnected) Modifier else Modifier.background(theme.surface)),
-        )
+        Box(contentAlignment = Alignment.BottomCenter) {
+            Chart(
+                listOf(ChartSeries(ra, theme.accent), ChartSeries(dec, theme.good, dashed = true)),
+                "Guide error trace", yRange = -2.0..2.0, height = 220, tag = "guide.trace",
+                modifier = Modifier.then(if (app.snapshot.isConnected) Modifier else Modifier.background(theme.surface)),
+            )
+            GuideReadout(Modifier.padding(bottom = 28.dp))
+        }
         Note("Solid: RA. Dashed: Dec. Arc-seconds.")
     }
 }
 
 /**
- * The guide star as the Master has it: PHD2's close-up of the star, or the whole guide frame. A tap on either asks PHD2
- * to choose the star there (MAPP-GUI-030); the Master looks for the best star in a small box around the tap, so it need
- * not be exact. Taps are sent as where on the picture they landed, in that picture's own pixels, and the Master works
- * out where that is on the guide frame.
+ * The guide star as the Master has it: PHD2's close-up of the star, which is all PHD2 sends a network client. Small, and
+ * not tappable: the star is chosen in PHD2 (or by the Master's Find star).
  */
 @Composable
 private fun GuidePicture() {
     val app = LocalApp.current
     val theme = LocalTheme.current
-    val scope = rememberCoroutineScope()
-    var fullFrame by remember { mutableStateOf(false) }
     var image by remember { mutableStateOf<ImageBitmap?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
 
     val state = app.value("guiding.state")?.value?.displayText() ?: ""
-    // PHD2 only takes a new star while looping; the Master says no at any other time, and so is only asked then.
-    val canChoose = state in setOf("Looping", "Selected", "LostLock")
-    val request = "${app.workingPier}/$fullFrame/$state/${app.value("guiding.rms_ra")?.value?.displayText()}"
+    val request = "${app.workingPier}/$state/${app.value("guiding.rms_ra")?.value?.displayText()}"
 
     suspend fun load() {
-        if (fullFrame) {
-            val shot = app.preview(1200, 50, PreviewSource.Guide)
-            val decoded = shot?.let { BitmapFactory.decodeByteArray(it.data, 0, it.data.size) }
-            if (decoded != null && shot.frameWidth != null && shot.frameHeight != null) {
-                image = decoded.asImageBitmap()
-                problem = null
-            } else if (image == null) {
-                problem = "No guide frame yet. The Master can only show it when PHD2 runs on the Master's computer."
-            }
-        } else {
-            val star = app.read("guiding.star")
-            val width = star["width"].double?.toInt()
-            val height = star["height"].double?.toInt()
-            val encoded = star["pixels"].string
-            val rendered = if (star["available"].bool != false && width != null && height != null && encoded != null) {
-                renderCutout(Base64.decode(encoded, Base64.DEFAULT), width, height)
-            } else null
-            if (rendered != null) {
-                image = rendered.asImageBitmap()
-                problem = null
-            } else if (image == null) {
-                problem = "No guide star yet."
-            }
+        val star = app.read("guiding.star")
+        val width = star["width"].double?.toInt()
+        val height = star["height"].double?.toInt()
+        val encoded = star["pixels"].string
+        val rendered = if (star["available"].bool != false && width != null && height != null && encoded != null) {
+            renderCutout(Base64.decode(encoded, Base64.DEFAULT), width, height)
+        } else null
+        if (rendered != null) {
+            image = rendered.asImageBitmap()
+            problem = null
+        } else if (image == null) {
+            problem = "No guide star yet."
         }
     }
 
     LaunchedEffect(request) { load() }
-    LaunchedEffect(fullFrame) {
-        // The Master only keeps fetching the picture (for the frame, a file write each) while someone is looking.
+    LaunchedEffect(Unit) {
+        // The Master only keeps fetching the picture while someone is looking.
         while (true) {
             delay(2000)
             load()
@@ -177,38 +184,17 @@ private fun GuidePicture() {
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        ButtonRow(
-            { ActionButton("Star", kind = if (!fullFrame) ActionKind.Prominent else ActionKind.Normal, tag = "guide.show.Star") { fullFrame = false; image = null } },
-            { ActionButton("Full frame", kind = if (fullFrame) ActionKind.Prominent else ActionKind.Normal, tag = "guide.show.Full frame") { fullFrame = true; image = null } },
-        )
-        Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).background(theme.background), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(150.dp).background(theme.background), contentAlignment = Alignment.Center) {
             val shown = image
             if (shown != null) {
-                val density = LocalDensity.current
                 Canvas(
-                    Modifier.fillMaxWidth().aspectRatio(shown.width.toFloat() / shown.height)
+                    Modifier.fillMaxHeight().aspectRatio(shown.width.toFloat() / shown.height)
                         .testTag("guide.picture")
-                        .semantics { contentDescription = if (fullFrame) "Guide frame" else "Guide star" }
-                        .pointerInput(canChoose, fullFrame, shown) {
-                            detectTapGestures { tap ->
-                                if (!canChoose) return@detectTapGestures
-                                val x = tap.x / size.width * shown.width
-                                val y = tap.y / size.height * shown.height
-                                scope.launch {
-                                    message = app.perform(
-                                        "guiding.select_star",
-                                        mapOf(
-                                            "x" to JsonPrimitive(x.toDouble()), "y" to JsonPrimitive(y.toDouble()),
-                                            "space" to JsonPrimitive(if (fullFrame) "frame" else "cutout"),
-                                        ),
-                                    )
-                                }
-                            }
-                        },
+                        .semantics { contentDescription = "Guide star" },
                 ) {
                     drawImage(
                         shown, dstSize = IntSize(size.width.toInt(), size.height.toInt()), dstOffset = IntOffset.Zero,
-                        filterQuality = if (fullFrame) FilterQuality.Medium else FilterQuality.None,
+                        filterQuality = FilterQuality.None,
                         colorFilter = ColorFilter.tint(theme.imageTint, BlendMode.Modulate),
                     )
                 }
@@ -218,11 +204,6 @@ private fun GuidePicture() {
                 Spinner()
             }
         }
-        message?.let { Note(it) }
-        Note(
-            if (canChoose) "Tap a star to guide on it."
-            else "Loop exposures to choose a star; the star can't be changed while guiding.",
-        )
     }
 }
 

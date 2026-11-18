@@ -70,7 +70,7 @@
      "name": "celsius",
      "type": "float",
      "required": true,
-     "unit": "\u00b0C",
+     "unit": "°C",
      "min": -60,
      "max": 40
     }
@@ -407,6 +407,14 @@
    "lease": true,
    "args": [],
    "description": "Dither by the Options > Guiding amount and settle"
+  },
+  {
+   "name": "guiding.loop",
+   "area": "guiding",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Start PHD2 looping exposures (shows the guide star and frame; no guiding)"
   },
   {
    "name": "guiding.find_star",
@@ -1092,6 +1100,106 @@
    "lease": false,
    "args": [],
    "description": "The saved session templates that can be run"
+  },
+  {
+   "name": "session.saved",
+   "area": "session",
+   "class": "read",
+   "lease": false,
+   "args": [],
+   "description": "The Pier's saved sessions that can be run (never templates)"
+  },
+  {
+   "name": "session.start_check",
+   "area": "session",
+   "class": "read",
+   "lease": false,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "Whether a saved session can be started now: the job running, or the jobs still to come, on the Pier's schedule"
+  },
+  {
+   "name": "session.run_saved",
+   "area": "session",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "preempt",
+     "type": "bool",
+     "required": false,
+     "default": false
+    }
+   ],
+   "description": "Start a saved session now, as Run on the desktop's Sessions screen does. Refused while a job is running, and while a job is still to come unless preempt is true"
+  },
+  {
+   "name": "scheduler.remove",
+   "area": "scheduler",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    }
+   ],
+   "description": "Take a queued job off the schedule (not the running one)"
+  },
+  {
+   "name": "scheduler.reorder",
+   "area": "scheduler",
+   "class": "operate",
+   "lease": true,
+   "args": [
+    {
+     "name": "name",
+     "type": "str",
+     "required": true
+    },
+    {
+     "name": "position",
+     "type": "int",
+     "required": true,
+     "min": 0
+    }
+   ],
+   "description": "Move a queued job to a place in the queue, 0 first (not the running one)"
+  },
+  {
+   "name": "scheduler.pause",
+   "area": "scheduler",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Pause the running job"
+  },
+  {
+   "name": "scheduler.resume",
+   "area": "scheduler",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Resume the paused job"
+  },
+  {
+   "name": "scheduler.stop",
+   "area": "scheduler",
+   "class": "operate",
+   "lease": true,
+   "args": [],
+   "description": "Stop the running job"
   },
   {
    "name": "sky.catalogues",

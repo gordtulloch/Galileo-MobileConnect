@@ -423,6 +423,20 @@ struct DialogLayer: View {
                     .buttonStyle(ActionStyle(kind: .destructive))
                     .accessibilityIdentifier("confirm.accept")
             }
+        } else if let name = model.preemptFor {
+            Dialog(title: "Pre-empt any upcoming jobs?") {
+                Text("\(name) will start now. Jobs scheduled for later stay on the queue and start in their own time unless this session is still running.")
+                if let pier = model.pier { Note("On \(pier.name).") }
+                Button("Cancel") { model.preemptFor = nil }
+                    .buttonStyle(ActionStyle())
+                    .accessibilityIdentifier("preempt.cancel")
+                Button("Pre-empt") {
+                    model.preemptFor = nil
+                    Task { _ = await model.perform("session.run_saved", args: ["name": .string(name), "preempt": .bool(true)]) }
+                }
+                .buttonStyle(ActionStyle(kind: .prominent))
+                .accessibilityIdentifier("preempt.accept")
+            }
         } else if model.pierPickerOpen {
             Dialog(title: "Working Pier") {
                 ForEach(model.snapshot.piers) { pier in

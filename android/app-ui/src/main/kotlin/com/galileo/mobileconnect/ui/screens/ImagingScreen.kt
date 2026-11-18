@@ -151,7 +151,7 @@ private fun StretchBar(stretch: Double, onChange: (Double) -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Txt("Stretch: ${stretch.toInt()}", size = 13.sp, color = theme.textSecondary)
-            ThemedSlider("Stretch", stretch, 0.0..100.0, onChange)
+            ThemedSlider("Stretch", stretch, 0.0..100.0, thin = true, onChange = onChange)
         }
         CompositionLocalProvider(LocalCompact provides true) {
             Box(Modifier.width(72.dp)) {
@@ -171,21 +171,28 @@ private fun Progress(stackFrames: Int?) {
     val stacked = app.value("imaging.stack.progress")?.value.double
     // An older Master publishes no progress keys; the capture's own progress events still say it is under way.
     val running = app.record("imaging.capture")?.state as? com.galileo.mobileconnect.core.control.OperationState.Running
-    if (exposing == null && series == null && stacked == null && !app.liveLoopRunning && running == null) return
+    val phasing = app.value("imaging.phase")?.value.string
+    if (exposing == null && phasing == null && series == null && stacked == null && !app.liveLoopRunning && running == null) return
     Column(
         Modifier.fillMaxWidth().background(theme.veil(0.6f)).padding(horizontal = 12.dp, vertical = 8.dp).testTag("imaging.progress"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        if (exposing != null) {
-            val seconds = app.value("imaging.exposure_s")?.value.double
-            Bar("Exposure", seconds?.let { "${if (it == Math.rint(it)) it.toLong().toString() else "%.1f".format(it)} s" }, exposing)
+        val phase = app.value("imaging.phase")?.value.string
+        val frame = app.value("imaging.frame")?.value?.displayText()
+        val count = app.value("imaging.count")?.value?.displayText()
+        if (exposing != null || phase != null) {
+            // "Exposure 1 of 999 integrating...", then "downloading...": the one line that says exposures are being made.
+            val of = if (frame != null && count != null) " $frame of $count" else ""
+            val bar = exposing ?: if (phase == "downloading") 1.0 else 0.0
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Txt("Exposure$of ${phase ?: "integrating"}...", size = 13.sp, weight = FontWeight.SemiBold)
+                ThemedProgress(bar, "Exposure")
+            }
         }
-        if (exposing == null && series == null && stacked == null && running != null) {
+        if (exposing == null && phasing == null && series == null && stacked == null && running != null) {
             com.galileo.mobileconnect.ui.RunningProgress(running.progress, running.message ?: "Capturing", "Capture")
         }
         if (series != null) {
-            val frame = app.value("imaging.frame")?.value?.displayText()
-            val count = app.value("imaging.count")?.value?.displayText()
             Bar("Series", if (frame != null && count != null) "frame $frame of $count" else null, series)
         } else if (exposing == null && app.liveLoopRunning) {
             Txt("Live loop", size = 11.sp, weight = FontWeight.SemiBold)

@@ -56,8 +56,30 @@
   ],
   "lease_holders": {},
   "targets": [
-    {"name": "M42", "designations": ["NGC 1976"], "ra_deg": 83.822, "dec_deg": -5.391, "type": "Nebula", "magnitude": 4.0, "size_arcmin": 65.0, "description": ""},
-    {"name": "M31", "designations": ["NGC 224"], "ra_deg": 10.685, "dec_deg": 41.269, "type": "Galaxy", "magnitude": 3.4, "size_arcmin": 178.0, "description": ""}
+    {
+      "name": "M42",
+      "designations": [
+        "NGC 1976"
+      ],
+      "ra_deg": 83.822,
+      "dec_deg": -5.391,
+      "type": "Nebula",
+      "magnitude": 4.0,
+      "size_arcmin": 65.0,
+      "description": ""
+    },
+    {
+      "name": "M31",
+      "designations": [
+        "NGC 224"
+      ],
+      "ra_deg": 10.685,
+      "dec_deg": 41.269,
+      "type": "Galaxy",
+      "magnitude": 3.4,
+      "size_arcmin": 178.0,
+      "description": ""
+    }
   ],
   "alerts": [
     {
@@ -551,6 +573,69 @@
           "local": true
         }
       ]
+    },
+    "session.saved": {
+      "sessions": [
+        {
+          "name": "M42 — LRGB",
+          "blocks": 9,
+          "target": "M42"
+        },
+        {
+          "name": "Horsehead — Ha",
+          "blocks": 7,
+          "target": "IC 434"
+        },
+        {
+          "name": "Calibration flats",
+          "blocks": 4,
+          "target": ""
+        }
+      ]
+    },
+    "session.start_check": {
+      "running": "M42 — LRGB",
+      "upcoming": [],
+      "reason": ""
+    },
+    "scheduler.jobs": {
+      "jobs": [
+        {
+          "name": "M42 — LRGB",
+          "run_state": "running",
+          "priority": 1,
+          "frames_captured": 7,
+          "total_required": 30,
+          "complete": false,
+          "running": true,
+          "paused": false,
+          "queued": true
+        },
+        {
+          "name": "Horsehead — Ha",
+          "run_state": "pending",
+          "priority": 2,
+          "frames_captured": 0,
+          "total_required": 24,
+          "complete": false,
+          "running": false,
+          "paused": false,
+          "queued": true,
+          "start": "2026-11-19T03:10:00+00:00"
+        },
+        {
+          "name": "Calibration flats",
+          "run_state": "pending",
+          "priority": 3,
+          "frames_captured": 0,
+          "total_required": 20,
+          "complete": false,
+          "running": false,
+          "paused": false,
+          "queued": true
+        }
+      ],
+      "next": "Horsehead — Ha"
     }
   },
   "consequences": {

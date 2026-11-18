@@ -329,7 +329,7 @@ final class DemoUITests: XCTestCase {
         element("lease.take").tap()
         XCTAssertTrue(element("lease.release").waitForExistence(timeout: 5))
         open("Sessions")
-        XCTAssertTrue(element("schedule.next").waitForExistence(timeout: 5))
+        XCTAssertTrue(element("job.pause").waitForExistence(timeout: 5), "the running job has Pause and Stop in the queue")
         XCTAssertTrue(app.staticTexts["3 of 12"].exists)
         screenshot("night-sessions")
         element("session.pause").tap()

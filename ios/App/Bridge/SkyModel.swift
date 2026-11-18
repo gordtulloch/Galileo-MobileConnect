@@ -83,7 +83,7 @@ final class SkyModel {
             chooseDeepSky()
         }
     }
-    nonisolated static let catalogs = ["Messier", "Caldwell", "NGC"]
+    nonisolated static let catalogs = ["Messier", "Caldwell", "NGC", "IC"]
 
     /// Survey tiles behind the stars.
     let survey: SkySurveyLayer

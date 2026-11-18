@@ -156,7 +156,7 @@ private struct JogPad: View {
                     }
                 }
                 // One full screen on a phone: the visible height less the screen's own padding.
-                .containerRelativeFrame(.vertical) { length, _ in max(280, length - 2 * (Layout.spacing + 4) - 96) }
+                .containerRelativeFrame(.vertical) { length, _ in max(220, length - 2 * (Layout.spacing + 4) - 180) }
                 if info.arguments.contains(where: { $0.name == "level" }) {
                     speed
                 }

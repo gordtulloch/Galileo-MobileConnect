@@ -630,7 +630,7 @@ public actor MockMaster: ClientTransport, StreamTransport {
         func catalog(_ name: String, _ prefix: String) -> JSONValue {
             .object(["name": .string(name), "indexes": members { $0.hasPrefix(prefix) && $0.dropFirst(prefix.count).first?.isNumber == true }])
         }
-        return .object(["catalogs": .array([catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC ")])])
+        return .object(["catalogs": .array([catalog("Messier", "M "), catalog("Caldwell", "C "), catalog("NGC", "NGC "), catalog("IC", "IC ")])])
     }
 
     /// Name, type and size of each deep-sky object, at the index `skyCatalogs` gives it.
