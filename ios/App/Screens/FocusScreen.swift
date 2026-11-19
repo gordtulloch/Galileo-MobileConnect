@@ -82,7 +82,8 @@ private struct VCurve: View {
         // The Master publishes the whole run as one object, `focus.autofocus`: step/steps, the [position, hfr] points so
         // far, the best position and the outcome. An older Master's `focus.vcurve` series still draws.
         // The app flattens an object into one key per field (`focus.autofocus.points`, `.running`...).
-        func field(_ name: String) -> JSONValue? { model.value("focus.autofocus.\(name)")?.value }
+        // A closure, not a nested func: a declaration of that kind is not allowed inside a ViewBuilder body.
+        let field: (String) -> JSONValue? = { name in model.value("focus.autofocus.\(name)")?.value }
         let phase = field("phase")?.stringValue
         let measured = (field("points")?.arrayValue ?? []).enumerated().compactMap { index, pair -> Sample? in
             guard let pair = pair.arrayValue, pair.count > 1, let position = pair[0].doubleValue, let hfr = pair[1].doubleValue else { return nil }
