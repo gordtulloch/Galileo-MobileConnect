@@ -31,7 +31,9 @@ struct PolarAlignmentControls: View {
         Card("Polar alignment") {
             Note("Turns the mount to three positions and solves a frame at each, then follows your adjustments live until you stop it.")
             OperationForm(title: "Start polar alignment", operation: "polar.start", icon: "scope",
-                          fields: ["exposure_s", "step_deg", "direction", "refraction", "slew_from_zenith"], kind: .prominent, oneLine: true)
+                          fields: ["exposure_s", "step_deg", "direction", "refraction", "slew_from_zenith"], kind: .prominent,
+                          choicesOnOneLine: true)
+                .environment(\.compactControls, true)
             OperationButton(title: "Stop polar alignment", operation: "polar.stop", icon: "stop")
         }
     }
