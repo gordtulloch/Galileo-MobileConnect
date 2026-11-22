@@ -48,6 +48,7 @@
         { "$ref": "#/$defs/delta" },
         { "$ref": "#/$defs/opEvent" },
         { "$ref": "#/$defs/alert" },
+        { "$ref": "#/$defs/notice" },
         { "$ref": "#/$defs/lease" },
         { "$ref": "#/$defs/access" },
         { "$ref": "#/$defs/closing" }
@@ -103,6 +104,21 @@
         "pier": { "type": "string" },
         "message": { "type": "string" },
         "important": { "type": "boolean" }
+      }
+    },
+    "notice": {
+      "type": "object",
+      "description": "A brief 'something just happened' (an exposure started, a slew ended, a solve resolved). Shown for a few seconds and not kept: unlike an alert it is not listed by GET /alerts. A frame without `id`, `time` or `title` is ignored.",
+      "required": ["type", "id", "time", "title"],
+      "properties": {
+        "type": { "const": "notice" },
+        "id": { "type": "string" },
+        "severity": { "enum": ["info", "success", "warning", "error"], "default": "info" },
+        "time": { "type": "string", "format": "date-time" },
+        "pier": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "kind": { "type": "string", "description": "A dotted id such as `exposure.started`, `slew.ended`, `solve.resolved`, `focus.result`, `device.connected`." }
       }
     },
     "lease": {

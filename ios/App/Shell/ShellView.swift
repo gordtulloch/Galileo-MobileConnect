@@ -88,6 +88,7 @@ struct ShellView: View {
             selection = wanted
             model.requestedArea = nil
         }
+        .overlay(alignment: .topTrailing) { NoticeOverlay() }
         .overlay {
             if model.emergencyOpen { EmergencyPanel() }
         }

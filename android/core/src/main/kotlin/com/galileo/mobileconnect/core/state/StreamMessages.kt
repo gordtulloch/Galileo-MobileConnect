@@ -13,6 +13,19 @@ data class AlertEvent(
     val important: Boolean = false,
 )
 
+/** A brief "something just happened" from the Master (an exposure started, a slew ended, a solve resolved). */
+data class NoticeEvent(
+    val id: String,
+    /** `info`, `success`, `warning` or `error`. */
+    val severity: String,
+    val time: Instant,
+    val pier: String? = null,
+    val title: String,
+    val message: String = "",
+    /** A dotted id such as `exposure.started`. */
+    val kind: String = "",
+)
+
 data class OperationEvent(
     /** `op.started`, `op.progress` or `op.finished`. */
     val phase: String,
@@ -32,6 +45,7 @@ sealed interface StreamEvent {
     data class Delta(val pier: String, val key: String, val value: JsonElement, val asOf: Instant) : StreamEvent
     data class Operation(val event: OperationEvent) : StreamEvent
     data class Alert(val alert: AlertEvent) : StreamEvent
+    data class Notice(val notice: NoticeEvent) : StreamEvent
     data class Lease(val pier: String, val holder: String?, val holderName: String?) : StreamEvent
     data class Access(val pier: String, val access: String, val reachable: Boolean?, val reason: String?) : StreamEvent
     data class Closing(val reason: String) : StreamEvent
@@ -95,6 +109,18 @@ sealed interface StreamMessage {
                     if (id == null || severity == null || at == null || message == null) StreamEvent.Unknown
                     else StreamEvent.Alert(
                         AlertEvent(id, severity, at, json["pier"].string, message, json["important"].bool ?: false),
+                    )
+                }
+                type == "notice" -> {
+                    val id = json["id"].string
+                    val at = time("time")
+                    val title = json["title"].string
+                    if (id == null || at == null || title == null) StreamEvent.Unknown
+                    else StreamEvent.Notice(
+                        NoticeEvent(
+                            id, json["severity"].string ?: "info", at, json["pier"].string, title,
+                            json["message"].string ?: "", json["kind"].string ?: "",
+                        ),
                     )
                 }
                 type == "lease" -> {

@@ -61,6 +61,8 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-OVR-060 | The app shall show recent alerts with their severity and time, and shall show when a new alert arrives while the app is connected | All | MVP | S-STATE | I-SHELL | A-SHELL | Q-PANE | TC-MAPP-OVR-060 | U, UI |
 | MAPP-OVR-070 | The app shall show a state of the observatory within 5 seconds of connecting (value to be confirmed, Section 5) | All | MVP | S-STATE, S-LINK | I-SHELL | A-SHELL | Q-PANE | TC-MAPP-OVR-070 | D |
 | MAPP-OVR-080 | The app shall show, on the Overview screen, the health of the computer running the Master (CPU use, memory use, free disk space, temperature where… | All | P2 | S-STATE | I-SHELL | A-SHELL | Q-PANE | TC-MAPP-OVR-080 | U, UI |
+| MAPP-OVR-090 | The app shall show each event notice the Master sends as a brief panel over the top-right corner of every screen, and shall not replay earlier ones… | All | MVP | S-STATE | I-SHELL | A-SHELL | Q-PANE | TC-MAPP-OVR-090 | U, UI |
+| MAPP-OVR-100 | An event notice panel shall close itself after 10 seconds or when its × is tapped, stack at most five, and use the theme's colours only… | All | MVP | S-STATE | I-SHELL | A-SHELL | Q-PANE | TC-MAPP-OVR-100 | U, UI |
 
 ## 4. MAPP-DEV — Devices
 

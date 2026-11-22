@@ -18,6 +18,32 @@ public struct AlertEvent: Sendable, Equatable, Identifiable, Codable {
     }
 }
 
+/// A brief "something just happened" from the Master (an exposure started, a slew ended, a solve resolved).
+public struct NoticeEvent: Sendable, Equatable, Identifiable, Codable {
+    public var id: String
+    /// `info`, `success`, `warning` or `error`.
+    public var severity: String
+    public var time: Date
+    public var pier: String?
+    public var title: String
+    public var message: String
+    /// A dotted id such as `exposure.started`.
+    public var kind: String
+
+    public init(
+        id: String, severity: String = "info", time: Date, pier: String? = nil, title: String, message: String = "",
+        kind: String = ""
+    ) {
+        self.id = id
+        self.severity = severity
+        self.time = time
+        self.pier = pier
+        self.title = title
+        self.message = message
+        self.kind = kind
+    }
+}
+
 public struct OperationEvent: Sendable, Equatable {
     public var phase: String  // op.started, op.progress, op.finished
     public var correlationID: String
@@ -36,6 +62,7 @@ public enum StreamEvent: Sendable, Equatable {
     case delta(pier: String, key: String, value: JSONValue, asOf: Date)
     case operation(OperationEvent)
     case alert(AlertEvent)
+    case notice(NoticeEvent)
     case lease(pier: String, holder: String?, holderName: String?)
     case access(pier: String, access: String, reachable: Bool?, reason: String?)
     case closing(reason: String)
@@ -96,6 +123,14 @@ public enum StreamMessage: Sendable, Equatable {
                 AlertEvent(
                     id: id, severity: severity, time: time, pier: json["pier"]?.stringValue, message: message,
                     important: json["important"]?.boolValue ?? false))
+        case "notice":
+            guard let id = json["id"]?.stringValue, let time = now("time"), let title = json["title"]?.stringValue
+            else { return .unknown }
+            return .notice(
+                NoticeEvent(
+                    id: id, severity: json["severity"]?.stringValue ?? "info", time: time,
+                    pier: json["pier"]?.stringValue, title: title, message: json["message"]?.stringValue ?? "",
+                    kind: json["kind"]?.stringValue ?? ""))
         case "lease":
             guard let pier = json["pier"]?.stringValue else { return .unknown }
             return .lease(pier: pier, holder: json["holder"]?.stringValue, holderName: json["holder_name"]?.stringValue)

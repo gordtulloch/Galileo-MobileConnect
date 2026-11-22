@@ -47,6 +47,8 @@ data class LiveState(
     val lastSeq: Int? = null,
     val piers: Map<String, PierState> = emptyMap(),
     val alerts: List<AlertEvent> = emptyList(),
+    /** The latest event notices, newest first. The UI shows each briefly; it is not a log. */
+    val notices: List<NoticeEvent> = emptyList(),
     val closingReason: String? = null,
     internal val buffered: List<StreamEvent.Delta> = emptyList(),
 ) {
@@ -55,6 +57,7 @@ data class LiveState(
         internal const val SERIES_LIMIT = 300
         private const val LANE_LIMIT = 200
         private const val ALERT_LIMIT = 200
+        private const val NOTICE_LIMIT = 20
         private const val LANE_PREFIX = "activity."
 
         fun reduce(state: LiveState, message: StreamMessage): LiveState = when (message) {
@@ -98,6 +101,9 @@ data class LiveState(
                 val alerts = (listOf(event.alert) + state.alerts.filterNot { it.id == event.alert.id }).take(ALERT_LIMIT)
                 state.copy(alerts = alerts)
             }
+
+            is StreamEvent.Notice ->
+                state.copy(notices = (listOf(event.notice) + state.notices.filterNot { it.id == event.notice.id }).take(NOTICE_LIMIT))
 
             is StreamEvent.Lease -> state.withPier(event.pier) {
                 it.copy(leaseHolder = event.holder, leaseHolderName = event.holderName)

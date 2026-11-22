@@ -52,6 +52,8 @@ public struct LiveState: Sendable, Equatable {
     public var lastSeq: Int?
     public var piers: [String: PierState] = [:]
     public var alerts: [AlertEvent] = []
+    /// The latest event notices, newest first. The UI shows each briefly; it is not a log.
+    public var notices: [NoticeEvent] = []
     public var closingReason: String?
     var buffered: [StreamEvent] = []
 
@@ -61,6 +63,7 @@ public struct LiveState: Sendable, Equatable {
     static let seriesLimit = 300
     static let laneLimit = 200
     static let alertLimit = 200
+    static let noticeLimit = 20
     static let lanePrefix = "activity."
 
     /// A pure function of its inputs, with no clock or I/O: what makes the shared vectors possible (`S-STATE`).
@@ -127,6 +130,10 @@ public struct LiveState: Sendable, Equatable {
             alerts.removeAll { $0.id == alert.id }
             alerts.insert(alert, at: 0)
             if alerts.count > Self.alertLimit { alerts.removeLast(alerts.count - Self.alertLimit) }
+        case .notice(let notice):
+            notices.removeAll { $0.id == notice.id }
+            notices.insert(notice, at: 0)
+            if notices.count > Self.noticeLimit { notices.removeLast(notices.count - Self.noticeLimit) }
         case .lease(let pier, let holder, let name):
             piers[pier, default: PierState()].leaseHolder = holder
             piers[pier, default: PierState()].leaseHolderName = name

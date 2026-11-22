@@ -121,6 +121,7 @@ fun ShellView() {
                 }
             }
             DialogLayer()
+            NoticeOverlay()
         }
     }
     if (app.emergencyOpen) EmergencyPanel()

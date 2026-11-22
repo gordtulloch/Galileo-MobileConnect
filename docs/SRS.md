@@ -128,6 +128,8 @@ What the user sees on opening the app (PSD G7, G8).
 | MAPP-OVR-060 | All | The app shall show recent alerts with their severity and time, and shall show when a new alert arrives while the app is connected. | MVP |
 | MAPP-OVR-070 | All | The app shall show a state of the observatory within 5 seconds of connecting (value to be confirmed, Section 5). | MVP |
 | MAPP-OVR-080 | All | The app shall show, on the Overview screen, the health of the computer running the Master (CPU use, memory use, free disk space, temperature where reported, and uptime), taken from the Master's published state rather than polled, and shall offer Restart and Shut down for that computer as confirm-class operations that the Master refuses, with a reason, while a session is running. The Master side is `CSURF-310`. | P2 |
+| MAPP-OVR-090 | All | The app shall show each event notice the Master sends (an exposure starting, a slew beginning or ending, a plate solve resolving, a focus result, equipment connecting or disconnecting) as a brief panel over the top-right corner of every screen, and shall not replay notices that were sent before the app connected. | MVP |
+| MAPP-OVR-100 | All | An event notice panel shall close itself after 10 seconds or when its close (×) control is tapped, shall stack with at most five shown at once, and shall take its colours from the theme alone (Night stays red). | MVP |
 
 ### 3.3 `MAPP-DEV` — Devices
 

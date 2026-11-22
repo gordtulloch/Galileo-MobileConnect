@@ -120,6 +120,30 @@ struct StateTests {
         #expect(state.alerts.map(\.id) == ["1", "2"])
     }
 
+    @Test("MAPP-OVR-090: a notice goes first, a repeated id replaces, and only the latest are kept")
+    func notices() {
+        let a = NoticeEvent(id: "1", time: t0, title: "Exposure started", message: "30 s Light")
+        let b = NoticeEvent(id: "2", severity: "success", time: t0, title: "Slew complete")
+        let state = reduce([.frame(seq: 1, event: .notice(a)), .frame(seq: 2, event: .notice(b)), .frame(seq: 3, event: .notice(a))])
+        #expect(state.notices.map(\.id) == ["1", "2"])
+        let many = reduce((1...30).map { .frame(seq: $0, event: .notice(NoticeEvent(id: "n\($0)", time: t0, title: "t"))) })
+        #expect(many.notices.count == LiveState.noticeLimit && many.notices.first?.id == "n30")
+    }
+
+    @Test("MAPP-OVR-090: a notice frame decodes, and one without a title is ignored")
+    func noticeDecoding() throws {
+        let ok = try #require(
+            StreamMessage(
+                data: Data(
+                    #"{"seq":4,"data":{"type":"notice","id":"x","severity":"warning","time":"2026-11-22T01:02:03Z","title":"Solve failed","message":"no stars","kind":"solve.failed"}}"#
+                        .utf8)))
+        guard case .frame(_, .notice(let notice)) = ok else { Issue.record("not a notice"); return }
+        #expect(notice.title == "Solve failed" && notice.severity == "warning" && notice.kind == "solve.failed")
+        let bad = try #require(
+            StreamMessage(data: Data(#"{"seq":5,"data":{"type":"notice","id":"y","time":"2026-11-22T01:02:03Z"}}"#.utf8)))
+        #expect(bad == .frame(seq: 5, event: .unknown))
+    }
+
     @Test("Messages decode, and an unknown type is not an error")
     func decoding() throws {
         let unknown = try #require(StreamMessage(data: Data(#"{"seq":3,"data":{"type":"brand_new"}}"#.utf8)))

@@ -1,5 +1,6 @@
 package com.galileo.mobileconnect.ui
 
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -48,6 +50,58 @@ import com.galileo.mobileconnect.ui.theme.LocalTheme
 import kotlinx.serialization.json.JsonArray
 
 // Shared by the tablet shell and the Quest panes: the banners and the dialogs that must never be missed.
+
+/** How long an event notice stays up before it closes itself (MAPP-OVR-100). */
+const val NOTICE_SECONDS = 10L
+private const val NOTICE_VISIBLE = 5
+
+/**
+ * Event notices over the top-right corner: each exposure start, slew, solve, focus result or connection the Master
+ * reports appears for [NOTICE_SECONDS] seconds, or until its × is tapped (MAPP-OVR-090). Notices already in the state
+ * when this first appears are history and are not shown, so reconnecting does not replay old events. Colours come
+ * from the theme alone, so Night stays red (ADR-AND-007).
+ */
+@Composable
+fun NoticeOverlay() {
+    val app = LocalApp.current
+    val theme = LocalTheme.current
+    val notices = app.snapshot.live.notices
+    val known = remember { notices.map { it.id }.toSet() }
+    var dismissed by remember { mutableStateOf(emptySet<String>()) }
+    val shown = notices.filter { it.id !in known && it.id !in dismissed }.take(NOTICE_VISIBLE).reversed()
+    Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.TopEnd) {
+        Column(Modifier.widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            shown.forEach { notice ->
+                LaunchedEffect(notice.id) {
+                    delay(NOTICE_SECONDS * 1000)
+                    dismissed = dismissed + notice.id
+                }
+                val accent = when (notice.severity) {
+                    "error" -> theme.danger
+                    "warning" -> theme.warning
+                    "success" -> theme.good
+                    else -> theme.accent
+                }
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(theme.raised).testTag("notice.${notice.kind}"),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(Modifier.width(5.dp).heightIn(min = 44.dp).background(accent))
+                    Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 6.dp)) {
+                        Txt(notice.title, size = 14.sp, weight = FontWeight.Bold)
+                        if (notice.message.isNotEmpty()) Txt(notice.message, size = 13.sp, color = theme.textSecondary)
+                    }
+                    Box(
+                        Modifier.heightIn(min = 44.dp).width(44.dp)
+                            .clickable(role = Role.Button, onClickLabel = "Dismiss") { dismissed = dismissed + notice.id }
+                            .testTag("notice.close"),
+                        contentAlignment = Alignment.Center,
+                    ) { Txt("×", size = 20.sp, color = theme.textSecondary) }
+                }
+            }
+        }
+    }
+}
 
 /** Reconnecting, unreachable, a demo: always said, never implied (MAPP-CON-070, MAPP-CON-110). */
 @Composable

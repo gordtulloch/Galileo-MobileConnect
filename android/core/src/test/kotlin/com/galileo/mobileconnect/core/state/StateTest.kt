@@ -159,6 +159,30 @@ class StateTest {
     }
 
     @Test
+    fun `MAPP-OVR-090 a notice goes first, a repeated id replaces and only the latest are kept`() {
+        val a = NoticeEvent("1", "info", t0, title = "Exposure started", message = "30 s Light")
+        val b = NoticeEvent("2", "success", t0, title = "Slew complete")
+        val state = reduce(listOf(frame(1, StreamEvent.Notice(a)), frame(2, StreamEvent.Notice(b)), frame(3, StreamEvent.Notice(a))))
+        assertEquals(listOf("1", "2"), state.notices.map { it.id })
+        val many = reduce((1..30).map { frame(it, StreamEvent.Notice(NoticeEvent("n$it", "info", t0, title = "t"))) })
+        assertEquals(20, many.notices.size)
+        assertEquals("n30", many.notices.first().id)
+    }
+
+    @Test
+    fun `MAPP-OVR-090 a notice frame decodes and one without a title is ignored`() {
+        val ok = StreamMessage.parse(
+            """{"seq":4,"data":{"type":"notice","id":"x","severity":"warning","time":"2026-11-22T01:02:03Z","title":"Solve failed","message":"no stars","kind":"solve.failed"}}""",
+        )
+        val event = (assertNotNull(ok) as StreamMessage.Frame).event as StreamEvent.Notice
+        assertEquals("Solve failed", event.notice.title)
+        assertEquals("warning", event.notice.severity)
+        assertEquals("solve.failed", event.notice.kind)
+        val bad = assertNotNull(StreamMessage.parse("""{"seq":5,"data":{"type":"notice","id":"y","time":"2026-11-22T01:02:03Z"}}"""))
+        assertEquals(frame(5, StreamEvent.Unknown), bad)
+    }
+
+    @Test
     fun `messages decode and an unknown type is not an error`() {
         val unknown = assertNotNull(StreamMessage.parse("""{"seq":3,"data":{"type":"brand_new"}}"""))
         assertEquals(frame(3, StreamEvent.Unknown), unknown)
