@@ -1,3 +1,11 @@
+## Galileo MobileConnect for Android 0.9.9 (testing)
+
+Test build. Install the APK, then use the app against Galileo 0.9.09alpha or later with a MobileConnect plug-in that includes event notices installed (Options > Plug-ins), or try the built-in demo with no equipment.
+
+- **Event notices:** a small panel over the top-right corner of every screen for each exposure start, slew start and end, plate-solve result, focus result and equipment connection. It closes itself after 10 seconds, or tap its ×.
+
+Android 8.0 or later. Android asks once to allow installs from your browser.
+
 ## Galileo MobileConnect for Android 0.1.1 (testing)
 
 Test build. Install the APK, then use the app against Galileo 0.9.08alpha or later with the MobileConnect plug-in 0.1.2 or later installed (Options > Plug-ins), or try the built-in demo with no equipment.
