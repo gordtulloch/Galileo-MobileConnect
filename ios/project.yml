@@ -8,7 +8,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.9.09alpha"
+    MARKETING_VERSION: "0.9.9"
     CURRENT_PROJECT_VERSION: "3"
     DEVELOPMENT_TEAM: 4QZ7YY8FJA   # kept here so that regenerating the project doesn't lose it
 packages:
