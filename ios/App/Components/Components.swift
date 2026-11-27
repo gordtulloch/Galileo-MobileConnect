@@ -386,6 +386,8 @@ struct OperationForm: View {
     var loopable = false
     /// More buttons for that row (Hide).
     var trailing: AnyView?
+    /// Arguments chosen outside the form (a filter), sent with it and with its loop.
+    var extra: [String: JSONValue] = [:]
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.compactControls) private var compact
@@ -609,7 +611,7 @@ struct OperationForm: View {
                 if let entered = text[argument.name], !entered.isEmpty { args[argument.name] = .string(entered) }
             }
         }
-        return args
+        return args.merging(extra) { _, chosen in chosen }
     }
 }
 

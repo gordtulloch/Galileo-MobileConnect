@@ -61,6 +61,8 @@ import com.galileo.mobileconnect.ui.compactTarget
 import com.galileo.mobileconnect.ui.theme.LocalCompact
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 import kotlinx.serialization.json.JsonArray
+import com.galileo.mobileconnect.ui.Choices
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.math.max
 
 /**
@@ -240,6 +242,10 @@ private fun Panel(onHide: () -> Unit) {
     val shown = listOfNotNull(byName["frame_type"], byName["live_stack"]) + numbers
     val record = app.record(operation)
     val open = record?.state?.isOpen == true
+    val filters = (app.value("filter.names")?.value as? JsonArray)?.mapNotNull { it.string } ?: emptyList()
+    val pier = app.workingPier ?: ""
+    val chosen = app.captureFilters[pier]?.takeIf { it in filters }
+    val filterArgs = if (chosen != null) mapOf("filter" to JsonPrimitive(chosen)) else emptyMap()
     CompositionLocalProvider(LocalCompact provides true) {
         Column(
             Modifier.fillMaxWidth().background(theme.surface).border(1.dp, theme.border).padding(8.dp),
@@ -254,12 +260,19 @@ private fun Panel(onHide: () -> Unit) {
                     numbers.forEach { Box(Modifier.weight(1f)) { Field(operation, it, text, flags) } }
                 }
                 byName["live_stack"]?.let { Field(operation, it, text, flags) }
+                if (filters.isNotEmpty() && byName["filter"] != null) {
+                    // The Master moves the wheel when the capture starts; tapping the chosen one again lets it stay put.
+                    Txt("Filter", size = 11.sp, color = theme.textSecondary)
+                    Choices(filters, chosen ?: app.value("filter.current")?.value.string ?: "") { name ->
+                        if (chosen == name) app.captureFilters.remove(pier) else app.captureFilters[pier] = name
+                    }
+                }
             }
             ButtonRow(
                 {
                     if (app.canOperate) ActionButton(
                         "Start", kind = ActionKind.Prominent, busy = open, enabled = info != null && info.available && !open, tag = operation,
-                    ) { if (info != null) scope.launch { message = send(app, operation, shown, text, flags) } }
+                    ) { if (info != null) scope.launch { message = app.perform(operation, send(shown, text, flags) + filterArgs) } }
                 },
                 { if (app.canOperate) ActionButton("Stop", enabled = app.operation("imaging.stop") != null, tag = "imaging.stop") { scope.launch { message = app.perform("imaging.stop") } } },
                 {
@@ -273,7 +286,7 @@ private fun Panel(onHide: () -> Unit) {
                             seconds != null && seconds > 0 -> {
                                 message = null
                                 // The loop takes every other setting from the form too, so it is the capture the user set up, repeated.
-                                val settings = send(shown, text, flags).filterKeys { it != "seconds" && it != "count" }
+                                val settings = send(shown, text, flags).filterKeys { it != "seconds" && it != "count" } + filterArgs
                                 app.startLiveLoop(seconds, settings)
                             }
                             else -> message = "Exposure must be a number above zero."

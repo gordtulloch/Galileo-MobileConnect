@@ -49,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import com.galileo.mobileconnect.ui.ScreenScroll
 import com.galileo.mobileconnect.ui.Txt
+import com.galileo.mobileconnect.ui.ThemedProgress
 import com.galileo.mobileconnect.ui.theme.LocalTheme
 
 /**
@@ -98,16 +99,38 @@ private fun PolarAlignmentReadout() {
             Txt(value, size = 22.sp, weight = FontWeight.Bold, color = colour)
         }
     }
+    // Notices already here when the screen opens are history, as for the panels shown on other screens.
+    val known = remember { app.snapshot.live.notices.map { it.id }.toSet() }
+    val problems = app.snapshot.live.notices.filter { it.id !in known && (it.severity == "warning" || it.severity == "error") }.take(3)
     Card("Alignment Results") {
-        if (text("polar.state.phase") != null) {
-            // What it is doing now, then the last few things it did, so a long step is never a silent one.
+        val phase = text("polar.state.phase")
+        val log = (app.value("polar.state.log")?.value as? JsonArray)?.mapNotNull { it.string } ?: emptyList()
+        if (phase != null) {
+            // Which phase it is in, how far through, what it is doing now and what the last solve found.
+            val running = app.value("polar.state.running")?.value.bool == true
+            val step = number("polar.state.step")?.toInt() ?: 0
+            val steps = number("polar.state.steps")?.toInt() ?: 3
+            val title = when {
+                phase == "measuring" && step > 0 -> "Measuring: position $step of $steps"
+                phase == "measuring" -> "Preparing: checking where the mount points"
+                phase == "adjusting" -> "Adjusting: turn the altitude and azimuth knobs"
+                app.value("polar.state.stopped")?.value.bool == true -> "Stopped"
+                else -> "Finished"
+            }
+            Txt(title, Modifier.testTag("polar.phase"), size = 18.sp, weight = FontWeight.Bold, color = if (running) theme.accent else theme.text)
+            if (running && phase == "measuring") ThemedProgress(step.toDouble() / maxOf(steps, 1), "Measuring")
             text("polar.state.message")?.let { Txt(it, weight = FontWeight.SemiBold) }
-            if (app.value("polar.state.running")?.value.bool == true) {
-                val log = (app.value("polar.state.log")?.value as? JsonArray)?.mapNotNull { it.string } ?: emptyList()
-                log.takeLast(5).dropLast(1).forEach { Note(it) }
+            log.lastOrNull { it.startsWith("Solution:") || it.startsWith("Solver failed") }?.let {
+                Txt("Last solve. $it", Modifier.testTag("polar.solve"))
             }
         } else {
             Note("Polar alignment hasn't been run.")
+        }
+        problems.forEach { notice ->
+            Txt(
+                listOf(notice.title, notice.message).filter { it.isNotEmpty() }.joinToString(": "), Modifier.testTag("polar.notice"),
+                color = if (notice.severity == "error") theme.danger else theme.warning, weight = FontWeight.SemiBold,
+            )
         }
         number("polar.state.error.total_arcsec")?.let { figure("Total", polarAngle(it), "polar.total", band) }
         // The Master's sign: altitude positive when the axis is too high, azimuth positive when it is east of the pole.
@@ -120,6 +143,14 @@ private fun PolarAlignmentReadout() {
         if (number("polar.state.error.total_arcsec") != null) {
             text("polar.state.error.altitude_advice")?.let { Txt(it) }
             text("polar.state.error.azimuth_advice")?.let { Txt(it) }
+        }
+        // The Master's own log, newest last, kept after the run ends so a failure can still be read.
+        val earlier = (if (log.lastOrNull() == text("polar.state.message")) log.dropLast(1) else log).takeLast(8)
+        if (phase != null && earlier.isNotEmpty()) {
+            Column(Modifier.testTag("polar.log"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Txt("Activity", color = theme.textSecondary, weight = FontWeight.SemiBold)
+                earlier.forEach { Note(it) }
+            }
         }
     }
 }

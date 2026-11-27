@@ -392,6 +392,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return handle(current.goToQuestion(pier, name, raDeg, decDeg))
     }
 
+    /** The filter chosen for captures, per Pier; none means the wheel stays where it is (MAPP-IMG-010). */
+    val captureFilters = androidx.compose.runtime.mutableStateMapOf<String, String>()
+
     // -- live loop (MAPP-IMG-020) ---------------------------------------------------------------------------------
 
     var liveLoopRunning by mutableStateOf(false); private set

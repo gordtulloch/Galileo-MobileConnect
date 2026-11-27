@@ -128,7 +128,7 @@ What the user sees on opening the app (PSD G7, G8).
 | MAPP-OVR-060 | All | The app shall show recent alerts with their severity and time, and shall show when a new alert arrives while the app is connected. | MVP |
 | MAPP-OVR-070 | All | The app shall show a state of the observatory within 5 seconds of connecting (value to be confirmed, Section 5). | MVP |
 | MAPP-OVR-080 | All | The app shall show, on the Overview screen, the health of the computer running the Master (CPU use, memory use, free disk space, temperature where reported, and uptime), taken from the Master's published state rather than polled, and shall offer Restart and Shut down for that computer as confirm-class operations that the Master refuses, with a reason, while a session is running. The Master side is `CSURF-310`. | P2 |
-| MAPP-OVR-090 | All | The app shall show each event notice the Master sends (an exposure starting, a slew beginning or ending, a plate solve resolving, a focus result, equipment connecting or disconnecting) as a brief panel over the top-right corner of every screen, and shall not replay notices that were sent before the app connected. | MVP |
+| MAPP-OVR-090 | All | The app shall show each event notice the Master sends (an exposure starting, a slew beginning or ending, a plate solve resolving, a focus result, equipment connecting or disconnecting) as a brief panel over the top-right corner of every screen except Polar Alignment, whose results the panels would hide (that screen shows warning and error notices within its results), and shall not replay notices that were sent before the app connected. | MVP |
 | MAPP-OVR-100 | All | An event notice panel shall close itself after 10 seconds or when its close (×) control is tapped, shall stack with at most five shown at once, and shall take its colours from the theme alone (Night stays red). | MVP |
 
 ### 3.3 `MAPP-DEV` — Devices
@@ -151,7 +151,7 @@ Capture and the display of images (PSD G5, PC7). The app handles node-rendered p
 
 | ID | Platforms | Requirement | Priority |
 |---|---|---|---|
-| MAPP-IMG-010 | All | The app shall start single exposures and exposure series with per-run parameters (frame type, exposure, count, binning, gain, offset), all on view at once with no More/Less control, and stop a running exposure or series with Stop. Every long-running operation (capture, autofocus, plate solve, polar alignment) shall show a progress bar: measured when the Master reports a fraction, a moving bar when it does not, with the Master's current step as text. | MVP |
+| MAPP-IMG-010 | All | The app shall start single exposures and exposure series with per-run parameters (frame type, exposure, count, binning, gain, offset, and the filter when the Pier has a wheel), all on view at once with no More/Less control, and stop a running exposure or series with Stop. Every long-running operation (capture, autofocus, plate solve, polar alignment) shall show a progress bar: measured when the Master reports a fraction, a moving bar when it does not, with the Master's current step as text. | MVP |
 | MAPP-IMG-020 | All | The app shall run a live exposure loop, with the capture settings the user has entered, and display each result as it arrives. | MVP |
 | MAPP-IMG-030 | All | The app shall display the current frame as a preview rendered by the Master, scaled to the device, with pinch-to-zoom and pan, loading further detail as tiles when the user zooms. | MVP |
 | MAPP-IMG-040 | All | The app shall let the user adjust the preview stretch interactively and shall show the histogram. | MVP |
@@ -187,7 +187,7 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 |---|---|---|---|
 | MAPP-SOL-010 | All | The app shall solve the current or last frame, show the result, and centre the mount on a target by plate solving. | MVP |
 | MAPP-SOL-020 | All | The app shall sync the mount to a solved position when the user asks. | MVP |
-| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the live error in altitude and azimuth (as the correction in words, a quality band, a trend and the pole's position against the axis), refreshed with each solve. | P2 |
+| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the live error in altitude and azimuth (as the correction in words, a quality band, a trend and the pole's position against the axis), refreshed with each solve. Its results shall also say which phase the run is in and how far through, the current step, the last solve's solution or failure, and recent activity. | P2 |
 
 ### 3.7 `MAPP-FOC` — Focus
 
@@ -198,6 +198,7 @@ Manual and automatic focus, both from the Master's focus module (`MAPP` follows 
 | MAPP-FOC-010 | All | The app shall provide manual focus using the operations the Master publishes from its focus module: move in or out by a chosen step, move to an absolute position, and halt, with the current position and temperature shown. | MVP |
 | MAPP-FOC-020 | All | The app shall start and cancel an autofocus run and show its progress, the V-curve and the result, and the state of temperature compensation. | MVP |
 | MAPP-FOC-030 | All | The app shall not move a focuser by any means other than the focus module's operations. | MVP |
+| MAPP-FOC-040 | All | The Focus screen shall show a preview of the working Pier's latest frame, refreshed by each capture and autofocus exposure, with an exposure length field and Capture, Loop and Stop controls. | MVP |
 
 ### 3.8 `MAPP-GUI` — Guiding
 
@@ -401,7 +402,7 @@ PSD Section 4a. The Quest 2 is the primary target and acceptance device (Q-12). 
 | MAPP-IMG | 9 | 5 | 4 | 0 |
 | MAPP-SKY | 6 | 4 | 2 | 0 |
 | MAPP-SOL | 3 | 2 | 1 | 0 |
-| MAPP-FOC | 3 | 3 | 0 | 0 |
+| MAPP-FOC | 4 | 4 | 0 | 0 |
 | MAPP-GUI | 3 | 3 | 0 | 0 |
 | MAPP-FLP | 2 | 2 | 0 | 0 |
 | MAPP-SES | 9 | 4 | 5 | 0 |

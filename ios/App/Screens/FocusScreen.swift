@@ -10,6 +10,7 @@ struct FocusScreen: View {
     var body: some View {
         ScreenScroll("Focus") {
             ReadOnlyHint()
+            FocusPreview()
             Columns {
                 autofocus
             } right: {
@@ -51,6 +52,97 @@ struct FocusScreen: View {
             AutofocusControls()
             VCurve()
         }
+    }
+}
+
+/// The Pier's latest frame (a capture from here, or each autofocus exposure) with an exposure length and Capture,
+/// Loop and Stop, so focus can be judged by eye (`MAPP-FOC-040`).
+private struct FocusPreview: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.theme) private var theme
+    @AppStorage("focus.exposure") private var exposure = "2"
+    @State private var message: String?
+
+    var body: some View {
+        Card("Preview") {
+            // Each autofocus point is a new picture.
+            FramePicture(stretch: 50, stack: false, stackFrames: 0, refresh: refresh)
+                .frame(height: 260)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            if model.canOperate { controls }
+        }
+    }
+
+    private var refresh: String {
+        ["running", "phase", "step"].map { model.value("focus.autofocus.\($0)")?.value.displayText ?? "" }.joined(separator: "/")
+    }
+
+    @ViewBuilder private var controls: some View {
+        let capture = model.operation("imaging.capture")
+        let record = model.record(of: "imaging.capture")
+        let open = record?.state.isOpen == true
+        // The Master would let a capture and an autofocus run share the camera, so the app doesn't.
+        let focusing = model.record(of: "focus.autofocus")?.state.isOpen == true
+            || model.value("focus.autofocus.running")?.value.boolValue == true
+        let free = capture != nil && capture?.available != false && !open && !focusing && !model.liveLoopRunning
+        HStack {
+            Text("Exposure (s)").foregroundStyle(theme.textSecondary)
+            TextField("", text: $exposure, prompt: Text("2").foregroundStyle(theme.textSecondary))
+                .keyboardType(.numbersAndPunctuation)
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(theme.text)
+                .accessibilityLabel("Exposure in seconds")
+                .accessibilityIdentifier("focus.exposure")
+        }
+        .frame(minHeight: Layout.minimumTarget)
+        .padding(.horizontal, 10)
+        .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
+        HStack(spacing: 8) {
+            Button {
+                guard let seconds = seconds() else { return }
+                Task { message = await model.perform("imaging.capture", args: ["seconds": .number(seconds), "count": 1]) }
+            } label: {
+                Label("Capture", systemImage: "camera")
+            }
+            .buttonStyle(ActionStyle(kind: .prominent))
+            .disabled(!free)
+            .accessibilityIdentifier("focus.capture")
+            Button {
+                guard let seconds = seconds() else { return }
+                message = model.startLiveLoop(seconds: seconds)
+            } label: {
+                Label("Loop", systemImage: "repeat")
+            }
+            .buttonStyle(ActionStyle())
+            .disabled(!free)
+            .accessibilityIdentifier("focus.loop")
+            Button {
+                model.stopLiveLoop()
+                Task { message = await model.perform("imaging.stop") }
+            } label: {
+                Label("Stop", systemImage: "stop")
+            }
+            .buttonStyle(ActionStyle())
+            .disabled(!model.liveLoopRunning && !open)
+            .accessibilityIdentifier("focus.stop")
+        }
+        if capture == nil {
+            Note("This Master doesn't offer capture yet.")
+        } else if let reason = capture?.unavailableBecause, capture?.available == false, !open {
+            Note(reason)
+        } else if let message {
+            Note(message)
+        } else if let said = model.liveLoopMessage {
+            Note(said)
+        } else if let record {
+            OutcomeNote(record: record)
+        }
+    }
+
+    private func seconds() -> Double? {
+        let value = Double(exposure.trimmingCharacters(in: .whitespaces)).flatMap { $0 > 0 ? $0 : nil }
+        message = value == nil ? "Exposure must be a number above zero." : nil
+        return value
     }
 }
 
@@ -168,7 +260,7 @@ private struct AutofocusControls: View {
                         }
                     }
                     .buttonStyle(ActionStyle(kind: .prominent))
-                    .disabled(run == nil || run?.available == false || running)
+                    .disabled(run == nil || run?.available == false || running || model.liveLoopRunning)
                     .accessibilityIdentifier("focus.autofocus")
                     Button {
                         Task { message = await model.perform("focus.autofocus_cancel") }

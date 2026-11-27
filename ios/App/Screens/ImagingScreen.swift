@@ -192,6 +192,33 @@ struct ImagingScreen: View {
         }
     }
 
+    private var filters: [String] { model.value("filter.names")?.value.arrayValue?.compactMap(\.stringValue) ?? [] }
+
+    private var chosenFilter: String? {
+        guard let name = model.captureFilters[model.workingPier ?? ""], filters.contains(name) else { return nil }
+        return name
+    }
+
+    /// The Master moves the wheel when the capture starts; tapping the chosen one again lets it stay put.
+    @ViewBuilder private var filterChoice: some View {
+        if model.canOperate, !filters.isEmpty,
+           model.operation("imaging.capture")?.arguments.contains(where: { $0.name == "filter" }) == true {
+            let selected = chosenFilter ?? model.value("filter.current")?.value.stringValue
+            Text("Filter").font(.caption2).foregroundStyle(theme.textSecondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 56))], spacing: 4) {
+                ForEach(filters, id: \.self) { name in
+                    Button(name) {
+                        let pier = model.workingPier ?? ""
+                        model.captureFilters[pier] = chosenFilter == name ? nil : name
+                    }
+                    .buttonStyle(ActionStyle(kind: selected == name ? .prominent : .normal))
+                    .accessibilityValue(selected == name ? "selected" : "")
+                    .accessibilityIdentifier("imaging.filter.\(name)")
+                }
+            }
+        }
+    }
+
     /// Everything on a few lines, so nothing is hidden behind a More: the frame type on one line, the numbers that
     /// change with it on one line, then Start, Stop, Loop and Hide on one line (`MAPP-IMG-010`, `MAPP-IMG-020`).
     private var panel: some View {
@@ -204,7 +231,9 @@ struct ImagingScreen: View {
                 trailing: AnyView(
                     Button("Hide") { panelOpen = false }
                         .buttonStyle(ActionStyle())
-                        .accessibilityIdentifier("imaging.panel.close")))
+                        .accessibilityIdentifier("imaging.panel.close")),
+                extra: chosenFilter.map { ["filter": .string($0)] } ?? [:])
+            filterChoice
             Histogram()
         }
         .environment(\.compactControls, true)
