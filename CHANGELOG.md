@@ -4,6 +4,10 @@ All notable changes to this repository are recorded here, in [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+
+- **Polar alignment shows whether the figures are current (iOS, Android, Quest) (`MAPP-SOL-030`).** The total is rated Good, Fair or Poor in words, because the night theme draws good and bad in the same red. Each update shows its reading number and age, a solve that did not update the figures marks them **OUT OF DATE** with the reason, and the Master's poor-pointing warnings are shown. Needs a Master with the matching Galileo change (restart it); with an older Master the new lines are simply absent. **Not run:** the iOS build (no Mac here) and the apps on a device.
+
 ### Added
 
 - **Android and iOS version bumped to 0.9.10 (Android versionCode 4, iOS build 4)** to line up with Galileo 0.9.10alpha; Android release notes added. No functional change in the apps.

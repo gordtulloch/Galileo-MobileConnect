@@ -81,8 +81,16 @@ struct PolarAlignmentReadout: View {
                     .foregroundStyle(notice.severity == "error" ? theme.danger : theme.warning)
                     .accessibilityIdentifier("polar.notice")
             }
+            // Poor-pointing warnings for this run, from the Master.
+            ForEach(warnings, id: \.self) { warning in
+                Text(warning)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(theme.warning)
+                    .accessibilityIdentifier("polar.warning")
+            }
             if let total = number("polar.state.error.total_arcsec") {
-                row("Total", Self.angle(total), id: "polar.total", colour: bandColour)
+                row("Total", Self.angle(total) + rating, id: "polar.total", colour: bandColour)
+                readingLine
                 if let altitude = number("polar.state.error.altitude_arcsec") {
                     row("N–S (altitude)", Self.signed(altitude, positive: "high", negative: "low"), id: "polar.altitude")
                 }
@@ -95,6 +103,39 @@ struct PolarAlignmentReadout: View {
             if text("polar.state.phase") != nil { activity }
         }
         .onAppear { if known == nil { known = Set(model.snapshot.live.notices.map(\.id)) } }
+    }
+
+    private var warnings: [String] { model.value("polar.state.warnings")?.value.arrayValue?.compactMap(\.stringValue) ?? [] }
+
+    /// The rating in words as well as colour: the night theme's colours cannot be told apart.
+    private var rating: String {
+        switch text("polar.state.error.quality") {
+        case "good": " · Good"
+        case "fair": " · Fair"
+        case "poor": " · Poor"
+        default: ""
+        }
+    }
+
+    /// Which reading the figures are and how old it is, so an unchanged or stale error is never mistaken for a fresh
+    /// one. A Master that sends no reading number shows nothing here.
+    @ViewBuilder private var readingLine: some View {
+        let reading = Int(number("polar.state.reading") ?? 0)
+        if reading > 0 {
+            let running = model.value("polar.state.running")?.value.boolValue == true
+            let stale = model.value("polar.state.stale")?.value.boolValue == true
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let age = number("polar.state.measured_at").map { max(0, Int((context.date.timeIntervalSince1970 - $0).rounded())) }
+                let taken = (running && age != nil) ? ", taken \(age ?? 0) s ago" : ""
+                let line = stale
+                    ? "OUT OF DATE. Reading \(reading)\(taken). \(text("polar.state.problem") ?? "")"
+                    : "Reading \(reading)\(taken)." + (running ? "" : " Not running, so this will not update.")
+                Text(line)
+                    .font(stale ? .callout.weight(.bold) : .callout)
+                    .foregroundStyle(stale ? theme.warning : theme.text)
+                    .accessibilityIdentifier("polar.reading")
+            }
+        }
     }
 
     private var log: [String] { model.value("polar.state.log")?.value.arrayValue?.compactMap(\.stringValue) ?? [] }

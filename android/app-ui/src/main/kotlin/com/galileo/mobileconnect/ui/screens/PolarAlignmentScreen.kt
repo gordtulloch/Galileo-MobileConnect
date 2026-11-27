@@ -33,6 +33,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.setValue
 import com.galileo.mobileconnect.core.api.ArgumentInfo
 import com.galileo.mobileconnect.core.state.bool
@@ -45,6 +47,7 @@ import com.galileo.mobileconnect.ui.Toggle
 import com.galileo.mobileconnect.ui.argumentTitle
 import com.galileo.mobileconnect.ui.send
 import com.galileo.mobileconnect.ui.theme.LocalCompact
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import com.galileo.mobileconnect.ui.ScreenScroll
@@ -132,7 +135,19 @@ private fun PolarAlignmentReadout() {
                 color = if (notice.severity == "error") theme.danger else theme.warning, weight = FontWeight.SemiBold,
             )
         }
-        number("polar.state.error.total_arcsec")?.let { figure("Total", polarAngle(it), "polar.total", band) }
+        // Poor-pointing warnings for this run, from the Master.
+        (app.value("polar.state.warnings")?.value as? JsonArray)?.mapNotNull { it.string }?.forEach {
+            Txt(it, Modifier.testTag("polar.warning"), color = theme.warning, weight = FontWeight.SemiBold)
+        }
+        // The rating is in words as well as colour: the night theme's colours cannot be told apart.
+        val rating = when (text("polar.state.error.quality")) {
+            "good" -> " · Good"
+            "fair" -> " · Fair"
+            "poor" -> " · Poor"
+            else -> ""
+        }
+        number("polar.state.error.total_arcsec")?.let { figure("Total", polarAngle(it) + rating, "polar.total", band) }
+        PolarReading()
         // The Master's sign: altitude positive when the axis is too high, azimuth positive when it is east of the pole.
         number("polar.state.error.altitude_arcsec")?.let {
             figure("N–S (altitude)", "${polarAngle(it)} ${if (it >= 0) "high" else "low"}", "polar.altitude")
@@ -152,6 +167,36 @@ private fun PolarAlignmentReadout() {
                 earlier.forEach { Note(it) }
             }
         }
+    }
+}
+
+/**
+ * Which reading the figures are and how old it is, so an unchanged or stale error is never mistaken for a fresh one.
+ * A Master that sends no reading number shows nothing here.
+ */
+@Composable
+private fun PolarReading() {
+    val app = LocalApp.current
+    val theme = LocalTheme.current
+    val reading = app.value("polar.state.reading")?.value.double?.toInt() ?: 0
+    if (reading == 0) return
+    val running = app.value("polar.state.running")?.value.bool == true
+    val measuredAt = app.value("polar.state.measured_at")?.value.double
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(running) {
+        while (running) {
+            now = System.currentTimeMillis()
+            delay(1000)
+        }
+    }
+    val age = measuredAt?.let { maxOf(0L, Math.round(now / 1000.0 - it)) }
+    val taken = if (running && age != null) ", taken $age s ago" else ""
+    val tag = Modifier.testTag("polar.reading")
+    if (app.value("polar.state.stale")?.value.bool == true) {
+        val problem = app.value("polar.state.problem")?.value.string ?: ""
+        Txt("OUT OF DATE. Reading $reading$taken. $problem", tag, color = theme.warning, weight = FontWeight.Bold)
+    } else {
+        Txt("Reading $reading$taken." + if (running) "" else " Not running, so this will not update.", tag)
     }
 }
 

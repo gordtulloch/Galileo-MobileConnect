@@ -17,7 +17,12 @@
      "error": null,
      "target_offset_arcmin": null,
      "stopped": false,
-     "log": []
+     "log": [],
+     "reading": 0,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment",
     "session.state": "Idle",
@@ -40,7 +45,12 @@
      "error": null,
      "target_offset_arcmin": null,
      "stopped": false,
-     "log": []
+     "log": [],
+     "reading": 0,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -58,7 +68,12 @@
      "error": null,
      "target_offset_arcmin": null,
      "stopped": false,
-     "log": []
+     "log": [],
+     "reading": 0,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -76,7 +91,12 @@
      "error": null,
      "target_offset_arcmin": null,
      "stopped": false,
-     "log": []
+     "log": [],
+     "reading": 0,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -123,7 +143,12 @@
        467.2
       ],
       "arcmin_per_px": 0.5
-     }
+     },
+     "reading": 1,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -172,7 +197,12 @@
        474.8
       ],
       "arcmin_per_px": 0.5
-     }
+     },
+     "reading": 2,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -223,7 +253,12 @@
        478.2
       ],
       "arcmin_per_px": 0.5
-     }
+     },
+     "reading": 3,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -276,7 +311,12 @@
        479.6
       ],
       "arcmin_per_px": 0.5
-     }
+     },
+     "reading": 4,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Polar alignment"
    }
@@ -288,7 +328,12 @@
     "polar.state": {
      "running": false,
      "phase": "finished",
-     "stopped": true
+     "stopped": true,
+     "reading": 4,
+     "measured_at": null,
+     "stale": false,
+     "problem": "",
+     "warnings": []
     },
     "activity.solve": "Idle"
    }

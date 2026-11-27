@@ -187,7 +187,7 @@ The sky as drawn on the tablet and phone (the immersive form is `MAPP-QST`). Dat
 |---|---|---|---|
 | MAPP-SOL-010 | All | The app shall solve the current or last frame, show the result, and centre the mount on a target by plate solving. | MVP |
 | MAPP-SOL-020 | All | The app shall sync the mount to a solved position when the user asks. | MVP |
-| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the live error in altitude and azimuth (as the correction in words, a quality band, a trend and the pole's position against the axis), refreshed with each solve. Its results shall also say which phase the run is in and how far through, the current step, the last solve's solution or failure, and recent activity. | P2 |
+| MAPP-SOL-030 | All | The app shall run a polar alignment and display its progress and the live error in altitude and azimuth (as the correction in words, a quality band, a trend and the pole's position against the axis), refreshed with each solve. The quality shall be given in words as well as colour; each reading shall show its number and age and, when the latest attempt did not update it, that it is out of date and why; and poor-pointing warnings from the Master shall be shown. Its results shall also say which phase the run is in and how far through, the current step, the last solve's solution or failure, and recent activity. | P2 |
 
 ### 3.7 `MAPP-FOC` — Focus
 
