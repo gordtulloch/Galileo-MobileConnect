@@ -22,8 +22,8 @@ android {
         applicationId = "com.gordtulloch.galileo.mobileconnect"
         minSdk = 26 // java.time without desugaring; Quest 2 and every current tablet are well above it
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.9.9"
+        versionCode = 4
+        versionName = "0.9.10"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

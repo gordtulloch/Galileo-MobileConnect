@@ -1,3 +1,11 @@
+## Galileo MobileConnect for Android 0.9.10 (testing)
+
+Test build. Install the APK over the old copy, then use the app against Galileo 0.9.10alpha with a MobileConnect plug-in that includes event notices installed (Options > Plug-ins), or try the built-in demo with no equipment.
+
+- Version number lines up with Galileo 0.9.10alpha and the iOS app. Remote captures now use the filter they name and the Focus screen updates during autofocus; both need the Galileo Master (0.9.10alpha) restarted, with no app change.
+
+Android 8.0 or later. Android asks once to allow installs from your browser.
+
 ## Galileo MobileConnect for Android 0.9.9 (testing)
 
 Test build. Install the APK, then use the app against Galileo 0.9.09alpha or later with a MobileConnect plug-in that includes event notices installed (Options > Plug-ins), or try the built-in demo with no equipment.
