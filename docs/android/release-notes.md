@@ -2,7 +2,10 @@
 
 Test build. Install the APK over the old copy, then use the app against Galileo 0.9.10alpha with a MobileConnect plug-in that includes event notices installed (Options > Plug-ins), or try the built-in demo with no equipment.
 
-- Version number lines up with Galileo 0.9.10alpha and the iOS app. Remote captures now use the filter they name and the Focus screen updates during autofocus; both need the Galileo Master (0.9.10alpha) restarted, with no app change.
+- **Imaging:** choose a filter in the capture panel; the Master moves the wheel before the exposure.
+- **Focus:** the picture updates point by point during autofocus.
+- **Polar alignment:** says what it is doing, and notice panels no longer cover the results.
+- The filter and Focus changes need the Galileo Master (0.9.10alpha) restarted.
 
 Android 8.0 or later. Android asks once to allow installs from your browser.
 
