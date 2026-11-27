@@ -6,6 +6,8 @@ All notable changes to this repository are recorded here, in [Keep a Changelog](
 
 ### Added
 
+- **iOS build number raised to 4 (0.9.9) and uploaded to TestFlight.** `ios/project.yml` `CURRENT_PROJECT_VERSION` 3 → 4 (App Store Connect needs a higher number per upload), so testers get the recent Imaging filter, Focus preview, polar-alignment and notice changes. The archive needed Xcode's Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`). **Checked:** `GalileoCore` tests (92) pass, the Release archive builds and signs, and the upload completed; **not run:** the build on a device or after TestFlight processing.
+
 - **Polar alignment: no notice panels over the results (iOS, Android) (`MAPP-OVR-090`).** The pop-up notices hid the error figures while adjusting. They are no longer shown on the Polar Alignment screen: the Alignment Results card already reports each capture, slew and solve, and now also shows up to three warning or error notices received while the screen is open, so those are not lost. Other screens are unchanged. **Checked:** Android compiles and `:core` tests pass; **not run:** looked at on a device; iOS edited, unbuilt.
 
 - **Polar alignment says what it is doing (iOS, Android, Quest) (`MAPP-SOL-030`).** The Alignment Results card now shows the phase in words (preparing, measuring position N of 3 with a progress bar, adjusting, stopped or finished), the current step, the last solve's solution or why it failed, and the Master's recent activity, which stays after the run ends. iOS's card is renamed from Polar error to match Android. No Master or plugin change. **Checked:** Android compiles and `:core` tests pass; **not run:** looked at on a device or against a live Master; iOS edited, unbuilt.
