@@ -121,7 +121,8 @@ fun ShellView() {
                 }
             }
             DialogLayer()
-            NoticeOverlay()
+            // Not over Polar Alignment: the panels hid its results, which carry the messages themselves (MAPP-OVR-090).
+            if (selection != Area.PolarAlignment) NoticeOverlay()
         }
     }
     if (app.emergencyOpen) EmergencyPanel()

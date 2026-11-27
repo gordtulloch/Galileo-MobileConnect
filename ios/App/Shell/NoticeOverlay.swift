@@ -55,7 +55,6 @@ private struct NoticeCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            Rectangle().fill(accent).frame(width: 5)
             VStack(alignment: .leading, spacing: 1) {
                 Text(notice.title).font(.subheadline.weight(.bold)).foregroundStyle(theme.text)
                 if !notice.message.isEmpty {
@@ -70,6 +69,10 @@ private struct NoticeCard: View {
             .accessibilityLabel("Dismiss")
             .accessibilityIdentifier("notice.close")
         }
+        // The stripe is an overlay, not part of the row: a bare Rectangle there takes all the height offered, which
+        // stretched the card from the top of the screen to the bottom.
+        .padding(.leading, 5)
+        .overlay(alignment: .leading) { Rectangle().fill(accent).frame(width: 5) }
         .background(theme.raised, in: RoundedRectangle(cornerRadius: 8))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .contain)

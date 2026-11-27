@@ -41,6 +41,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
+import com.galileo.mobileconnect.ui.TextBox
+import com.galileo.mobileconnect.core.state.displayText
 import com.galileo.mobileconnect.core.api.Role
 import com.galileo.mobileconnect.core.state.bool
 import com.galileo.mobileconnect.core.state.double
@@ -258,6 +262,7 @@ fun FocusScreen() {
     val scope = rememberCoroutineScope()
     ScreenScroll("Focus") {
         ReadOnlyHint()
+        FocusPreview()
         Columns(
             left = {
                 Card("Autofocus") {
@@ -270,7 +275,7 @@ fun FocusScreen() {
                     if (app.canOperate) {
                         ButtonRow(
                             {
-                                ActionButton("Run autofocus", kind = ActionKind.Prominent, busy = running, enabled = run != null && run.available && !running, tag = "focus.autofocus") {
+                                ActionButton("Run autofocus", kind = ActionKind.Prominent, busy = running, enabled = run != null && run.available && !running && !app.liveLoopRunning, tag = "focus.autofocus") {
                                     scope.launch { focusMessage = app.perform("focus.autofocus") }
                                 }
                             },
@@ -321,6 +326,77 @@ fun FocusScreen() {
                 }
             },
         )
+    }
+}
+
+/**
+ * The Pier's latest frame (a capture from here, or each autofocus exposure) with an exposure length and Capture, Loop
+ * and Stop, so focus can be judged by eye (MAPP-FOC-040).
+ */
+@Composable
+private fun FocusPreview() {
+    val app = LocalApp.current
+    val theme = LocalTheme.current
+    val scope = rememberCoroutineScope()
+    var exposure by remember { mutableStateOf(app.pref("focus.exposure", "2")) }
+    var message by remember { mutableStateOf<String?>(null) }
+    Card("Preview") {
+        // Each autofocus point is a new picture.
+        val refresh = listOf("running", "phase", "step").joinToString("/") { app.value("focus.autofocus.$it")?.value?.displayText() ?: "" }
+        Box(Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(10.dp))) {
+            FramePicture(50.0, false, 0, refresh)
+        }
+        if (app.canOperate) {
+            val capture = app.operation("imaging.capture")
+            val record = app.record("imaging.capture")
+            val open = record?.state?.isOpen == true
+            // The Master would let a capture and an autofocus run share the camera, so the app doesn't.
+            val focusing = app.record("focus.autofocus")?.state?.isOpen == true || app.value("focus.autofocus.running")?.value.bool == true
+            val free = capture != null && capture.available && !open && !focusing && !app.liveLoopRunning
+            fun seconds(): Double? {
+                val value = exposure.trim().toDoubleOrNull()?.takeIf { it > 0 }
+                message = if (value == null) "Exposure must be a number above zero." else null
+                return value
+            }
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = minimumTarget).clip(RoundedCornerShape(8.dp)).background(theme.raised).padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Txt("Exposure (s)", color = theme.textSecondary)
+                TextBox(
+                    exposure, { exposure = it; app.setPref("focus.exposure", it) }, "2", keyboard = KeyboardType.Decimal,
+                    label = "Exposure in seconds", tag = "focus.exposure", align = TextAlign.End, modifier = Modifier.weight(1f).padding(start = 8.dp),
+                )
+            }
+            ButtonRow(
+                {
+                    ActionButton("Capture", kind = ActionKind.Prominent, busy = open && !app.liveLoopRunning, enabled = free, tag = "focus.capture") {
+                        seconds()?.let { value ->
+                            scope.launch { message = app.perform("imaging.capture", mapOf("seconds" to JsonPrimitive(value), "count" to JsonPrimitive(1))) }
+                        }
+                    }
+                },
+                {
+                    ActionButton("Loop", busy = app.liveLoopRunning, enabled = free, tag = "focus.loop") {
+                        seconds()?.let { app.startLiveLoop(it) }
+                    }
+                },
+                {
+                    ActionButton("Stop", enabled = app.liveLoopRunning || open, tag = "focus.stop") {
+                        app.stopLiveLoop()
+                        scope.launch { message = app.perform("imaging.stop") }
+                    }
+                },
+            )
+            val unavailable = capture?.takeIf { !it.available && !open }?.unavailableBecause
+            when {
+                capture == null -> Note("This Master doesn't offer capture yet.")
+                unavailable != null -> Note(unavailable)
+                message != null -> Note(message!!)
+                app.liveLoopMessage != null -> Note(app.liveLoopMessage!!)
+                record != null -> OutcomeNote(record)
+            }
+        }
     }
 }
 

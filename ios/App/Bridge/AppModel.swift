@@ -345,6 +345,9 @@ final class AppModel {
         return handle(await session.goToQuestion(pier: pier, name: name, raDeg: raDeg, decDeg: decDeg))
     }
 
+    /// The filter chosen for captures, per Pier; none means the wheel stays where it is (`MAPP-IMG-010`).
+    var captureFilters: [String: String] = [:]
+
     // MARK: Live loop (`MAPP-IMG-020`)
 
     private(set) var liveLoopRunning = false

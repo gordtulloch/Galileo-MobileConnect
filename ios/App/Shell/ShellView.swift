@@ -88,7 +88,8 @@ struct ShellView: View {
             selection = wanted
             model.requestedArea = nil
         }
-        .overlay(alignment: .topTrailing) { NoticeOverlay() }
+        // Not over Polar Alignment: the panels hid its results, which carry the messages themselves (`MAPP-OVR-090`).
+        .overlay(alignment: .topTrailing) { if area != .polarAlignment { NoticeOverlay() } }
         .overlay {
             if model.emergencyOpen { EmergencyPanel() }
         }

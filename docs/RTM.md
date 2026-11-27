@@ -123,6 +123,7 @@ Test-case identifiers follow `TC-MAPP-<AREA>-<###>`, the requirement's number re
 | MAPP-FOC-010 | The app shall provide manual focus using the operations the Master publishes from its focus module: move in or out by a chosen step, move to an… | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-FOC-010 | C, UI |
 | MAPP-FOC-020 | The app shall start and cancel an autofocus run and show its progress, the V-curve and the result, and the state of temperature compensation | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-FOC-020 | C, UI |
 | MAPP-FOC-030 | The app shall not move a focuser by any means other than the focus module's operations | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-FOC-030 | C, UI |
+| MAPP-FOC-040 | The Focus screen shall show a preview of the working Pier's latest frame, refreshed by each capture and autofocus exposure, with an exposure length… | All | MVP | S-API | I-OPS | A-OPS | Q-PANE | TC-MAPP-FOC-040 | C, UI |
 
 ## 9. MAPP-GUI — Guiding
 

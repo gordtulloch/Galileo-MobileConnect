@@ -44,6 +44,15 @@ struct PolarAlignmentControls: View {
 struct PolarAlignmentReadout: View {
     @Environment(AppModel.self) private var model
     @Environment(\.theme) private var theme
+    /// Notices already here when the screen opens are history, as for the panels shown on other screens.
+    @State private var known: Set<String>?
+
+    private var problems: [NoticeEvent] {
+        let baseline = known ?? Set(model.snapshot.live.notices.map(\.id))
+        return Array(model.snapshot.live.notices
+            .filter { !baseline.contains($0.id) && ($0.severity == "warning" || $0.severity == "error") }
+            .prefix(3))
+    }
 
     private func number(_ key: String) -> Double? { model.value(key)?.value.doubleValue }
     private func text(_ key: String) -> String? {
@@ -60,12 +69,17 @@ struct PolarAlignmentReadout: View {
     }
 
     var body: some View {
-        Card("Polar error") {
-            if text("polar.state.phase") != nil {
-                LiveRow(label: "Phase", key: "polar.state.phase")
-                if let message = text("polar.state.message") { Note(message) }
+        Card("Alignment Results") {
+            if let phase = text("polar.state.phase") {
+                status(phase)
             } else {
                 Note("Polar alignment hasn't been run.")
+            }
+            ForEach(problems) { notice in
+                Text([notice.title, notice.message].filter { !$0.isEmpty }.joined(separator: ": "))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(notice.severity == "error" ? theme.danger : theme.warning)
+                    .accessibilityIdentifier("polar.notice")
             }
             if let total = number("polar.state.error.total_arcsec") {
                 row("Total", Self.angle(total), id: "polar.total", colour: bandColour)
@@ -78,6 +92,49 @@ struct PolarAlignmentReadout: View {
                 if let advice = text("polar.state.error.altitude_advice") { Text(advice).font(.body) }
                 if let advice = text("polar.state.error.azimuth_advice") { Text(advice).font(.body) }
             }
+            if text("polar.state.phase") != nil { activity }
+        }
+        .onAppear { if known == nil { known = Set(model.snapshot.live.notices.map(\.id)) } }
+    }
+
+    private var log: [String] { model.value("polar.state.log")?.value.arrayValue?.compactMap(\.stringValue) ?? [] }
+
+    /// Which phase it is in, how far through, what it is doing now and what the last solve found.
+    @ViewBuilder private func status(_ phase: String) -> some View {
+        let running = model.value("polar.state.running")?.value.boolValue == true
+        let step = Int(number("polar.state.step") ?? 0)
+        let steps = Int(number("polar.state.steps") ?? 3)
+        Text(title(phase, step: step, steps: steps))
+            .font(.headline)
+            .foregroundStyle(running ? theme.accent : theme.text)
+            .accessibilityIdentifier("polar.phase")
+        if running, phase == "measuring" {
+            ThemedProgress(value: Double(step) / Double(max(steps, 1)), label: "Measuring")
+        }
+        if let message = text("polar.state.message") { Text(message).font(.body.weight(.semibold)).foregroundStyle(theme.text) }
+        if let solve = log.last(where: { $0.hasPrefix("Solution:") || $0.hasPrefix("Solver failed") }) {
+            Text("Last solve. \(solve)").font(.callout).foregroundStyle(theme.text).accessibilityIdentifier("polar.solve")
+        }
+    }
+
+    private func title(_ phase: String, step: Int, steps: Int) -> String {
+        switch phase {
+        case "measuring": step > 0 ? "Measuring: position \(step) of \(steps)" : "Preparing: checking where the mount points"
+        case "adjusting": "Adjusting: turn the altitude and azimuth knobs"
+        default: model.value("polar.state.stopped")?.value.boolValue == true ? "Stopped" : "Finished"
+        }
+    }
+
+    /// The Master's own log, newest last, kept after the run ends so a failure can still be read.
+    @ViewBuilder private var activity: some View {
+        let all = log
+        let earlier = Array((all.last == text("polar.state.message") ? Array(all.dropLast()) : all).suffix(8))
+        if !earlier.isEmpty {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Activity").font(.subheadline.weight(.semibold)).foregroundStyle(theme.textSecondary)
+                ForEach(Array(earlier.enumerated()), id: \.offset) { _, line in Note(line) }
+            }
+            .accessibilityIdentifier("polar.log")
         }
     }
 
